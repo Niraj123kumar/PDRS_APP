@@ -7,6 +7,11 @@ const { sanitizeUser } = require('../middleware/validators');
 const emailService = require('../services/email');
 const auditService = require('../services/auditService');
 const ipDetection = require('../services/ipDetection');
+const backupService = require('../services/backupService');
+const cacheService = require('../services/cacheService');
+const fs = require('fs');
+const path = require('path');
+const packageJson = require('../package.json');
 
 router.use(verifyToken, requireAdmin);
 
@@ -128,6 +133,71 @@ router.get('/export.csv', (req, res) => {
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader('Content-Disposition', 'attachment; filename="pdrs-export.csv"');
     res.send(csv);
+});
+
+// GET /api/admin/backups
+router.get('/backups', (req, res) => {
+    try {
+        const backups = backupService.listBackups();
+        res.json(backups);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /api/admin/backups/:filename
+router.get('/backups/:filename', (req, res) => {
+    const filename = req.params.filename;
+    // Basic path traversal prevention
+    if (filename.includes('..') || filename.includes('/')) {
+        return res.status(400).json({ error: 'Invalid filename' });
+    }
+    const filePath = path.join(__dirname, '..', 'backups', filename);
+    if (!fs.existsSync(filePath)) {
+        return res.status(404).json({ error: 'Backup not found' });
+    }
+    res.download(filePath);
+});
+
+// POST /api/admin/backups/trigger
+router.post('/backups/trigger', async (req, res) => {
+    try {
+        const result = await backupService.backupDatabase();
+        auditService.logAction(req.user.id, req.user.email, 'TRIGGER_BACKUP', 'admin', null, req, { filename: result.filename });
+        res.json(result);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /api/admin/metrics
+router.get('/metrics', (req, res) => {
+    try {
+        const dbPath = path.join(__dirname, '..', 'pdrs.db');
+        const dbSize = fs.statSync(dbPath).size;
+        
+        // Calculate requests per minute from audit_log
+        const rpm = db.prepare("SELECT COUNT(*) as count FROM audit_log WHERE datetime(created_at) >= datetime('now', '-1 minute')").get().count;
+        
+        // Error rate (mock implementation as we don't track every error in DB yet)
+        const totalReqs = db.prepare("SELECT COUNT(*) as count FROM audit_log WHERE datetime(created_at) >= datetime('now', '-1 hour')").get().count;
+        // In a real app, you'd have an error_log table or integrate with Sentry metrics
+        const errorRate = 0.01; // placeholder
+
+        res.json({
+            uptime: process.uptime(),
+            memoryUsage: process.memoryUsage(),
+            cpuUsage: process.cpuUsage(),
+            dbSize,
+            cacheHitRate: cacheService.getStats(),
+            requestsPerMinute: rpm,
+            errorRate,
+            version: packageJson.version,
+            timestamp: Date.now()
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 module.exports = router;

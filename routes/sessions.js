@@ -6,6 +6,7 @@ const { verifyToken } = require('../middleware/auth');
 const auditService = require('../services/auditService');
 const badgeService = require('../services/badgeService');
 const pdfService = require('../services/pdfService');
+const cacheService = require('../services/cacheService');
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -37,6 +38,11 @@ router.post('/', verifyToken, (req, res) => {
     try {
         const info = db.prepare("INSERT INTO sessions (user_id, project_id, status) VALUES (?, ?, 'active')").run(user_id, project_id);
         auditService.logAction(req.user.id, req.user.email, 'CREATE_SESSION', 'session', info.lastInsertRowid, req, { project_id });
+        
+        // Invalidate faculty cache
+        cacheService.invalidatePattern('faculty:stats:*');
+        cacheService.invalidatePattern('cohort:chart:*');
+        
         res.status(201).json({ id: info.lastInsertRowid, user_id, project_id, status: 'active' });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -361,6 +367,41 @@ router.get('/student/export-report/full', verifyToken, async (req, res) => {
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', 'attachment; filename=progress-report.pdf');
         res.send(pdf);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /api/templates
+router.post('/templates', verifyToken, (req, res) => {
+    const { name, projectId, questionsJson } = req.body;
+    try {
+        const info = db.prepare(`
+            INSERT INTO session_templates (user_id, name, project_id, questions_json)
+            VALUES (?, ?, ?, ?)
+        `).run(req.user.id, name, projectId, questionsJson);
+        const template = db.prepare('SELECT * FROM session_templates WHERE id = ?').get(info.lastInsertRowid);
+        res.status(201).json(template);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /api/templates
+router.get('/templates', verifyToken, (req, res) => {
+    try {
+        const templates = db.prepare('SELECT * FROM session_templates WHERE user_id = ?').all(req.user.id);
+        res.json(templates);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// DELETE /api/templates/:id
+router.delete('/templates/:id', verifyToken, (req, res) => {
+    try {
+        db.prepare('DELETE FROM session_templates WHERE id = ? AND user_id = ?').run(req.params.id, req.user.id);
+        res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }

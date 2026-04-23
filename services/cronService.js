@@ -3,6 +3,7 @@ const db = require('../db');
 const emailService = require('./email');
 const pushService = require('./pushService');
 const smsService = require('./smsService');
+const backupService = require('./backupService');
 
 let started = false;
 
@@ -107,6 +108,26 @@ function startCronJobs() {
     cron.schedule('0 9 * * 0', runWeeklyReportJob);
     cron.schedule('0 8 * * *', runInactivityAlertJob);
     cron.schedule('0 * * * *', runOtpCleanupJob);
+
+    // Daily backup at 2am
+    cron.schedule('0 2 * * *', async () => {
+        try {
+            await backupService.backupDatabase();
+            console.log('Database backed up');
+        } catch (err) {
+            console.error('Scheduled database backup failed:', err);
+        }
+    });
+
+    // Weekly JSON export at 3am Sunday
+    cron.schedule('0 3 * * 0', async () => {
+        try {
+            await backupService.exportToJSON();
+            console.log('Weekly JSON export completed');
+        } catch (err) {
+            console.error('Scheduled JSON export failed:', err);
+        }
+    });
 }
 
 module.exports = {

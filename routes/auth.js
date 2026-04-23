@@ -8,6 +8,7 @@ const totpService = require('../services/totpService');
 const tokenService = require('../services/tokenService');
 const auditService = require('../services/auditService');
 const passport = require('../services/googleAuth');
+const cacheService = require('../services/cacheService');
 const ipDetection = require('../services/ipDetection');
 const { encryptField } = require('../services/encryption');
 const googleEnabled = Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET && process.env.GOOGLE_CALLBACK_URL);
@@ -83,6 +84,11 @@ router.post('/register', (req, res) => {
         const token = tokenService.generateAccessToken(user);
         emailService.sendWelcome(email, name).catch(() => {});
         auditService.logAction(user.id, email, 'REGISTER', 'user', user.id, req, { role });
+
+        // Invalidate faculty cache if student registered
+        if (role === 'student') {
+            cacheService.invalidatePattern('faculty:stats:*');
+        }
 
         res.json({ token, user });
     } catch (err) {
@@ -474,18 +480,12 @@ router.get('/audit', verifyToken, (req, res) => {
 // GET /api/auth/me
 router.get('/me', verifyToken, (req, res) => {
     try {
-        const user = db.prepare('SELECT id, name, email, role, avatar_url, github_username, force_password_change FROM users WHERE id = ?').get(req.user.id);
+        const user = db.prepare('SELECT id, name, email, role, avatar_url, github_username, force_password_change, slack_webhook_url, whatsapp_number, zoom_user_id FROM users WHERE id = ?').get(req.user.id);
         if (!user) return res.status(404).json({ error: 'User not found' });
         return res.json({
-            user: {
-                id: user.id,
-                name: user.name,
-                email: maskEmail(user.email),
-                role: user.role,
-                avatar_url: user.avatar_url,
-                github_username: user.github_username,
-                force_password_change: Number(user.force_password_change) === 1
-            }
+            ...user,
+            email: maskEmail(user.email),
+            force_password_change: Number(user.force_password_change) === 1
         });
     } catch (err) {
         return res.status(500).json({ error: err.message });

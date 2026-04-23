@@ -9,6 +9,7 @@ const auditService = require('../services/auditService');
 const pushService = require('../services/pushService');
 const emailService = require('../services/email');
 const pdfService = require('../services/pdfService');
+const cacheService = require('../services/cacheService');
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -64,8 +65,12 @@ function fmtPctChange(curr, prev) {
 }
 
 // GET /api/faculty/stats (faculty auth)
-router.get('/stats', verifyToken, requireRole('faculty'), (req, res) => {
+router.get('/stats', verifyToken, requireRole('faculty'), async (req, res) => {
     try {
+        const cacheKey = `faculty:stats:${req.user.id}`;
+        const cached = await cacheService.get(cacheKey);
+        if (cached) return res.json(cached);
+
         const totalStudents = db.prepare("SELECT COUNT(*) as count FROM users WHERE role = 'student'").get().count;
         const sessionsThisWeek = db.prepare("SELECT COUNT(*) as count FROM sessions WHERE created_at >= datetime('now', '-7 days')").get().count;
         const avgCohortScore = db.prepare('SELECT AVG(overall_score) as avg FROM sessions WHERE overall_score IS NOT NULL').get().avg || 0;
@@ -82,20 +87,27 @@ router.get('/stats', verifyToken, requireRole('faculty'), (req, res) => {
             )
         `).get().count;
 
-        res.json({
+        const result = {
             totalStudents,
             sessionsThisWeek,
             avgCohortScore: Math.round(avgCohortScore * 10) / 10,
             atRiskCount
-        });
+        };
+
+        await cacheService.set(cacheKey, result, 300); // 5 mins
+        res.json(result);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
 
 // GET /api/faculty/cohort (faculty auth)
-router.get('/cohort', verifyToken, requireRole('faculty'), (req, res) => {
+router.get('/cohort', verifyToken, requireRole('faculty'), async (req, res) => {
     try {
+        const cacheKey = `cohort:chart:${req.user.id}`;
+        const cached = await cacheService.get(cacheKey);
+        if (cached) return res.json(cached);
+
         const students = db.prepare(`
             SELECT u.id, u.name, u.email, 
             (SELECT overall_score FROM sessions WHERE user_id = u.id ORDER BY created_at DESC LIMIT 1) as latest_score
@@ -113,7 +125,9 @@ router.get('/cohort', verifyToken, requireRole('faculty'), (req, res) => {
             else distribution[4]++;
         });
 
-        res.json({ students, cohortChart: distribution });
+        const result = { students, cohortChart: distribution };
+        await cacheService.set(cacheKey, result, 300); // 5 mins
+        res.json(result);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }

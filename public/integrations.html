@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Integrations - PDRS</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/animations.css">
+    <style>
+        body.dark-mode { --bg-color: #0f172a; --card-bg: #1e293b; --text-color: #f1f5f9; --text-muted: #94a3b8; --border-color: rgba(255,255,255,0.1); }
+        .container { max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
+        .card { background: white; padding: 1.5rem; border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 1.5rem; }
+        body.dark-mode .card { background: var(--card-bg); border: 1px solid var(--border-color); color: var(--text-color); }
+        .integration-header { display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem; }
+        .integration-icon { font-size: 2rem; }
+        .status-badge { display: inline-block; padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.8rem; font-weight: 700; }
+        .status-connected { background: #dcfce7; color: #166534; }
+        .status-disconnected { background: #f1f5f9; color: #475569; }
+        .form-group { margin-bottom: 1.25rem; }
+        .form-group label { display: block; margin-bottom: 0.5rem; font-weight: 600; }
+        .toggle-group { display: flex; flex-direction: column; gap: 0.75rem; margin-top: 1rem; }
+        .toggle-item { display: flex; align-items: center; gap: 0.75rem; }
+        .faculty-only { display: none; }
+        .theme-toggle { cursor: pointer; font-size: 1.25rem; background: none; border: none; padding: 0.5rem; }
+    </style>
+    <script>
+        const savedTheme = localStorage.getItem('pdrs_theme');
+        if (savedTheme === 'dark') document.documentElement.classList.add('dark-mode');
+    </script>
+</head>
+<body class="animate-up">
+    <nav class="navbar">
+        <div style="display: flex; align-items: center; gap: 2rem;">
+            <h1 style="color: var(--primary-color); font-weight: 800; cursor: pointer;" onclick="window.location.href='/'">PDRS</h1>
+            <div style="display: flex; gap: 1.5rem;">
+                <a href="/student.html" id="nav-dashboard" style="text-decoration: none; color: var(--text-muted);">Dashboard</a>
+                <a href="/integrations.html" style="text-decoration: none; color: var(--text-color); font-weight: 600;">Integrations</a>
+            </div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 1.5rem;">
+            <button onclick="toggleTheme()" class="theme-toggle">🌙</button>
+            <span id="user-name" style="font-weight: 600;"></span>
+            <button onclick="auth.logout()" class="btn btn-secondary" style="width: auto; padding: 0.5rem 1rem;">Logout</button>
+        </div>
+    </nav>
+
+    <div class="container">
+        <h2 style="margin-bottom: 2rem;">Integrations & External Tools</h2>
+
+        <!-- Slack Integration -->
+        <div class="card">
+            <div class="integration-header">
+                <span class="integration-icon">💬</span>
+                <div style="flex-grow: 1;">
+                    <h3 style="margin: 0;">Slack Integration</h3>
+                    <p class="text-muted" style="margin: 0; font-size: 0.9rem;">Receive notifications and alerts in your Slack workspace.</p>
+                </div>
+                <span id="slack-status" class="status-badge status-disconnected">Disconnected</span>
+            </div>
+            
+            <div id="slack-setup">
+                <div class="form-group">
+                    <label for="slack-webhook">Webhook URL</label>
+                    <input type="text" id="slack-webhook" placeholder="https://hooks.slack.com/services/...">
+                </div>
+                <button id="slack-connect-btn" class="btn" style="width: auto;">Connect Slack</button>
+            </div>
+
+            <div id="slack-connected" style="display: none;">
+                <div style="display: flex; gap: 0.5rem; margin-bottom: 1.5rem;">
+                    <button id="slack-test-btn" class="btn btn-secondary" style="width: auto;">Send Test Message</button>
+                    <button id="slack-disconnect-btn" class="btn btn-secondary" style="width: auto; color: #ef4444;">Disconnect</button>
+                </div>
+                
+                <h4>Notification Settings</h4>
+                <div class="toggle-group">
+                    <label class="toggle-item"><input type="checkbox" checked> Defense session scores</label>
+                    <label class="toggle-item"><input type="checkbox" checked> Badge earned</label>
+                    <div class="faculty-only">
+                        <label class="toggle-item"><input type="checkbox" checked> Weekly cohort digest</label>
+                        <label class="toggle-item"><input type="checkbox" checked> At-risk student alerts</label>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Zoom Integration -->
+        <div class="card">
+            <div class="integration-header">
+                <span class="integration-icon">📹</span>
+                <div style="flex-grow: 1;">
+                    <h3 style="margin: 0;">Zoom Meetings</h3>
+                    <p class="text-muted" style="margin: 0; font-size: 0.9rem;">Auto-create Zoom meetings for scheduled defenses.</p>
+                </div>
+                <span id="zoom-status" class="status-badge status-disconnected">Disconnected</span>
+            </div>
+            <button id="zoom-connect-btn" class="btn" style="width: auto;">Connect Zoom Account</button>
+            
+            <div id="zoom-connected" style="display: none; margin-top: 1rem;">
+                <label class="toggle-item"><input type="checkbox" id="zoom-auto-create"> Auto-create meeting when defense is scheduled</label>
+                <h4 style="margin-top: 1.5rem;">Meeting History</h4>
+                <table style="width: 100%; border-collapse: collapse; margin-top: 0.5rem;">
+                    <thead>
+                        <tr style="text-align: left; border-bottom: 1px solid var(--border-color);">
+                            <th style="padding: 0.5rem;">Topic</th>
+                            <th style="padding: 0.5rem;">Date</th>
+                            <th style="padding: 0.5rem;">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="zoom-history">
+                        <tr><td colspan="3" class="text-muted" style="padding: 1rem; text-align: center;">No meetings created yet.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- LMS Integration (Faculty Only) -->
+        <div class="card faculty-only">
+            <div class="integration-header">
+                <span class="integration-icon">🎓</span>
+                <div style="flex-grow: 1;">
+                    <h3 style="margin: 0;">LMS Sync (Moodle / Canvas)</h3>
+                    <p class="text-muted" style="margin: 0; font-size: 0.9rem;">Import students and sync rosters from your LMS.</p>
+                </div>
+                <span id="lms-status" class="status-badge status-disconnected">Never Synced</span>
+            </div>
+            
+            <div class="form-group">
+                <label for="lms-type">LMS Provider</label>
+                <select id="lms-type">
+                    <option value="moodle">Moodle</option>
+                    <option value="canvas">Canvas</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="lms-url">LMS URL</label>
+                <input type="text" id="lms-url" placeholder="https://moodle.university.edu">
+            </div>
+            <div class="form-group">
+                <label for="lms-token">API Token / Web Service Key</label>
+                <input type="password" id="lms-token">
+            </div>
+            <div class="form-group">
+                <label for="lms-course-id">Course ID</label>
+                <input type="text" id="lms-course-id" placeholder="123">
+            </div>
+            
+            <button id="lms-sync-btn" class="btn" style="width: auto;">Sync Students Now</button>
+            
+            <div id="lms-results" style="margin-top: 1.5rem; display: none;">
+                <p id="lms-last-status" style="font-weight: 600;"></p>
+                <label class="toggle-item"><input type="checkbox"> Enable daily auto-sync</label>
+            </div>
+        </div>
+
+        <!-- WhatsApp Integration -->
+        <div class="card">
+            <div class="integration-header">
+                <span class="integration-icon">📱</span>
+                <div style="flex-grow: 1;">
+                    <h3 style="margin: 0;">WhatsApp Reminders</h3>
+                    <p class="text-muted" style="margin: 0; font-size: 0.9rem;">Get defense reminders and results via WhatsApp.</p>
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="whatsapp-number">WhatsApp Number (International format)</label>
+                <input type="text" id="whatsapp-number" placeholder="+1234567890">
+                <p class="text-muted" style="font-size: 0.8rem; margin-top: 0.25rem;">Note: Uses Twilio sandbox for testing.</p>
+            </div>
+            <button id="whatsapp-save-btn" class="btn btn-secondary" style="width: auto;">Verify & Save</button>
+            <div style="margin-top: 1rem;">
+                <label class="toggle-item"><input type="checkbox"> Receive defense reminders via WhatsApp</label>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/auth.js"></script>
+    <script src="/js/toast.js"></script>
+    <script>
+        auth.requireAuth();
+        const user = auth.getUser();
+        document.getElementById('user-name').textContent = user.name;
+        
+        if (user.role === 'faculty' || user.role === 'admin') {
+            document.querySelectorAll('.faculty-only').forEach(el => el.style.display = 'block');
+            document.getElementById('nav-dashboard').href = '/faculty.html';
+        }
+
+        async function loadIntegrationStatus() {
+            try {
+                const res = await fetch('/api/notifications/preferences', {
+                    headers: { 'Authorization': `Bearer ${auth.getToken()}` }
+                });
+                const prefs = await res.json();
+                
+                // For this phase, we'll fetch the user record for integration fields
+                // Normally we'd have a specific endpoint, but we can reuse preferences or similar
+                const userRes = await fetch('/api/auth/me', {
+                    headers: { 'Authorization': `Bearer ${auth.getToken()}` }
+                });
+                const userData = await userRes.json();
+
+                if (userData.slack_webhook_url) {
+                    document.getElementById('slack-status').textContent = 'Connected';
+                    document.getElementById('slack-status').className = 'status-badge status-connected';
+                    document.getElementById('slack-setup').style.display = 'none';
+                    document.getElementById('slack-connected').style.display = 'block';
+                }
+
+                if (userData.zoom_user_id) {
+                    document.getElementById('zoom-status').textContent = 'Connected';
+                    document.getElementById('zoom-status').className = 'status-badge status-connected';
+                    document.getElementById('zoom-connect-btn').style.display = 'none';
+                    document.getElementById('zoom-connected').style.display = 'block';
+                }
+
+                document.getElementById('whatsapp-number').value = userData.whatsapp_number || '';
+
+                if (user.role === 'faculty' || user.role === 'admin') {
+                    const lmsRes = await fetch('/api/integrations/lms/status', {
+                        headers: { 'Authorization': `Bearer ${auth.getToken()}` }
+                    });
+                    const lmsStatus = await lmsRes.json();
+                    if (lmsStatus && lmsStatus.length > 0) {
+                        const last = lmsStatus[0];
+                        document.getElementById('lms-status').textContent = 'Last Sync: ' + new Date(last.last_synced).toLocaleDateString();
+                        document.getElementById('lms-status').className = 'status-badge status-connected';
+                        document.getElementById('lms-results').style.display = 'block';
+                        document.getElementById('lms-last-status').textContent = `Last sync: ${last.student_count} students found.`;
+                    }
+                }
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        // Slack Connect
+        document.getElementById('slack-connect-btn').onclick = async () => {
+            const webhookUrl = document.getElementById('slack-webhook').value;
+            if (!webhookUrl) return showToast('Please enter a webhook URL', 'error');
+            
+            try {
+                const res = await fetch('/api/integrations/slack/connect', {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${auth.getToken()}`
+                    },
+                    body: JSON.stringify({ webhookUrl })
+                });
+                if (res.ok) {
+                    showToast('Slack connected!', 'success');
+                    loadIntegrationStatus();
+                } else {
+                    const data = await res.json();
+                    showToast(data.error || 'Failed to connect Slack', 'error');
+                }
+            } catch (err) {
+                showToast('Connection failed', 'error');
+            }
+        };
+
+        // Slack Test
+        document.getElementById('slack-test-btn').onclick = async () => {
+            const res = await fetch('/api/integrations/slack/test', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${auth.getToken()}` }
+            });
+            if (res.ok) showToast('Test message sent!', 'success');
+        };
+
+        // Slack Disconnect
+        document.getElementById('slack-disconnect-btn').onclick = async () => {
+            const res = await fetch('/api/integrations/slack/disconnect', {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${auth.getToken()}` }
+            });
+            if (res.ok) {
+                showToast('Slack disconnected', 'success');
+                location.reload();
+            }
+        };
+
+        // LMS Sync
+        document.getElementById('lms-sync-btn').onclick = async () => {
+            const btn = document.getElementById('lms-sync-btn');
+            btn.disabled = true;
+            btn.textContent = 'Syncing...';
+            
+            const payload = {
+                lmsType: document.getElementById('lms-type').value,
+                lmsUrl: document.getElementById('lms-url').value,
+                token: document.getElementById('lms-token').value,
+                courseId: document.getElementById('lms-course-id').value
+            };
+
+            try {
+                const res = await fetch('/api/integrations/lms/sync', {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${auth.getToken()}`
+                    },
+                    body: JSON.stringify(payload)
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    showToast(`Sync complete! ${data.imported} new students imported.`, 'success');
+                    loadIntegrationStatus();
+                } else {
+                    showToast(data.error || 'Sync failed', 'error');
+                }
+            } catch (err) {
+                showToast('Sync failed', 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Sync Students Now';
+            }
+        };
+
+        // WhatsApp Save
+        document.getElementById('whatsapp-save-btn').onclick = async () => {
+            const whatsappNumber = document.getElementById('whatsapp-number').value;
+            try {
+                const res = await fetch('/api/integrations/whatsapp/save', {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${auth.getToken()}`
+                    },
+                    body: JSON.stringify({ whatsappNumber })
+                });
+                if (res.ok) {
+                    showToast('WhatsApp number saved!', 'success');
+                } else {
+                    showToast('Failed to save number', 'error');
+                }
+            } catch (err) {
+                showToast('Save failed', 'error');
+            }
+        };
+
+        function toggleTheme() {
+            const isDark = document.documentElement.classList.toggle('dark-mode');
+            localStorage.setItem('pdrs_theme', isDark ? 'dark' : 'light');
+        }
+
+        loadIntegrationStatus();
+    </script>
+</body>
+</html>

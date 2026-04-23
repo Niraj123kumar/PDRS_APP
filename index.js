@@ -19,12 +19,17 @@ const flashcardsRoutes = require('./routes/flashcards');
 const bookmarksRoutes = require('./routes/bookmarks');
 const peerRoutes = require('./routes/peer');
 const templatesRoutes = require('./routes/templates');
+const integrationsRoutes = require('./routes/integrations');
 const initWebSocket = require('./websocket');
 const db = require('./db');
 const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const fs = require('fs');
 const cookieParser = require('cookie-parser');
+const compression = require('compression');
+const Sentry = require('@sentry/node');
+const packageJson = require('./package.json');
+const cacheService = require('./services/cacheService');
 const session = require('express-session');
 const tokenService = require('./services/tokenService');
 const passport = require('./services/googleAuth');
@@ -33,6 +38,22 @@ const { startCronJobs } = require('./services/cronService');
 
 const app = express();
 const server = http.createServer(app);
+
+// Sentry Initialization
+if (process.env.SENTRY_DSN) {
+    Sentry.init({
+        dsn: process.env.SENTRY_DSN,
+        integrations: [
+            new Sentry.Integrations.Http({ tracing: true }),
+            new Sentry.Integrations.Express({ app }),
+        ],
+        tracesSampleRate: 0.1,
+        environment: process.env.NODE_ENV || 'development'
+    });
+    app.use(Sentry.Handlers.requestHandler());
+    app.use(Sentry.Handlers.tracingHandler());
+}
+
 const port = process.env.PORT || 3000;
 
 const JWT_SECRET = process.env.JWT_SECRET || 'pdrs_super_secret_key_123';
@@ -82,6 +103,7 @@ const otpLimiter = rateLimit({ windowMs: 10 * 60 * 1000, max: 3, standardHeaders
 const adminLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 30, standardHeaders: true, legacyHeaders: false, handler: rateLimitHandler });
 
 app.use(express.json());
+app.use(compression());
 app.use(cookieParser());
 app.use(session({
     secret: process.env.SESSION_SECRET || 'pdrs_session_secret_dev',
@@ -144,8 +166,37 @@ app.post('/api/panel/room/:roomCode/rubric', (req, res, next) => {
 // Health check for AI provider
 app.get('/api/health', (req, res) => {
     const provider = process.env.ANTHROPIC_API_KEY ? 'claude' : 'other';
-    res.json({ provider, status: 'ok' });
+    res.json({
+        ok: true,
+        aiProvider: provider,
+        uptime: process.uptime(),
+        dbConnected: !!db,
+        redisConnected: cacheService.isRedisConnected,
+        version: packageJson.version,
+        timestamp: Date.now()
+    });
 });
+
+// Load test endpoint (development only)
+if (process.env.NODE_ENV !== 'production') {
+    app.get('/api/dev/load-test', async (req, res) => {
+        const start = Date.now();
+        const promises = [];
+        for (let i = 0; i < 10; i++) {
+            promises.push(new Promise((resolve) => {
+                const s = Date.now();
+                db.prepare('SELECT COUNT(*) FROM users').get();
+                resolve(Date.now() - s);
+            }));
+        }
+        const times = await Promise.all(promises);
+        res.json({
+            totalTime: Date.now() - start,
+            queryTimes: times,
+            avgTime: times.reduce((a, b) => a + b, 0) / times.length
+        });
+    });
+}
 
 // Demo login endpoint
 app.get('/api/demo/student', (req, res) => {
@@ -180,6 +231,12 @@ app.use('/api/flashcards', flashcardsRoutes);
 app.use('/api/bookmarks', bookmarksRoutes);
 app.use('/api/peer', peerRoutes);
 app.use('/api/templates', templatesRoutes);
+app.use('/api/integrations', integrationsRoutes);
+
+// Sentry Error Handler
+if (process.env.SENTRY_DSN) {
+    app.use(Sentry.Handlers.errorHandler());
+}
 
 // Root redirect
 app.get('/', (req, res) => {

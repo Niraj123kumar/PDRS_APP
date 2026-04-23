@@ -2,8 +2,10 @@ const express = require('express');
 const router = express.Router();
 const Anthropic = require('@anthropic-ai/sdk');
 const db = require('../db');
+const crypto = require('crypto');
 const { verifyToken } = require('../middleware/auth');
 const { requireRole } = require('../middleware/roles');
+const cacheService = require('../services/cacheService');
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -39,20 +41,33 @@ function parseAIResponse(raw) {
 router.post('/generate-questions', verifyToken, requireRole('student'), async (req, res) => {
     const { title, description, tech_stack, sessionId } = req.body;
     
-    const systemPrompt = "You are a technical interview expert. Return ONLY raw JSON. No markdown. No explanation. No backticks.";
-    const userPrompt = `Generate exactly 10 interview questions for a project titled: ${title}, description: ${description}, tech stack: ${tech_stack}. Return this exact JSON format: 
-    [ 
-        {
-          "question": "...",
-          "tier": 1,
-          "tier_label": "Fundamentals",
-          "modelAnswer": "...",
-          "keyPoints": ["point1", "point2", "point3"]
-        },
-        ...4 tier1, 3 tier2, 3 tier3 questions...
-    ]`;
-
+    // Create cache key based on project info
+    const projectHash = crypto.createHash('md5').update(`${title}${description}${tech_stack}`).digest('hex');
+    const cacheKey = `ai:questions:${projectHash}`;
+    
     try {
+        const cached = await cacheService.get(cacheKey);
+        if (cached) {
+            if (sessionId) {
+                db.prepare('UPDATE sessions SET questions_json = ? WHERE id = ? AND user_id = ?')
+                    .run(JSON.stringify(cached), sessionId, req.user.id);
+            }
+            return res.json(cached);
+        }
+
+        const systemPrompt = "You are a technical interview expert. Return ONLY raw JSON. No markdown. No explanation. No backticks.";
+        const userPrompt = `Generate exactly 10 interview questions for a project titled: ${title}, description: ${description}, tech stack: ${tech_stack}. Return this exact JSON format: 
+        [ 
+            {
+              "question": "...",
+              "tier": 1,
+              "tier_label": "Fundamentals",
+              "modelAnswer": "...",
+              "keyPoints": ["point1", "point2", "point3"]
+            },
+            ...4 tier1, 3 tier2, 3 tier3 questions...
+        ]`;
+
         const raw = await askAI(systemPrompt, userPrompt);
         const parsed = parseAIResponse(raw);
 
@@ -67,10 +82,13 @@ router.post('/generate-questions', verifyToken, requireRole('student'), async (r
             modelAnswer: q.modelAnswer || 'No model answer generated.',
             keyPoints: Array.isArray(q.keyPoints) ? q.keyPoints.slice(0, 3) : []
         }));
+        
         if (sessionId) {
             db.prepare('UPDATE sessions SET questions_json = ? WHERE id = ? AND user_id = ?')
                 .run(JSON.stringify(enriched), sessionId, req.user.id);
         }
+
+        await cacheService.set(cacheKey, enriched, 3600); // 1 hour
         res.json(enriched);
     } catch (err) {
         res.status(500).json({ error: "AI service unavailable" });
