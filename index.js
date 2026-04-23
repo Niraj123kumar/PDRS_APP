@@ -16,6 +16,8 @@ const panelRoutes = require('./routes/panel');
 const initWebSocket = require('./websocket');
 const db = require('./db');
 const jwt = require('jsonwebtoken');
+const multer = require('multer');
+const fs = require('fs');
 
 const app = express();
 const server = http.createServer(app);
@@ -41,6 +43,53 @@ app.use('/api/', limiter);
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
+
+// Configure Multer for Rubrics
+const rubricStorage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        const dir = './public/uploads/rubrics';
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        cb(null, dir);
+    },
+    filename: (req, file, cb) => {
+        const roomCode = req.params.roomCode;
+        cb(null, `${roomCode}.pdf`);
+    }
+});
+
+const uploadRubric = multer({
+    storage: rubricStorage,
+    limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+    fileFilter: (req, file, cb) => {
+        if (file.mimetype === 'application/pdf') cb(null, true);
+        else cb(new Error('Only PDFs are allowed'));
+    }
+});
+
+// Rubric Upload Route
+app.post('/api/panel/room/:roomCode/rubric', (req, res, next) => {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) return res.status(401).json({ error: 'Auth required' });
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        if (decoded.role !== 'faculty') return res.status(403).json({ error: 'Faculty only' });
+        req.user = decoded;
+        next();
+    } catch (err) {
+        res.status(401).json({ error: 'Invalid token' });
+    }
+}, uploadRubric.single('rubric'), (req, res) => {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    const roomCode = req.params.roomCode;
+    const rubricUrl = `/uploads/rubrics/${roomCode}.pdf`;
+    
+    try {
+        db.prepare('UPDATE panel_sessions SET rubric_url = ? WHERE room_code = ?').run(rubricUrl, roomCode);
+        res.json({ rubricUrl });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
 
 // Health check for AI provider
 app.get('/api/health', (req, res) => {

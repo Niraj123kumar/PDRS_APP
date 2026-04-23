@@ -27,9 +27,13 @@ class PDRS_WS {
         };
 
         this.ws.onmessage = (event) => {
-            const data = JSON.parse(event.data);
-            const handler = this.handlers.get(data.type);
-            if (handler) handler(data);
+            try {
+                const data = JSON.parse(event.data);
+                const handler = this.handlers.get(data.type);
+                if (handler) handler(data.payload || data);
+            } catch (err) {
+                console.error('WS parse error:', err);
+            }
         };
 
         this.ws.onclose = () => {
@@ -64,8 +68,8 @@ class PDRS_WS {
         this.handlers.set(type, handler);
     }
 
-    emit(type, targetId, payload) {
-        const msg = JSON.stringify({ type, targetId, payload });
+    emit(type, payload = {}, roomCode = null, targetId = null) {
+        const msg = JSON.stringify({ type, payload, roomCode, targetId });
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
             this.ws.send(msg);
         } else {

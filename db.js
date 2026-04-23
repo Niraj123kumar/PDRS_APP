@@ -58,16 +58,46 @@ CREATE TABLE IF NOT EXISTS answers (
 
 CREATE TABLE IF NOT EXISTS panel_sessions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    session_id INTEGER NOT NULL,
+    session_id INTEGER,
     faculty_id INTEGER NOT NULL,
-    student_id INTEGER NOT NULL,
+    student_id INTEGER,
     status TEXT CHECK(status IN ('scheduled', 'ongoing', 'ended')) DEFAULT 'scheduled',
+    room_code TEXT UNIQUE,
+    phase TEXT DEFAULT 'waiting',
+    panel_questions_json TEXT DEFAULT '[]',
+    rubric_url TEXT,
+    full_transcript TEXT DEFAULT '',
+    is_paused INTEGER DEFAULT 0,
+    time_per_question INTEGER DEFAULT 180,
     started_at DATETIME,
     ended_at DATETIME,
     FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
     FOREIGN KEY (faculty_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE
 );
+
+CREATE TABLE IF NOT EXISTS panel_chat ( 
+   id INTEGER PRIMARY KEY AUTOINCREMENT, 
+   panel_session_id INTEGER, 
+   sender_id INTEGER, 
+   sender_name TEXT, 
+   message TEXT, 
+   is_private INTEGER DEFAULT 0, 
+   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+   FOREIGN KEY (panel_session_id) REFERENCES panel_sessions(id) ON DELETE CASCADE,
+   FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE
+); 
+ 
+CREATE TABLE IF NOT EXISTS raise_hand_events ( 
+   id INTEGER PRIMARY KEY AUTOINCREMENT, 
+   panel_session_id INTEGER, 
+   student_id INTEGER, 
+   reason TEXT, 
+   resolved INTEGER DEFAULT 0, 
+   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+   FOREIGN KEY (panel_session_id) REFERENCES panel_sessions(id) ON DELETE CASCADE,
+   FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE
+); 
 
 CREATE TABLE IF NOT EXISTS session_requests (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
