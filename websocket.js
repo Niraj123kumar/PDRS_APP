@@ -226,6 +226,17 @@ function handleMessage(ws, data, clients, rooms, userRooms, userRoles, roomTimer
             }
             break;
 
+        case 'peer-join':
+        case 'peer-ready':
+        case 'peer-question':
+        case 'peer-answer-submitted':
+        case 'peer-both-submitted':
+        case 'peer-scores':
+            if (roomCode) {
+                broadcastToRoom(roomCode, { type, payload, senderId: userId }, clients, rooms);
+            }
+            break;
+
         default:
             // Legacy support
             if (targetId) {

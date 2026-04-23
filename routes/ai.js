@@ -299,6 +299,81 @@ router.post('/predict-score', verifyToken, requireRole('student'), (req, res) =>
     });
 });
 
+// POST /api/ai/check-plagiarism (faculty auth)
+router.post('/check-plagiarism', verifyToken, requireRole('faculty'), async (req, res) => {
+    const { studentAId, studentBId, sessionAId, sessionBId } = req.body;
+    const na = Number(studentAId);
+    const nb = Number(studentBId);
+    const sa = Number(sessionAId);
+    const sb = Number(sessionBId);
+    if (!na || !nb || !sa || !sb || na === nb) {
+        return res.status(400).json({ error: 'studentAId, studentBId, sessionAId, sessionBId required (two distinct students)' });
+    }
+    if (sa === sb) {
+        return res.status(400).json({ error: 'Sessions must be distinct' });
+    }
+    try {
+        const sA = db.prepare('SELECT id, user_id FROM sessions WHERE id = ? AND user_id = ?').get(sa, na);
+        const sB = db.prepare('SELECT id, user_id FROM sessions WHERE id = ? AND user_id = ?').get(sb, nb);
+        if (!sA || !sB) {
+            return res.status(404).json({ error: 'Session not found for given student' });
+        }
+        const listA = db.prepare('SELECT question, answer FROM answers WHERE session_id = ? ORDER BY id ASC').all(sa);
+        const listB = db.prepare('SELECT question, answer FROM answers WHERE session_id = ? ORDER BY id ASC').all(sb);
+        const nQ = Math.min(listA.length, listB.length, 10);
+        if (nQ === 0) {
+            return res.json({
+                overallSimilarity: 0,
+                suspicious: false,
+                questionBreakdown: [],
+                recommendation: 'No answers to compare for these sessions.'
+            });
+        }
+        const questionBreakdown = [];
+        let simSum = 0;
+        for (let i = 0; i < nQ; i++) {
+            const systemPrompt = 'You compare two student interview answers. Return ONLY raw JSON, no markdown.';
+            const userPrompt = `Compare these two answers for suspicious similarity. Consider paraphrasing, structural copying, idea copying.
+Question: ${String(listA[i].question).slice(0, 2000)}
+Answer A: ${String(listA[i].answer || '').slice(0, 8000)}
+Answer B: ${String(listB[i].answer || '').slice(0, 8000)}
+Return JSON: { "similarity": 0, "suspicious": false, "evidence": "short text" }
+Where similarity is 0-100.`;
+            let parsed = { similarity: 0, suspicious: false, evidence: '' };
+            try {
+                const raw = await askAI(systemPrompt, userPrompt);
+                parsed = parseAIResponse(raw);
+            } catch (e) {
+                parsed = { similarity: 0, suspicious: false, evidence: 'Could not parse model response.' };
+            }
+            const similarity = Math.min(100, Math.max(0, Number(parsed.similarity) || 0));
+            const suspicious = Boolean(parsed.suspicious);
+            simSum += similarity;
+            questionBreakdown.push({
+                question: i + 1,
+                similarity,
+                suspicious,
+                evidence: String(parsed.evidence || '').slice(0, 2000)
+            });
+        }
+        const overallSimilarity = Math.round(simSum / nQ);
+        const suspIdx = questionBreakdown.filter((q) => q.suspicious).map((q) => q.question);
+        const recommendation = suspIdx.length
+            ? `Manual review recommended for questions ${suspIdx.join(', ')}`
+            : 'No high-similarity flags; routine monitoring only.';
+
+        res.json({
+            overallSimilarity,
+            suspicious: questionBreakdown.some((q) => q.suspicious) || overallSimilarity >= 70,
+            questionBreakdown,
+            recommendation
+        });
+    } catch (err) {
+        console.error('check-plagiarism', err);
+        res.status(500).json({ error: 'Plagiarism check failed' });
+    }
+});
+
 // POST /api/ai/panel-question-bank (faculty auth required)
 router.post('/panel-question-bank', verifyToken, requireRole('faculty'), async (req, res) => {
     const { title, description, tech_stack } = req.body;

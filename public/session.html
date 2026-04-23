@@ -46,6 +46,20 @@
         .preview-card { border: 1px solid var(--border-color); border-radius: 10px; padding: 0.9rem; margin-top: 0.8rem; }
         .confidence-meter { height: 10px; background: #e2e8f0; border-radius: 8px; overflow: hidden; margin-bottom: 0.75rem; }
         .confidence-fill { height: 100%; width: 0; background: #f59e0b; transition: width 0.25s ease; }
+        .offline-banner { display: none; background: #ea580c; color: #fff; text-align: center; padding: 0.5rem; font-weight: 600; }
+        .offline-banner.show { display: block; }
+        .session-toolbar { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem; align-items: center; }
+        .split-wrap { display: block; }
+        .split-wrap.split-mode { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; align-items: start; }
+        @media (max-width: 900px) {
+            .split-wrap.split-mode { grid-template-columns: 1fr; }
+        }
+        .split-left { min-width: 0; }
+        .split-right { min-width: 0; }
+        .hint-box { background: #fffbeb; border: 1px solid #fcd34d; border-radius: 8px; padding: 0.75rem; margin: 0.5rem 0; font-size: 0.9rem; display: none; }
+        body.dark-mode .hint-box { background: rgba(180, 83, 9, 0.15); border-color: #b45309; }
+        .autosave-hint { font-size: 0.8rem; color: var(--text-muted); margin-top: 0.25rem; }
+        .sync-status { font-size: 0.85rem; color: #2563eb; margin-top: 0.25rem; }
     </style>
     <script>
         const savedTheme = localStorage.getItem('pdrs_theme');
@@ -53,6 +67,7 @@
     </script>
 </head>
 <body class="animate-up">
+    <div id="offline-banner" class="offline-banner">Offline mode — answers are saved locally and will sync when you reconnect.</div>
     <div id="loading-overlay" class="loading-overlay">
         <div class="spinner"></div>
         <h3 id="loading-text" style="color: var(--primary-color);">Preparing your AI panel...</h3>
@@ -103,9 +118,19 @@
 
         <!-- Step 2: Question Flow -->
         <div id="question-step" style="display: none;" class="animate-up">
+            <div class="session-toolbar">
+                <button type="button" class="btn btn-secondary" id="btn-split" style="width:auto">Split screen</button>
+                <button type="button" class="btn btn-secondary" id="btn-pause" style="width:auto">Pause session</button>
+                <button type="button" class="btn btn-secondary" id="btn-resume" style="width:auto; display:none">Resume</button>
+                <button type="button" class="btn btn-secondary" id="btn-save-local" style="width:auto">Save progress</button>
+                <button type="button" class="btn" id="btn-abandon" style="width:auto; background:#b91c1c">Abandon session</button>
+            </div>
+            <p id="sync-line" class="sync-status" style="display:none"></p>
             <div class="progress-bar">
                 <div id="progress-fill" class="progress-fill" style="width: 0%"></div>
             </div>
+            <div id="split-root" class="split-wrap">
+                <div class="split-left">
             <div id="question-card" class="card">
                 <div id="tier-badge" class="tier-badge">Fundamentals</div>
                 <div id="question-text" class="question-text">Question will appear here...</div>
@@ -114,8 +139,15 @@
                     <p id="model-answer" class="text-muted" style="margin-top:0.5rem;"></p>
                     <ul id="key-points"></ul>
                 </details>
+                <button type="button" class="btn btn-secondary" id="btn-hints" style="width:auto; margin-bottom:0.5rem;">Hints (<span id="hint-left">3</span> left · -5 pts each from final)</button>
+                <div id="hint-panel" class="hint-box" style="display:none;"></div>
+                </div>
+                </div>
+                <div class="split-right">
+            <div id="answer-card" class="card">
                 <textarea id="answer-input" class="answer-area" placeholder="Provide a detailed technical answer..."></textarea>
                 <div id="char-counter" class="char-counter">0 / 1000 characters</div>
+                <p class="autosave-hint" id="autosave-line">Last saved: —</p>
                 <div class="confidence-meter"><div id="confidence-fill" class="confidence-fill"></div></div>
                 <div id="confidence-label" class="text-muted" style="font-size:0.85rem; margin-bottom:0.8rem;">Confidence: --</div>
                 <textarea id="question-note" style="min-height:70px;" placeholder="Add personal note for this question"></textarea>
@@ -127,6 +159,25 @@
                 </div>
                 <div id="voice-analysis" class="text-muted" style="margin-top:0.75rem;"></div>
             </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-restore" class="modal-backdrop" style="display:none; z-index:1200;">
+        <div class="modal-content">
+            <h3>Restore saved progress?</h3>
+            <p class="text-muted">We found unsaved answers in your browser for this session.</p>
+            <button type="button" class="btn" id="modal-restore-yes">Restore</button>
+            <button type="button" class="btn btn-secondary" id="modal-restore-no">Start fresh</button>
+        </div>
+    </div>
+    <div id="modal-abandon" class="modal-backdrop" style="display:none; z-index:1200;">
+        <div class="modal-content">
+            <h3>Abandon this session?</h3>
+            <p class="text-muted">Your current progress on this run will be left incomplete.</p>
+            <button type="button" class="btn" id="modal-abandon-yes" style="background:#b91c1c">Yes, leave</button>
+            <button type="button" class="btn btn-secondary" id="modal-abandon-no">Cancel</button>
         </div>
     </div>
 
@@ -162,6 +213,11 @@
             <button id="github-close-btn" class="btn btn-secondary" style="margin-top:0.75rem;">Close</button>
         </div>
     </div>
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/sw.js').catch(() => {});
+        }
+    </script>
     <script src="/js/session-logic.js"></script>
 </body>
 </html>

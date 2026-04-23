@@ -148,6 +148,27 @@ async function sendReinstatementEmail(email) {
     await sendEmail({ to: email, subject: 'PDRS Account Reinstated', html });
 }
 
+async function sendDefenseScheduledEmail(email, name, { date, location, panel, notes } = {}) {
+    const html = emailShell(
+        'Defense session scheduled',
+        `
+            <p style="color: #334155;">Hi ${name || 'Student'}, your defense has been scheduled.</p>
+            <ul style="color: #334155;">
+                <li><strong>Date:</strong> ${date || 'TBA'}</li>
+                <li><strong>Location:</strong> ${location || 'TBA'}</li>
+                <li><strong>Panel:</strong> ${panel || '—'}</li>
+            </ul>
+            ${notes ? `<p style="color: #334155;">Notes: ${String(notes).replace(/</g, '&lt;')}</p>` : ''}
+            <p><a href="${APP_URL}/student.html" style="color: #2563eb;">Open PDRS</a></p>
+        `
+    );
+    await sendEmail({
+        to: email,
+        subject: 'PDRS — Defense session scheduled',
+        html
+    });
+}
+
 async function sendFacultyInactivityAlert(email, facultyName, inactiveStudents) {
     const list = (inactiveStudents || []).map((s) => `<li>${s.name} (${s.email}) - defense: ${s.defense_date}</li>`).join('');
     const html = emailShell(
@@ -165,6 +186,7 @@ module.exports = {
     sendOTP,
     sendWelcome,
     sendDefenseReminder,
+    sendDefenseScheduledEmail,
     sendWeeklyReport,
     sendSecurityAlert,
     sendSuspensionEmail,

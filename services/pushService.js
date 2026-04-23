@@ -53,9 +53,25 @@ async function sendToAll(title, body, url = '/notifications.html') {
     }
 }
 
+async function sendToRole(role, title, body, url = '/notifications.html') {
+    const rows = db.prepare(`
+        SELECT s.endpoint, s.p256dh, s.auth
+        FROM push_subscriptions s
+        JOIN users u ON u.id = s.user_id
+        WHERE u.role = ?
+    `).all(role);
+    for (const row of rows) {
+        await sendPush({
+            endpoint: row.endpoint,
+            keys: { p256dh: row.p256dh, auth: row.auth }
+        }, title, body, url);
+    }
+}
+
 module.exports = {
     sendPush,
     sendToUser,
     sendToAll,
+    sendToRole,
     vapidPublicKey
 };

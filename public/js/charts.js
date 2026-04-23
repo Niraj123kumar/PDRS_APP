@@ -98,5 +98,63 @@ window.charts = {
                 scales: { y: { min: 0, max: 100 } }
             }
         });
+    },
+
+    /**
+     * @param {string} axis - 'x' for horizontal bar
+     */
+    renderHorizontalBarChart(canvasId, labels, values, { axis = 'x', color = '#2563eb' } = {}) {
+        const ctx = document.getElementById(canvasId).getContext('2d');
+        const isY = axis === 'y';
+        return new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels,
+                datasets: [{ data: values, backgroundColor: color, borderRadius: 4 }]
+            },
+            options: {
+                indexAxis: isY ? 'y' : 'x',
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: { legend: { display: false } },
+                scales: { x: { beginAtZero: true }, y: { beginAtZero: true } }
+            }
+        });
+    },
+
+    renderHistogram(canvasId, bins, color = 'rgba(37, 99, 235, 0.6)') {
+        const ctx = document.getElementById(canvasId).getContext('2d');
+        return new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: bins.map((b) => b.label),
+                datasets: [{ data: bins.map((b) => b.count), backgroundColor: color, borderRadius: 2 }]
+            },
+            options: {
+                responsive: true,
+                plugins: { legend: { display: false } },
+                scales: { y: { beginAtZero: true, title: { display: true, text: 'Sessions' } },
+                    x: { title: { display: true, text: 'Duration (min)' } } }
+            }
+        });
+    },
+
+    renderYoYLine(canvasId, labels, cur, prev) {
+        const ctx = document.getElementById(canvasId).getContext('2d');
+        return new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels,
+                datasets: [
+                    { label: 'Current year', data: cur, borderColor: '#16a34a', tension: 0.2, fill: false },
+                    { label: 'Previous year', data: prev, borderColor: '#94a3b8', borderDash: [4, 4], tension: 0.2, fill: false }
+                ]
+            },
+            options: {
+                responsive: true,
+                spanGaps: true,
+                scales: { y: { min: 0, max: 4, title: { display: true, text: 'Avg score (0-4)' } } }
+            }
+        });
     }
 };

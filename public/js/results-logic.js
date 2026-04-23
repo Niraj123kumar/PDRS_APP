@@ -9,6 +9,29 @@ document.addEventListener('DOMContentLoaded', async () => {
         window.location.href = '/student.html';
         return;
     }
+
+    let fullSession = null;
+    let replayList = [];
+    let replayMeta = { questions: [] };
+
+    const tabBtns = document.querySelectorAll('.results-tabs [data-tab]');
+    const tabPanels = {
+        overview: document.getElementById('tab-panel-overview'),
+        replay: document.getElementById('tab-panel-replay'),
+        summary: document.getElementById('tab-panel-summary')
+    };
+    function switchTab(name) {
+        tabBtns.forEach(b => {
+            const on = b.getAttribute('data-tab') === name;
+            b.classList.toggle('active', on);
+            b.setAttribute('aria-selected', on ? 'true' : 'false');
+        });
+        Object.keys(tabPanels).forEach(k => {
+            if (tabPanels[k]) tabPanels[k].classList.toggle('active', k === name);
+        });
+    }
+    tabBtns.forEach(b => b.addEventListener('click', () => switchTab(b.getAttribute('data-tab'))));
+
     const exportBtn = document.getElementById('export-session-pdf-btn');
     if (exportBtn) {
         exportBtn.onclick = async () => {
@@ -33,6 +56,15 @@ document.addEventListener('DOMContentLoaded', async () => {
             headers: { 'Authorization': `Bearer ${token}` }
         });
         const session = await sessionRes.json();
+        fullSession = session;
+
+        const replayRes = await fetch(`/api/sessions/${sessionId}/replay`, {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+        if (replayRes.ok) {
+            const rj = await replayRes.json();
+            replayList = Array.isArray(rj.replay) ? rj.replay : [];
+        }
 
         // Fetch all sessions to compare
         const allSessionsRes = await fetch('/api/sessions', {
@@ -44,6 +76,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         renderResults(session, prevSession);
         fetchCoaching(session.answers);
         fetchPanelArtifacts(sessionId);
+        initReplayUi();
+        initSummaryUi();
 
     } catch (err) {
         console.error('Failed to load results', err);
@@ -190,5 +224,206 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (progress < 1) window.requestAnimationFrame(step);
         }
         window.requestAnimationFrame(step);
+    }
+
+    function buildQuestionList(sess) {
+        let qs = [];
+        try {
+            qs = JSON.parse(sess.questions_json || '[]');
+        } catch (e) { /* */ }
+        if (Array.isArray(qs) && qs.length && typeof qs[0] === 'object' && (qs[0].question != null)) {
+            return qs;
+        }
+        if (sess.answers && sess.answers.length) {
+            return sess.answers.map((a) => ({ question: a.question, tier: a.tier }));
+        }
+        return [];
+    }
+
+    function cumulativeStats(replay, upToIncl) {
+        const slice = replay.slice(0, upToIncl + 1);
+        if (!slice.length) {
+            return { overall: 0, clarity: 0, reasoning: 0, depth: 0, confidence: 0 };
+        }
+        const acc = { c: 0, r: 0, d: 0, f: 0 };
+        slice.forEach((s) => {
+            const sc = s.scoreSnapshot || {};
+            acc.c += Number(sc.clarity ?? sc.clarity_score) || 0;
+            acc.r += Number(sc.reasoning ?? sc.reasoning_score) || 0;
+            acc.d += Number(sc.depth ?? sc.depth_score) || 0;
+            acc.f += Number(sc.confidence ?? sc.confidence_score) || 0;
+        });
+        const n = slice.length;
+        const o = (acc.c + acc.r + acc.d + acc.f) / (4 * n);
+        return { overall: o, clarity: acc.c / n, reasoning: acc.r / n, depth: acc.d / n, confidence: acc.f / n };
+    }
+
+    function initReplayUi() {
+        const empty = document.getElementById('replay-empty');
+        const content = document.getElementById('replay-content');
+        const scrub = document.getElementById('replay-scrub');
+        if (!content || !scrub) return;
+        const qs = buildQuestionList(fullSession);
+        replayMeta.questions = qs;
+
+        if (!replayList.length) {
+            empty.style.display = 'block';
+            content.style.display = 'none';
+            return;
+        }
+        empty.style.display = 'none';
+        content.style.display = 'block';
+        const maxI = replayList.length - 1;
+        scrub.max = String(maxI);
+        scrub.value = '0';
+        const nav = document.getElementById('replay-q-nav');
+        const seen = new Set();
+        replayList.forEach((e) => seen.add(e.questionIndex));
+        const indices = Array.from(seen).sort((a, b) => a - b);
+        nav.innerHTML = indices
+            .map((qi) => {
+                const last = replayList.map((e, j) => (e.questionIndex === qi ? j : -1)).filter((j) => j >= 0).pop();
+                return `<button type="button" data-replay-idx="${last}" data-q="${qi}">Q${qi + 1}</button>`;
+            })
+            .join('');
+        nav.querySelectorAll('button').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                const j = parseInt(btn.getAttribute('data-replay-idx'), 10);
+                if (!Number.isNaN(j)) {
+                    scrub.value = String(j);
+                    renderReplayFrame(parseInt(scrub.value, 10), true);
+                }
+            });
+        });
+        function renderReplayFrame(idx, animate) {
+            const n = Math.max(0, Math.min(idx, maxI));
+            const step = replayList[n];
+            const stats = cumulativeStats(replayList, n);
+            document.getElementById('replay-step-label').textContent = `Step ${n + 1} of ${replayList.length}`;
+
+            const circle = document.getElementById('replay-circle-fill');
+            const sval = document.getElementById('replay-score-val');
+            const sc = step.scoreSnapshot || {};
+            const off = 440 - (440 * Math.round(stats.overall)) / 100;
+            if (circle) circle.style.strokeDashoffset = off;
+            if (sval) {
+                if (animate) {
+                    sval.textContent = '0';
+                    animateNumber(sval, 0, Math.round(stats.overall), 800);
+                } else sval.textContent = String(Math.round(stats.overall));
+            }
+
+            [['clarity', 'clarity'], ['reasoning', 'reasoning'], ['depth', 'depth'], ['confidence', 'confidence']].forEach(([a, b]) => {
+                const v = Math.round(stats[b]);
+                const elV = document.getElementById(`replay-${a}-val`);
+                const elF = document.getElementById(`replay-${a}-fill`);
+                if (elV) elV.textContent = `${v}%`;
+                if (elF) elF.style.width = `${v}%`;
+            });
+
+            const qList = replayMeta.questions;
+            const qText = (qList[step.questionIndex] && qList[step.questionIndex].question) || `Question ${step.questionIndex + 1}`;
+            document.getElementById('replay-question').textContent = qText;
+            document.getElementById('replay-answer').textContent = step.answerSnapshot || '';
+
+            const curQ = step.questionIndex;
+            nav.querySelectorAll('button').forEach((btn) => {
+                const qi = parseInt(btn.getAttribute('data-q'), 10);
+                btn.classList.toggle('current', !Number.isNaN(qi) && qi === curQ);
+            });
+        }
+        scrub.addEventListener('input', () => renderReplayFrame(parseInt(scrub.value, 10), false));
+        renderReplayFrame(0, true);
+
+        let playing = false;
+        const playBtn = document.getElementById('replay-play-btn');
+        if (playBtn) {
+            playBtn.addEventListener('click', () => {
+                if (playing) return;
+                playing = true;
+                playBtn.disabled = true;
+                let i = 0;
+                const tick = setInterval(() => {
+                    scrub.value = String(i);
+                    renderReplayFrame(i, i === 0);
+                    if (i >= maxI) {
+                        clearInterval(tick);
+                        playing = false;
+                        playBtn.disabled = false;
+                    } else i += 1;
+                }, 450);
+            });
+        }
+    }
+
+    function initSummaryUi() {
+        const prior = document.getElementById('summary-pdf-prior');
+        const genBtn = document.getElementById('btn-generate-summary');
+        const loadEl = document.getElementById('summary-loading');
+        const box = document.getElementById('summary-content');
+        const dl = document.getElementById('summary-download-pdf');
+        if (!genBtn) return;
+        if (fullSession && fullSession.summary_pdf_url) {
+            prior.style.display = 'block';
+            dl.style.display = 'inline-block';
+            dl.href = fullSession.summary_pdf_url;
+            dl.setAttribute('download', 'session-summary.pdf');
+        }
+        const cacheKey = `pdrs_session_summary_${sessionId}`;
+        try {
+            const cached = localStorage.getItem(cacheKey);
+            if (cached) {
+                const sum = JSON.parse(cached);
+                fillSummaryPanel(sum);
+                box.style.display = 'block';
+            }
+        } catch (e) { /* */ }
+
+        genBtn.addEventListener('click', async () => {
+            loadEl.style.display = 'block';
+            loadEl.textContent = 'Analyzing your performance...';
+            genBtn.disabled = true;
+            try {
+                const res = await fetch(`/api/sessions/${sessionId}/summarize`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${auth.getToken()}` }
+                });
+                if (!res.ok) throw new Error('fail');
+                const data = await res.json();
+                localStorage.setItem(cacheKey, JSON.stringify(data.summary));
+                fillSummaryPanel(data.summary);
+                box.style.display = 'block';
+                if (data.summaryUrl) {
+                    fullSession.summary_pdf_url = data.summaryUrl;
+                    prior.style.display = 'block';
+                    dl.style.display = 'inline-block';
+                    dl.href = data.summaryUrl;
+                }
+            } catch (e) {
+                showToast('Summary could not be generated', 'error');
+            } finally {
+                loadEl.style.display = 'none';
+                genBtn.disabled = false;
+            }
+        });
+    }
+
+    function fillSummaryPanel(s) {
+        if (!s) return;
+        const o = document.getElementById('summary-overall');
+        const d = document.getElementById('summary-dimensions');
+        if (o) o.textContent = s.overallParagraph || '';
+        if (d) d.textContent = s.dimensionAnalysis || '';
+        const st = document.getElementById('summary-strengths');
+        const im = document.getElementById('summary-improve');
+        const nx = document.getElementById('summary-next');
+        if (st) st.innerHTML = (s.strengths || []).map((x) => `<li class="strength-item">${escapeHtml(x)}</li>`).join('');
+        if (im) im.innerHTML = (s.improvements || []).map((x) => `<li class="improve-item">${escapeHtml(x)}</li>`).join('');
+        if (nx) nx.innerHTML = (s.nextSteps || []).map((x) => `<li class="next-item">${escapeHtml(x)}</li>`).join('');
+    }
+    function escapeHtml(t) {
+        const d = document.createElement('div');
+        d.textContent = t;
+        return d.innerHTML;
     }
 });

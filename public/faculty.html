@@ -32,6 +32,39 @@
         
         .at-risk-row { border-left: 4px solid var(--error-color); animation: pulseRed 2s infinite; }
         .theme-toggle { cursor: pointer; font-size: 1.25rem; background: none; border: none; padding: 0.5rem; }
+
+        .analytics-wrap { margin-bottom: 2rem; }
+        .tab-row { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1.25rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem; }
+        .tab-btn { padding: 0.5rem 1rem; border-radius: 8px; border: 1px solid var(--border-color); background: #f8fafc; color: #334155; font-weight: 600; cursor: pointer; font-size: 0.875rem; }
+        body.dark-mode .tab-btn { background: #1e293b; color: #e2e8f0; border-color: rgba(255,255,255,0.1); }
+        .tab-btn.active { background: var(--primary-color); color: #fff; border-color: var(--primary-color); }
+        .tab-panel { display: none; }
+        .tab-panel.active { display: block; }
+        .heatmap-table { border-collapse: separate; border-spacing: 4px; margin: 1rem 0; }
+        .heatmap-table th, .heatmap-table td { padding: 0.5rem 0.75rem; text-align: center; min-width: 5rem; }
+        .hm-cell { border-radius: 6px; font-weight: 700; color: #0f172a; cursor: default; }
+        .insight { margin-top: 1rem; padding: 0.75rem 1rem; background: #eff6ff; border-left: 4px solid #2563eb; border-radius: 6px; font-size: 0.9rem; }
+        body.dark-mode .insight { background: rgba(37,99,235,0.12); color: #e2e8f0; }
+        .badge-yoy { display: inline-block; margin: 0.15rem; padding: 0.2rem 0.5rem; border-radius: 6px; font-size: 0.8rem; font-weight: 700; }
+        .badge-pos { background: #dcfce7; color: #166534; }
+        .badge-neg { background: #fee2e2; color: #b91c1c; }
+        body.dark-mode .badge-pos { background: #14532d; color: #bbf7d0; }
+        body.dark-mode .badge-neg { background: #7f1d1d; color: #fecaca; }
+        .plag-row { border: 1px solid var(--border-color); border-radius: 8px; padding: 0.75rem; margin-bottom: 0.5rem; }
+        .plag-row.susp { border-color: #ef4444; background: #fef2f2; }
+        body.dark-mode .plag-row.susp { background: rgba(127, 29, 29, 0.2); }
+        .sim-bar { height: 8px; border-radius: 4px; background: #e2e8f0; overflow: hidden; margin-top: 0.5rem; }
+        .sim-bar > div { height: 100%; background: #22c55e; border-radius: 4px; }
+        .plag-row.susp .sim-bar > div { background: #ef4444; }
+        details.plag-ev { margin-top: 0.5rem; font-size: 0.85rem; color: var(--text-muted); }
+        .cal-wrap { max-width: 800px; }
+        .cal-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem; }
+        .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+        .cal-dow { font-size: 0.75rem; text-align: center; color: var(--text-muted); }
+        .cal-cell { min-height: 64px; border: 1px solid var(--border-color); border-radius: 6px; padding: 4px; font-size: 0.8rem; }
+        .cal-cell .def-block { background: #dbeafe; border-left: 3px solid #2563eb; padding: 2px 4px; margin: 2px 0; border-radius: 4px; cursor: pointer; }
+        body.dark-mode .cal-cell .def-block { background: #1e3a5f; }
+        .flag-card { border: 2px solid #ef4444 !important; background: #fef2f2; border-radius: 8px; padding: 1rem; margin-bottom: 0.75rem; }
     </style>
     <script>
         const savedTheme = localStorage.getItem('pdrs_theme');
@@ -51,6 +84,21 @@
     </nav>
 
     <div class="container">
+        <div class="analytics-wrap">
+            <h2 style="margin-bottom:0.5rem;">Analytics</h2>
+            <div class="tab-row" id="analytics-tabs">
+                <button type="button" class="tab-btn active" data-tab="overview">Overview</button>
+                <button type="button" class="tab-btn" data-tab="classroom">Classroom</button>
+                <button type="button" class="tab-btn" data-tab="heatmap">Heatmap</button>
+                <button type="button" class="tab-btn" data-tab="dropoff">Drop-off Analysis</button>
+                <button type="button" class="tab-btn" data-tab="time">Time Analytics</button>
+                <button type="button" class="tab-btn" data-tab="department">Department Comparison</button>
+                <button type="button" class="tab-btn" data-tab="yoy">Year over Year</button>
+                <button type="button" class="tab-btn" data-tab="plagiarism">Plagiarism Check</button>
+            </div>
+        </div>
+
+        <div id="tab-overview" class="tab-panel active">
         <div id="stats-loading" class="stats-grid">
             <div class="skeleton" style="height: 100px;"></div>
             <div class="skeleton" style="height: 100px;"></div>
@@ -78,13 +126,17 @@
         </div>
 
         <div class="table-section">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
                 <h3>Student Roster</h3>
-                <input type="text" id="student-search" placeholder="Search by name or email..." style="width: 300px;">
+                <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                    <input type="text" id="student-search" placeholder="Search by name or email..." style="width: 300px;">
+                    <button type="button" class="btn" id="btn-compare-sel" style="width: auto; font-size: 0.85rem;">Compare selected (max 2)</button>
+                </div>
             </div>
             <table id="student-table">
                 <thead>
                     <tr>
+                        <th style="width:36px"></th>
                         <th>Name</th>
                         <th>Email</th>
                         <th>Sessions</th>
@@ -94,6 +146,158 @@
                 </thead>
                 <tbody id="student-body"></tbody>
             </table>
+        </div>
+        </div>
+
+        <div id="tab-classroom" class="tab-panel">
+            <div class="table-section" style="margin-bottom:1.5rem;">
+                <h3>Bulk export</h3>
+                <p class="text-muted" style="margin: 0.5rem 0 1rem;">Download a ZIP of CSV files (one per student, all sessions and scores).</p>
+                <button type="button" class="btn" id="btn-export-zip" style="width: auto">Download all students (ZIP)</button>
+            </div>
+            <div class="table-section" style="margin-bottom:1.5rem;">
+                <h3>Announcements</h3>
+                <div style="max-width: 480px; display: grid; gap: 0.5rem;">
+                    <input type="text" id="ann-title" placeholder="Title" style="padding:0.4rem" />
+                    <textarea id="ann-body" rows="3" placeholder="Message" style="padding:0.4rem"></textarea>
+                    <label>Audience <select id="ann-role"><option value="student">Students</option><option value="faculty">Faculty</option></select></label>
+                    <button type="button" class="btn" id="ann-post" style="width:auto">Post announcement</button>
+                </div>
+                <h4 style="margin-top:1.5rem">Recent</h4>
+                <div id="ann-list"></div>
+            </div>
+            <div class="table-section cal-wrap" style="margin-bottom:1.5rem;">
+                <h3>Defense schedule</h3>
+                <div class="cal-nav">
+                    <button type="button" class="btn btn-secondary" id="cal-prev" style="width:auto">←</button>
+                    <strong id="cal-label">Month</strong>
+                    <button type="button" class="btn btn-secondary" id="cal-next" style="width:auto">→</button>
+                    <button type="button" class="btn" id="btn-open-schedule" style="width:auto; margin-left:1rem">Schedule defense</button>
+                </div>
+                <div class="cal-grid" id="cal-dow"></div>
+                <div class="cal-grid" id="cal-cells" style="margin-top:0.5rem"></div>
+            </div>
+            <div class="table-section" style="margin-bottom:1.5rem;">
+                <h3>Question paper (PDF)</h3>
+                <p class="text-muted" style="font-size:0.9rem">Select student IDs (comma-separated) or use picks from roster after checking students.</p>
+                <input type="text" id="qp-ids" placeholder="1,2,3" style="max-width: 320px; padding:0.4rem" />
+                <label style="margin-left:0.5rem">Count <input type="number" id="qp-n" value="5" min="1" max="20" style="width:3rem" /></label>
+                <label style="margin-left:0.5rem">Diff <select id="qp-diff"><option>easy</option><option selected>medium</option><option>hard</option></select></label>
+                <button type="button" class="btn" id="btn-qp" style="width:auto; margin-top:0.5rem; display:block">Generate PDF</button>
+            </div>
+            <div class="table-section">
+                <h3>Flagged students (active)</h3>
+                <div id="flag-list"><p class="text-muted">None</p></div>
+            </div>
+        </div>
+
+        <div id="def-modal" class="modal">
+            <div class="modal-content" style="max-width: 480px;">
+                <button type="button" onclick="document.getElementById('def-modal').style.display='none'" style="position:absolute; top:1rem; right:1rem; border:none; background:none; font-size:1.5rem; cursor:pointer;">&times;</button>
+                <h3 id="def-modal-title">Schedule defense</h3>
+                <input type="hidden" id="def-edit-id" value="" />
+                <label>Student (ID)</label>
+                <input type="number" id="def-student" style="width: 100%; margin-bottom:0.5rem" />
+                <label>Date / time (local)</label>
+                <input type="datetime-local" id="def-date" style="width: 100%; margin-bottom:0.5rem" />
+                <label>Location</label>
+                <input type="text" id="def-loc" style="width: 100%; margin-bottom:0.5rem" />
+                <label>Panel members (comma)</label>
+                <input type="text" id="def-panel" style="width: 100%; margin-bottom:0.5rem" />
+                <label>Notes</label>
+                <textarea id="def-notes" rows="2" style="width: 100%"></textarea>
+                <button type="button" class="btn" id="def-save" style="margin-top:1rem; width: auto">Save</button>
+            </div>
+        </div>
+
+        <div id="tab-heatmap" class="tab-panel">
+            <div class="table-section">
+                <h3>Question tier & dimension heatmap <small style="color:var(--text-muted);font-weight:400">(avg score 0–4, red → green)</small></h3>
+                <div id="heatmap-insight" class="insight" style="display:none;"></div>
+                <table class="heatmap-table" id="heatmap-grid" aria-label="Score heatmap"></table>
+            </div>
+        </div>
+
+        <div id="tab-dropoff" class="tab-panel">
+            <div class="chart-card">
+                <h3>Abandonment by question</h3>
+                <p id="dropoff-rate" class="insight" style="border-left-color:#16a34a;"></p>
+                <canvas id="dropoffChart" height="120"></canvas>
+                <p id="dropoff-insight" class="insight"></p>
+            </div>
+        </div>
+
+        <div id="tab-time" class="tab-panel">
+            <div class="chart-card" style="margin-bottom:1rem;">
+                <h3>Average time per question (seconds) by tier</h3>
+                <canvas id="timeTierChart" height="140"></canvas>
+            </div>
+            <div class="chart-card">
+                <h3>Session duration distribution (minutes)</h3>
+                <canvas id="timeHistChart" height="140"></canvas>
+                <p id="time-insight" class="insight"></p>
+            </div>
+        </div>
+
+        <div id="tab-department" class="tab-panel">
+            <div class="table-section" style="margin-bottom:1rem;">
+                <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;">
+                    <label>Scope: <select id="dept-scope"><option value="all">All time</option><option value="semester">Current semester (120d)</option></select></label>
+                </div>
+            </div>
+            <div class="chart-card" style="margin-bottom:1rem;">
+                <h3>Departments by average score</h3>
+                <canvas id="deptChart" height="160"></canvas>
+            </div>
+            <div class="table-section">
+                <h3>Department stats</h3>
+                <table>
+                    <thead><tr><th>Department</th><th>Students</th><th>Sessions</th><th>Avg score (0-4)</th></tr></thead>
+                    <tbody id="dept-table-body"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="tab-yoy" class="tab-panel">
+            <div class="table-section" style="margin-bottom:1rem;">
+                <label>Year: <input type="number" id="yoy-year" min="2000" max="2100" style="width:5rem"></label>
+                <label style="margin-left:1rem;">Compare: <input type="number" id="yoy-compare" min="2000" max="2100" style="width:5rem"></label>
+                <button type="button" class="btn" id="yoy-refresh" style="width:auto;margin-left:0.5rem;">Apply</button>
+            </div>
+            <p id="yoy-summary" class="insight"></p>
+            <div class="chart-card" style="margin-bottom:1rem;">
+                <h3>Monthly average score</h3>
+                <canvas id="yoyLineChart" height="200"></canvas>
+            </div>
+            <div class="table-section">
+                <h3>Dimension year-over-year</h3>
+                <table>
+                    <thead><tr><th>Dimension</th><th>Change</th></tr></thead>
+                    <tbody id="yoy-dim-body"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="tab-plagiarism" class="tab-panel">
+            <div class="table-section">
+                <h3>Compare two students</h3>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;max-width:700px;">
+                    <div>
+                        <label>Student A</label>
+                        <select id="plag-student-a" style="width:100%;margin-top:0.25rem;padding:0.4rem;"><option value="">-- Select --</option></select>
+                        <label style="margin-top:0.5rem;display:block;">Session A</label>
+                        <select id="plag-session-a" style="width:100%;margin-top:0.25rem;padding:0.4rem;"><option value="">--</option></select>
+                    </div>
+                    <div>
+                        <label>Student B</label>
+                        <select id="plag-student-b" style="width:100%;margin-top:0.25rem;padding:0.4rem;"><option value="">-- Select --</option></select>
+                        <label style="margin-top:0.5rem;display:block;">Session B</label>
+                        <select id="plag-session-b" style="width:100%;margin-top:0.25rem;padding:0.4rem;"><option value="">--</option></select>
+                    </div>
+                </div>
+                <button type="button" class="btn" id="plag-run" style="margin-top:1rem;">Check for Plagiarism</button>
+                <div id="plag-result" style="margin-top:1.5rem;"></div>
+            </div>
         </div>
     </div>
 
@@ -127,6 +331,351 @@
         document.getElementById('faculty-name').textContent = user.name;
 
         let cohortChart, historyChart;
+        const axCharts = { dropoff: null, timeTier: null, timeHist: null, dept: null, yoy: null };
+        let studentsCache = [];
+        const heatTo4 = (s) => Math.max(0, Math.min(4, s)) / 4;
+        const heatmapCellColor = (score) => {
+            const t = heatTo4(score);
+            const hue = Math.round(t * 120);
+            return `hsl(${hue} 70% 42%)`;
+        };
+
+        function showTab(name) {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.getAttribute('data-tab') === name));
+            document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-' + name));
+        }
+
+        function tabByName(t) {
+            if (t === 'classroom' && !window._loadedClass) { window._loadedClass = true; loadClassroom(); }
+            if (t === 'heatmap' && !window._loadedHeat) { window._loadedHeat = true; loadHeatmap(); }
+            if (t === 'dropoff' && !window._loadedDrop) { window._loadedDrop = true; loadDropoff(); }
+            if (t === 'time' && !window._loadedTime) { window._loadedTime = true; loadTimeAnalytics(); }
+            if (t === 'department' && !window._loadedDept) { window._loadedDept = true; loadDepartment(); }
+            if (t === 'yoy' && !window._loadedYoy) { window._loadedYoy = true; loadYoy(); }
+        }
+
+        let calCursor = new Date();
+        let defenseRows = [];
+        const tok = () => auth.getToken();
+
+        async function loadClassroom() {
+            const t = tok();
+            const [ann, flags, def] = await Promise.all([
+                fetch('/api/faculty/announcements', { headers: { 'Authorization': `Bearer ${t}` } }).then(r => r.json()),
+                fetch('/api/faculty/flagged', { headers: { 'Authorization': `Bearer ${t}` } }).then(r => r.json()),
+                fetch('/api/faculty/defense-schedule?all=true', { headers: { 'Authorization': `Bearer ${t}` } }).then(r => r.json())
+            ]);
+            defenseRows = def;
+            document.getElementById('ann-list').innerHTML = (ann || []).map(a => `
+                <div style="border:1px solid var(--border-color); border-radius:8px; padding:0.75rem; margin-bottom:0.5rem;">
+                    <strong>${(a.title || '').replace(/</g, '&lt;')}</strong> <span class="text-muted" style="font-size:0.8rem">→ ${a.target_role}</span>
+                    <p style="margin:0.25rem 0; font-size:0.9rem;">${(a.message || '').replace(/</g, '&lt;')}</p>
+                    <button type="button" class="btn btn-secondary" style="width:auto; font-size:0.8rem" onclick="deleteAnn(${a.id})">Delete</button>
+                </div>
+            `).join('') || '<p class="text-muted">No announcements</p>';
+            document.getElementById('flag-list').innerHTML = (flags && flags.length) ? flags.map(f => `
+                <div class="flag-card">
+                    <strong>${(f.student_name || '').replace(/</g, '&lt;')}</strong> <span class="text-muted">${(f.reason || '').replace(/</g, '&lt;')}</span>
+                    <button type="button" class="btn" style="width:auto; margin-top:0.5rem" onclick="resolveFlag(${f.id})">Resolve</button>
+                </div>
+            `).join('') : '<p class="text-muted">No active flags</p>';
+            renderCal();
+        }
+        window.deleteAnn = async function(id) {
+            if (!confirm('Delete this announcement?')) return;
+            const t = tok();
+            const r = await fetch('/api/faculty/announcements/' + id, { method: 'DELETE', headers: { 'Authorization': `Bearer ${t}` } });
+            if (r.ok) { showToast('Deleted', 'success'); loadClassroom(); }
+        };
+        window.resolveFlag = async function(id) {
+            const t = tok();
+            const r = await fetch('/api/faculty/flag-student/' + id + '/resolve', { method: 'PATCH', headers: { 'Authorization': `Bearer ${t}` } });
+            if (r.ok) { showToast('Resolved', 'success'); loadClassroom(); }
+        };
+        function renderCal() {
+            const y = calCursor.getFullYear();
+            const m = calCursor.getMonth();
+            document.getElementById('cal-label').textContent = new Date(y, m, 1).toLocaleString(undefined, { month: 'long', year: 'numeric' });
+            const dows = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+            document.getElementById('cal-dow').innerHTML = dows.map(d => `<div class="cal-dow">${d}</div>`).join('');
+            const first = new Date(y, m, 1);
+            const startPad = first.getDay();
+            const days = new Date(y, m + 1, 0).getDate();
+            const byDay = {};
+            (defenseRows || []).forEach((row) => {
+                if (!row.scheduled_date) return;
+                const d = new Date(row.scheduled_date);
+                if (d.getFullYear() === y && d.getMonth() === m) {
+                    if (!byDay[d.getDate()]) byDay[d.getDate()] = [];
+                    byDay[d.getDate()].push(row);
+                }
+            });
+            let cells = '';
+            for (let i = 0; i < startPad; i++) cells += '<div class="cal-cell"></div>';
+            for (let d = 1; d <= days; d++) {
+                const list = (byDay[d] || []);
+                const blocks = list.map((r) => `<div class="def-block" title="${(r.notes || '').replace(/"/g, '')}" onclick="editDefense(${r.id})">${(r.student_name || '').split(' ')[0]} — ${(r.status || '').slice(0,4)}</div>`).join('');
+                cells += `<div class="cal-cell"><div style="font-weight:700; margin-bottom:2px;">${d}</div>${blocks}</div>`;
+            }
+            document.getElementById('cal-cells').innerHTML = cells;
+        }
+        document.getElementById('cal-prev').addEventListener('click', () => { calCursor.setMonth(calCursor.getMonth() - 1); renderCal(); });
+        document.getElementById('cal-next').addEventListener('click', () => { calCursor.setMonth(calCursor.getMonth() + 1); renderCal(); });
+        document.getElementById('btn-open-schedule').addEventListener('click', () => {
+            document.getElementById('def-modal-title').textContent = 'Schedule defense';
+            document.getElementById('def-edit-id').value = '';
+            document.getElementById('def-student').value = '';
+            document.getElementById('def-date').value = '';
+            document.getElementById('def-loc').value = '';
+            document.getElementById('def-panel').value = '';
+            document.getElementById('def-notes').value = '';
+            document.getElementById('def-modal').style.display = 'flex';
+        });
+        window.editDefense = function(id) {
+            const r = (defenseRows || []).find((x) => x.id === id);
+            if (!r) return;
+            document.getElementById('def-modal-title').textContent = 'Edit defense';
+            document.getElementById('def-edit-id').value = r.id;
+            document.getElementById('def-student').value = r.student_id;
+            const dt = r.scheduled_date ? new Date(r.scheduled_date) : new Date();
+            document.getElementById('def-date').value = dt.toISOString().slice(0, 16);
+            document.getElementById('def-loc').value = r.location || '';
+            document.getElementById('def-panel').value = r.panel_members || '';
+            document.getElementById('def-notes').value = r.notes || '';
+            document.getElementById('def-modal').style.display = 'flex';
+        };
+        document.getElementById('def-save').addEventListener('click', async () => {
+            const t = tok();
+            const eid = document.getElementById('def-edit-id').value;
+            const body = {
+                date: document.getElementById('def-date').value,
+                location: document.getElementById('def-loc').value,
+                panelMembers: document.getElementById('def-panel').value,
+                notes: document.getElementById('def-notes').value
+            };
+            if (eid) {
+                const r = await fetch('/api/faculty/defense-schedule/' + eid, { method: 'PATCH', headers: { 'Authorization': `Bearer ${t}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+                if (r.ok) { showToast('Updated', 'success'); document.getElementById('def-modal').style.display = 'none'; loadClassroom(); }
+            } else {
+                const r = await fetch('/api/faculty/schedule-defense', {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${t}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ studentId: document.getElementById('def-student').value, date: body.date, location: body.location, panelMembers: body.panelMembers, notes: body.notes })
+                });
+                if (r.ok) { showToast('Scheduled', 'success'); document.getElementById('def-modal').style.display = 'none'; loadClassroom(); }
+                else { const e = await r.json().catch(()=>({})); showToast(e.error || 'Failed', 'error'); }
+            }
+        });
+        document.getElementById('ann-post').addEventListener('click', async () => {
+            const t = tok();
+            const r = await fetch('/api/faculty/announcements', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${t}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ title: document.getElementById('ann-title').value, message: document.getElementById('ann-body').value, targetRole: document.getElementById('ann-role').value })
+            });
+            if (r.ok) { showToast('Posted', 'success'); document.getElementById('ann-title').value = ''; document.getElementById('ann-body').value = ''; loadClassroom(); }
+        });
+        document.getElementById('btn-export-zip').addEventListener('click', async () => {
+            const t = tok();
+            const r = await fetch('/api/faculty/export-all', { headers: { 'Authorization': `Bearer ${t}` } });
+            if (!r.ok) { showToast('Export failed', 'error'); return; }
+            const b = await r.blob();
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(b);
+            a.download = 'pdrs_students_export.zip';
+            a.click();
+            URL.revokeObjectURL(a.href);
+            showToast('Download started', 'success');
+        });
+        document.getElementById('btn-qp').addEventListener('click', async () => {
+            const t = tok();
+            const raw = document.getElementById('qp-ids').value.split(/[\s,]+/).map((x) => parseInt(x, 10)).filter((n) => n > 0);
+            if (!raw.length) { showToast('Enter student IDs', 'error'); return; }
+            const r = await fetch('/api/faculty/generate-question-paper', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${t}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ studentIds: raw, difficulty: document.getElementById('qp-diff').value, questionCount: document.getElementById('qp-n').value })
+            });
+            if (!r.ok) { showToast('PDF failed', 'error'); return; }
+            const b = await r.blob();
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(b);
+            a.download = 'question_paper.pdf';
+            a.click();
+        });
+        document.getElementById('btn-compare-sel').addEventListener('click', () => {
+            const c = document.querySelectorAll('.st-pick:checked');
+            if (c.length !== 2) { showToast('Select exactly 2 students', 'error'); return; }
+            const a = c[0].getAttribute('data-id');
+            const b = c[1].getAttribute('data-id');
+            window.open('/compare.html?a=' + a + '&b=' + b, '_blank');
+        });
+
+        document.getElementById('analytics-tabs').addEventListener('click', (e) => {
+            const btn = e.target.closest('.tab-btn');
+            if (!btn) return;
+            const t = btn.getAttribute('data-tab');
+            if (!t) return;
+            showTab(t);
+            tabByName(t);
+        });
+
+        async function loadHeatmap() {
+            const token = auth.getToken();
+            const data = await fetch('/api/faculty/analytics/heatmap', { headers: { 'Authorization': `Bearer ${token}` } }).then(r => r.json());
+            const grid = document.getElementById('heatmap-grid');
+            const dims = ['clarity', 'reasoning', 'depth', 'confidence'];
+            const tiers = ['tier1', 'tier2', 'tier3'];
+            const counts = { tier1: data.tier1?.attemptCount || 0, tier2: data.tier2?.attemptCount || 0, tier3: data.tier3?.attemptCount || 0 };
+            let h = '<thead><tr><th></th><th>Tier 1</th><th>Tier 2</th><th>Tier 3</th></tr></thead><tbody>';
+            for (const d of dims) {
+                h += `<tr><th style="text-align:left">${d}</th>`;
+                for (const t of tiers) {
+                    const sc = (data.byDimension && data.byDimension[d] && data.byDimension[d][t]) != null ? Number(data.byDimension[d][t]) : 0;
+                    const n = counts[t] || 0;
+                    const bg = heatmapCellColor(sc);
+                    h += `<td class="hm-cell" style="background:${bg}" title="Attempts: ${n}, ${d} avg: ${sc} (0-4)">${sc.toFixed(1)}</td>`;
+                }
+                h += '</tr>';
+            }
+            h += '</tbody>';
+            grid.innerHTML = h;
+        }
+
+        async function loadDropoff() {
+            const token = auth.getToken();
+            const data = await fetch('/api/faculty/analytics/dropoff', { headers: { 'Authorization': `Bearer ${token}` } }).then(r => r.json());
+            document.getElementById('dropoff-rate').textContent = `Completion rate: ${data.completionRate}% — avg questions completed: ${data.avgQuestionsCompleted}`;
+            const labels = Object.keys(data.abandonedAt).map((k) => 'Q' + k);
+            const values = Object.values(data.abandonedAt);
+            if (axCharts.dropoff) axCharts.dropoff.destroy();
+            const ctx = document.getElementById('dropoffChart').getContext('2d');
+            axCharts.dropoff = new Chart(ctx, {
+                type: 'bar',
+                data: { labels, datasets: [{ data: values, backgroundColor: values.map((v) => (v > 0 ? '#f97316' : '#e2e8f0')) }] },
+                options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, title: { display: true, text: 'Sessions' } } } }
+            });
+            const maxQ = values.reduce((bi, v, i) => (v > values[bi] ? i : bi), 0);
+            const tq = maxQ + 1;
+            const tierHint = tq <= 4 ? 1 : tq <= 7 ? 2 : 3;
+            document.getElementById('dropoff-insight').textContent = values.some((v) => v > 0)
+                ? `Most students abandon at question ${tq} (often tier ${tierHint} in the default 4/3/3 split).`
+                : 'No abandonment records yet. Students who leave mid-session will appear here.';
+        }
+
+        async function loadTimeAnalytics() {
+            const token = auth.getToken();
+            const d = await fetch('/api/faculty/analytics/time', { headers: { 'Authorization': `Bearer ${token}` } }).then(r => r.json());
+            if (axCharts.timeTier) axCharts.timeTier.destroy();
+            if (axCharts.timeHist) axCharts.timeHist.destroy();
+            const t1 = d.avgTimePerQuestion?.tier1 || 0;
+            const t2 = d.avgTimePerQuestion?.tier2 || 0;
+            const t3 = d.avgTimePerQuestion?.tier3 || 0;
+            axCharts.timeTier = charts.renderHorizontalBarChart('timeTierChart', ['Tier 1', 'Tier 2', 'Tier 3'], [t1, t2, t3], { axis: 'y' });
+            const hist = d.durationHistogram || [];
+            const ctx2 = document.getElementById('timeHistChart').getContext('2d');
+            axCharts.timeHist = new Chart(ctx2, {
+                type: 'bar',
+                data: { labels: hist.map((x) => x.label), datasets: [{ data: hist.map((x) => x.count), backgroundColor: 'rgba(37, 99, 235, 0.55)', borderRadius: 3 }] },
+                options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+            });
+            const ratio = t1 > 0 ? (t3 / t1) : 0;
+            document.getElementById('time-insight').textContent = t1 > 0 && t3 > 0
+                ? `Tier 3 questions take about ${ratio.toFixed(1)}x longer on average than Tier 1.`
+                : 'Complete timed sessions to populate this insight.';
+        }
+
+        async function loadDepartment() {
+            const scope = document.getElementById('dept-scope').value;
+            const token = auth.getToken();
+            const d = await fetch('/api/faculty/analytics/department?scope=' + encodeURIComponent(scope), { headers: { 'Authorization': `Bearer ${token}` } }).then(r => r.json());
+            const depts = d.departments || [];
+            if (axCharts.dept) axCharts.dept.destroy();
+            const ctx = document.getElementById('deptChart').getContext('2d');
+            axCharts.dept = new Chart(ctx, {
+                type: 'bar',
+                data: { labels: depts.map((x) => x.name || '—'), datasets: [{ label: 'Avg', data: depts.map((x) => x.avgScore || 0), backgroundColor: '#2563eb' }] },
+                options: { responsive: true, scales: { y: { min: 0, max: 4 } } }
+            });
+            document.getElementById('dept-table-body').innerHTML = depts.map((r) => `<tr><td>${r.name || '—'}</td><td>${r.studentCount}</td><td>${r.sessionCount}</td><td>${(r.avgScore != null ? r.avgScore : 0).toFixed(2)}</td></tr>`).join('') || '<tr><td colspan="4">No departments yet. Create departments in the database and assign students.</td></tr>';
+        }
+        document.getElementById('dept-scope').addEventListener('change', () => { window._loadedDept = true; loadDepartment(); });
+
+        function loadYoy() {
+            const y = document.getElementById('yoy-year');
+            const c = document.getElementById('yoy-compare');
+            if (!y.value) y.value = new Date().getFullYear();
+            if (!c.value) c.value = Number(y.value) - 1;
+            document.getElementById('yoy-refresh').onclick = () => doYoy();
+            doYoy();
+        }
+
+        async function doYoy() {
+            const y = document.getElementById('yoy-year').value;
+            const c = document.getElementById('yoy-compare').value;
+            const token = auth.getToken();
+            const data = await fetch('/api/faculty/analytics/yearly?year=' + encodeURIComponent(y) + '&compare=' + encodeURIComponent(c), { headers: { 'Authorization': `Bearer ${token}` } }).then(r => r.json());
+            document.getElementById('yoy-summary').innerHTML = `<strong>Improvement (avg score 0-4):</strong> <span class="badge-yoy ${data.improvement && data.improvement.startsWith('-') ? 'badge-neg' : 'badge-pos'}">${data.improvement}</span> &nbsp; 
+                Current year: ${data.currentYear?.sessions || 0} sessions, previous: ${data.previousYear?.sessions || 0}`;
+            if (axCharts.yoy) axCharts.yoy.destroy();
+            const labels = (data.monthlyTrend.current || []).map((m) => m.label);
+            const cur = (data.monthlyTrend.current || []).map((m) => (m.avgScore != null ? m.avgScore : null));
+            const prev = (data.monthlyTrend.previous || []).map((m) => (m.avgScore != null ? m.avgScore : null));
+            axCharts.yoy = charts.renderYoYLine('yoyLineChart', labels, cur, prev);
+            const by = data.byDimension || {};
+            document.getElementById('yoy-dim-body').innerHTML = Object.keys(by).map((k) => {
+                const v = by[k];
+                const isNeg = v && String(v).trim().startsWith('-');
+                return `<tr><td>${k}</td><td><span class="badge-yoy ${isNeg ? 'badge-neg' : 'badge-pos'}">${v}</span></td></tr>`;
+            }).join('') || '<tr><td colspan="2">No data for selected years</td></tr>';
+        }
+
+        function fillPlagiarismStudents(students) {
+            const a = document.getElementById('plag-student-a');
+            const b = document.getElementById('plag-student-b');
+            const opt = (s) => `<option value="${s.id}">${s.name} (${s.email})</option>`;
+            a.innerHTML = '<option value="">-- Select --</option>' + students.map(opt).join('');
+            b.innerHTML = '<option value="">-- Select --</option>' + students.map(opt).join('');
+        }
+        async function loadSessionsFor(selectEl, userId) {
+            selectEl.innerHTML = '<option value="">--</option>';
+            if (!userId) return;
+            const token = auth.getToken();
+            const data = await fetch('/api/faculty/student/' + userId, { headers: { 'Authorization': `Bearer ${token}` } }).then(r => r.json());
+            (data.sessions || []).forEach((s) => {
+                const o = document.createElement('option');
+                o.value = s.id;
+                o.textContent = 'Session ' + s.id + ' — ' + (s.status || '') + ' — ' + new Date(s.created_at).toLocaleDateString();
+                selectEl.appendChild(o);
+            });
+        }
+        document.getElementById('plag-student-a').addEventListener('change', (e) => loadSessionsFor(document.getElementById('plag-session-a'), e.target.value));
+        document.getElementById('plag-student-b').addEventListener('change', (e) => loadSessionsFor(document.getElementById('plag-session-b'), e.target.value));
+        document.getElementById('plag-run').addEventListener('click', async () => {
+            const a = document.getElementById('plag-student-a').value;
+            const b = document.getElementById('plag-student-b').value;
+            const sa = document.getElementById('plag-session-a').value;
+            const sb = document.getElementById('plag-session-b').value;
+            if (!a || !b || a === b || !sa || !sb) { showToast('Select two different students and one session each.', 'error'); return; }
+            const token = auth.getToken();
+            try {
+                const res = await fetch('/api/ai/check-plagiarism', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify({ studentAId: Number(a), studentBId: Number(b), sessionAId: Number(sa), sessionBId: Number(sb) })
+                });
+                const out = await res.json();
+                if (!res.ok) { showToast(out.error || 'Request failed', 'error'); return; }
+                const el = document.getElementById('plag-result');
+                const esc = (s) => String(s == null ? '' : s)
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;');
+                el.innerHTML = '<p><strong>Overall similarity:</strong> ' + out.overallSimilarity + '% &nbsp; <strong>Suspicious:</strong> ' + (out.suspicious ? 'Yes' : 'No') + '</p><p class="insight">' + esc(out.recommendation) + '</p><h4>Per-question</h4>' + (out.questionBreakdown || []).map((q) => {
+                    return `<div class="plag-row ${q.suspicious ? 'susp' : ''}"><div><strong>Q${q.question}</strong> — ${q.similarity}%</div><div class="sim-bar"><div style="width:${q.similarity}%"></div></div><details class="plag-ev"><summary>Evidence</summary>${esc(q.evidence)}</details></div>`;
+                }).join('');
+            } catch (e) { showToast('Plagiarism check failed', 'error'); }
+        });
 
         async function init() {
             try {
@@ -138,6 +687,8 @@
                     fetch('/api/faculty/at-risk', { headers: { 'Authorization': `Bearer ${token}` } }).then(r => r.json()),
                     fetch('/api/faculty/session-requests', { headers: { 'Authorization': `Bearer ${token}` } }).then(r => r.json())
                 ]);
+                studentsCache = students;
+                fillPlagiarismStudents(students);
 
                 // Render Stats
                 document.getElementById('stat-students').textContent = stats.totalStudents;
@@ -180,11 +731,16 @@
             }
         }
 
+        function onRowClick(ev, id) {
+            if (ev.target.closest('input, button, a, label')) return;
+            openProfile(id);
+        }
         function renderTable(students, atRiskIds) {
             const body = document.getElementById('student-body');
             body.innerHTML = students.map(s => `
-                <tr onclick="openProfile(${s.id})" class="${atRiskIds.includes(s.id) ? 'at-risk-row' : ''}">
-                    <td><strong>${s.name}</strong></td>
+                <tr onclick="onRowClick(event, ${s.id})" class="${atRiskIds.includes(s.id) ? 'at-risk-row' : ''}">
+                    <td onclick="event.stopPropagation()"><input type="checkbox" class="st-pick" data-id="${s.id}" aria-label="Select for compare" /></td>
+                    <td><strong>${s.name}</strong> <button type="button" class="btn btn-secondary" style="width:auto; font-size:0.7rem; padding:0.2rem 0.4rem; margin-left:0.3rem" onclick="event.stopPropagation(); flagOne(${s.id})">Flag</button></td>
                     <td>${s.email}</td>
                     <td>${s.session_count}</td>
                     <td>${s.avg_score ? Math.round(s.avg_score) + '%' : '--'}</td>
@@ -192,6 +748,12 @@
                 </tr>
             `).join('');
         }
+        window.flagOne = async function(studentId) {
+            const reason = window.prompt('Reason for flag?');
+            if (reason == null) return;
+            const r = await fetch('/api/faculty/flag-student', { method: 'POST', headers: { 'Authorization': `Bearer ${tok()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ studentId, reason }) });
+            if (r.ok) { showToast('Student flagged', 'success'); if (window._loadedClass) loadClassroom(); }
+        };
 
         async function openProfile(id) {
             try {
@@ -238,10 +800,10 @@
         async function handleRequest(id, action) {
             try {
                 const token = auth.getToken();
-                const res = await fetch(`/api/faculty/session-request/${id}`, {
+                const res = await fetch(`/api/faculty/session-requests/${id}`, {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                    body: JSON.stringify({ status: action === 'accept' ? 'approved' : 'rejected' })
+                    body: JSON.stringify({ action: action === 'accept' ? 'accept' : 'reject' })
                 });
                 if (res.ok) {
                     showToast(`Request ${action}ed!`, 'success');

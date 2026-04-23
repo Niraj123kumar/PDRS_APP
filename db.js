@@ -387,6 +387,63 @@ CREATE TABLE IF NOT EXISTS scheduled_reminders (
 
 db.exec(schema);
 
+db.exec(`
+CREATE TABLE IF NOT EXISTS departments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT UNIQUE,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS peer_sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    student_a_id INTEGER,
+    student_b_id INTEGER,
+    room_code TEXT UNIQUE,
+    status TEXT DEFAULT 'waiting',
+    questions_json TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS flagged_students (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    student_id INTEGER,
+    faculty_id INTEGER,
+    reason TEXT,
+    resolved INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS announcements (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    faculty_id INTEGER,
+    title TEXT,
+    message TEXT,
+    target_role TEXT DEFAULT 'student',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS defense_schedule (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    student_id INTEGER,
+    faculty_id INTEGER,
+    scheduled_date DATETIME,
+    location TEXT,
+    panel_members TEXT,
+    status TEXT DEFAULT 'scheduled',
+    notes TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS session_templates (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
+    name TEXT,
+    project_id INTEGER,
+    questions_json TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+`);
+
 function addColumnIfMissing(tableName, columnName, definition) {
     const columns = db.prepare(`PRAGMA table_info(${tableName})`).all();
     const exists = columns.some((col) => col.name === columnName);
@@ -416,6 +473,17 @@ addColumnIfMissing('users', 'email_defense_reminders', 'INTEGER DEFAULT 1');
 addColumnIfMissing('users', 'email_inactivity_alerts', 'INTEGER DEFAULT 1');
 addColumnIfMissing('projects', 'github_repo_url', 'TEXT');
 addColumnIfMissing('login_attempts', 'user_id', 'INTEGER');
+addColumnIfMissing('users', 'department_id', 'INTEGER');
+addColumnIfMissing('sessions', 'time_per_question_json', 'TEXT');
+addColumnIfMissing('sessions', 'abandoned_at_question', 'INTEGER');
+addColumnIfMissing('peer_sessions', 'current_question_index', 'INTEGER DEFAULT 0');
+addColumnIfMissing('peer_sessions', 'answers_json', 'TEXT');
+addColumnIfMissing('peer_sessions', 'ready_a', 'INTEGER DEFAULT 0');
+addColumnIfMissing('peer_sessions', 'ready_b', 'INTEGER DEFAULT 0');
+addColumnIfMissing('sessions', 'replay_data_json', 'TEXT');
+addColumnIfMissing('sessions', 'time_stamps_json', 'TEXT');
+addColumnIfMissing('sessions', 'summary_pdf_url', 'TEXT');
+addColumnIfMissing('sessions', 'hints_state_json', 'TEXT');
 
 // Seed demo accounts
 const seedUsers = () => {

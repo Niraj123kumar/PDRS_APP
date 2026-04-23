@@ -1,3 +1,5 @@
+const path = require('path');
+const fs = require('fs');
 const puppeteer = require('puppeteer');
 const db = require('../db');
 
@@ -89,7 +91,48 @@ async function generateStudentReport(userId) {
     return renderPdf(html);
 }
 
+async function generateQuestionPaper(html) {
+    const safe = String(html).replace(/<script/gi, '&lt;script');
+    return renderPdf(
+        `<html><head><meta charset="utf-8" /></head><body style="font-family:Arial,sans-serif;padding:24px;">${safe}</body></html>`
+    );
+}
+
+async function generateSessionSummaryPdf(summary) {
+    const s = summary || {};
+    const esc = (x) => String(x == null ? '' : x).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const list = (arr) => (Array.isArray(arr) ? arr : []).map((x) => `<li>${esc(x)}</li>`).join('');
+    const html = `
+        <html><head><meta charset="utf-8" /></head><body style="font-family:Arial,sans-serif;padding:24px;">
+        <h1>PDRS Session Summary</h1>
+        <h2>Overall</h2><p>${esc(s.overallParagraph)}</p>
+        <h2>Per-dimension analysis</h2><p>${esc(s.dimensionAnalysis)}</p>
+        <h2>Top strengths</h2><ul>${list(s.strengths)}</ul>
+        <h2>Areas to improve</h2><ul>${list(s.improvements)}</ul>
+        <h2>Recommended next steps</h2><ul>${list(s.nextSteps)}</ul>
+        </body></html>
+    `;
+    return renderPdf(html);
+}
+
+function ensureSummaryDir() {
+    const dir = path.join(__dirname, '..', 'public', 'uploads', 'summaries');
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    return dir;
+}
+
+async function writeSessionSummaryPdf(sessionId, buffer) {
+    ensureSummaryDir();
+    const filename = `session_${sessionId}.pdf`;
+    const abs = path.join(__dirname, '..', 'public', 'uploads', 'summaries', filename);
+    fs.writeFileSync(abs, buffer);
+    return `/uploads/summaries/${filename}`;
+}
+
 module.exports = {
     generateStudentReport,
-    generateSessionReport
+    generateSessionReport,
+    generateQuestionPaper,
+    generateSessionSummaryPdf,
+    writeSessionSummaryPdf
 };

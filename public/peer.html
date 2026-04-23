@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Peer Practice - PDRS</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <style>
+        .room-setup { max-width: 480px; margin: 2rem auto; }
+        .session-view { max-width: 900px; margin: 0 auto; }
+        .peer-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+        @media (max-width: 700px) { .peer-grid { grid-template-columns: 1fr; } }
+        textarea.ans { width: 100%; min-height: 120px; padding: 0.75rem; }
+        .compare-side { background: #f8fafc; border-radius: 8px; padding: 1rem; border: 1px solid #e2e8f0; }
+        .compare-side.mine { border-color: #2563eb; }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <a href="/student.html" style="font-weight: 800; color: var(--primary-color);">← Back</a>
+        <span id="me-name" style="font-weight: 600;"></span>
+    </nav>
+    <div class="container">
+        <div id="lobby" class="room-setup">
+            <h1>Peer practice</h1>
+            <p class="text-muted">Practice with a classmate. Create a room and share the link, or join with a code.</p>
+            <button type="button" class="btn" id="btn-create">Create practice room</button>
+            <hr style="margin: 1.5rem 0;">
+            <div>
+                <input type="text" id="join-code" placeholder="6-char room code" maxlength="6" style="text-transform:uppercase;padding:0.5rem;width: 160px;" />
+                <button type="button" class="btn" id="btn-join" style="width:auto">Join</button>
+            </div>
+        </div>
+
+        <div id="session" class="session-view" style="display:none">
+            <p id="room-label" class="text-muted"></p>
+            <h2 id="names-row"></h2>
+            <p id="status-msg"></p>
+            <div id="ready-block" style="display:none">
+                <p>When both are ready, the session starts.</p>
+                <button type="button" class="btn" id="btn-ready">I’m ready</button>
+            </div>
+            <div id="q-block" style="display:none">
+                <div class="card" style="padding:1rem;margin-bottom:1rem">
+                    <span id="q-badge" class="badge">Q</span>
+                    <p id="q-text" style="font-size:1.1rem;margin-top:0.5rem"></p>
+                </div>
+                <div class="peer-grid">
+                    <div class="compare-side mine">
+                        <strong id="label-a">You</strong>
+                        <textarea class="ans" id="ans-me" placeholder="Your answer..."></textarea>
+                    </div>
+                    <div class="compare-side">
+                        <strong id="label-b">Peer</strong>
+                        <textarea class="ans" id="ans-peer" readonly placeholder="Peer answer appears after they submit..."></textarea>
+                    </div>
+                </div>
+                <button type="button" class="btn" id="btn-submit" style="margin-top:1rem">Submit answer</button>
+            </div>
+            <div id="scores-block" style="display:none; margin-top:1rem">
+                <h3>AI scores (this question)</h3>
+                <div class="peer-grid" id="scores-compare"></div>
+                <div class="peer-grid" style="margin-top:1rem">
+                    <div><label>Comment for peer</label><textarea id="comment-me" class="ans" rows="2"></textarea></div>
+                </div>
+                <button type="button" class="btn" id="btn-comment" style="width:auto">Send comment</button>
+                <button type="button" class="btn btn-secondary" id="btn-next" style="margin-top:0.5rem">Next question</button>
+            </div>
+        </div>
+    </div>
+    <script src="/js/auth.js"></script>
+    <script src="/js/toast.js"></script>
+    <script>
+        auth.requireAuth();
+        auth.requireRole('student');
+        const u = auth.getUser();
+        document.getElementById('me-name').textContent = u.name || u.email;
+        const params = new URLSearchParams(window.location.search);
+        let room = (params.get('room') || '').trim().toUpperCase();
+        let pollTimer;
+        const token = () => auth.getToken();
+        const headers = { 'Authorization': `Bearer ${token()}`, 'Content-Type': 'application/json' };
+        let sessionData = null;
+        let myIsA = true;
+        let currentIdx = 0;
+        let ws;
+
+        function connectWs() {
+            if (!room) return;
+            const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            ws = new WebSocket(`${protocol}//${location.host}?token=${encodeURIComponent(token())}`);
+            ws.onopen = () => {
+                ws.send(JSON.stringify({ type: 'room-join', roomCode: room, payload: { name: u.name || 'Student' } }));
+            };
+            ws.onmessage = (ev) => {
+                try {
+                    const data = JSON.parse(ev.data);
+                    if (String(data.type).startsWith('peer-')) {
+                        if (data.type === 'peer-question' || data.type === 'peer-both-submitted' || data.type === 'peer-scores') {
+                            loadSession();
+                        }
+                    }
+                } catch (e) {}
+            };
+        }
+
+        async function loadSession() {
+            const r = await fetch('/api/peer/' + encodeURIComponent(room), { headers: { 'Authorization': `Bearer ${token()}` } });
+            if (!r.ok) { showToast('Session error', 'error'); return; }
+            sessionData = await r.json();
+            myIsA = sessionData.isViewerA;
+            currentIdx = sessionData.currentQuestionIndex || 0;
+            render();
+        }
+
+        function render() {
+            if (!sessionData) return;
+            const qs = sessionData.questions || [];
+            document.getElementById('lobby').style.display = 'none';
+            document.getElementById('session').style.display = 'block';
+            document.getElementById('room-label').textContent = 'Room: ' + room;
+            document.getElementById('names-row').textContent = sessionData.nameA + ' · vs · ' + (sessionData.nameB || 'Waiting for peer...');
+            const bHere = sessionData.studentB;
+            if (!bHere) {
+                document.getElementById('ready-block').style.display = 'none';
+                document.getElementById('q-block').style.display = 'none';
+                document.getElementById('status-msg').textContent = 'Share this URL with your partner: ' + location.href;
+                return;
+            }
+            document.getElementById('ready-block').style.display = (sessionData.readyA && sessionData.readyB) ? 'none' : 'block';
+            document.getElementById('q-block').style.display = (sessionData.readyA && sessionData.readyB) ? 'block' : 'none';
+            document.getElementById('status-msg').textContent = '';
+            const q = qs[currentIdx];
+            if (!q) { document.getElementById('q-text').textContent = 'Session complete!'; return; }
+            document.getElementById('q-badge').textContent = 'Q' + (currentIdx + 1) + ' · Tier ' + q.tier;
+            document.getElementById('q-text').textContent = q.question;
+            document.getElementById('label-a').textContent = sessionData.nameA;
+            document.getElementById('label-b').textContent = sessionData.nameB;
+            const slot = (sessionData.answers && sessionData.answers[String(currentIdx)]) || {};
+            if (myIsA) {
+                document.getElementById('ans-me').value = slot.a || '';
+                document.getElementById('ans-peer').value = slot.b || '';
+            } else {
+                document.getElementById('ans-me').value = slot.b || '';
+                document.getElementById('ans-peer').value = slot.a || '';
+            }
+            const showScores = slot.scored && slot.scoreA && slot.scoreB;
+            document.getElementById('scores-block').style.display = showScores ? 'block' : 'none';
+            if (showScores) {
+                const a = slot.scoreA, b = slot.scoreB;
+                document.getElementById('scores-compare').innerHTML = `
+                    <div class="compare-side"><strong>${sessionData.nameA}</strong>
+                        <p>C ${Math.round(a.clarity)} R ${Math.round(a.reasoning)} D ${Math.round(a.depth)} F ${Math.round(a.confidence)}</p>
+                        <small>${(a.feedback || '').replace(/</g,'&lt;')}</small></div>
+                    <div class="compare-side"><strong>${sessionData.nameB}</strong>
+                        <p>C ${Math.round(b.clarity)} R ${Math.round(b.reasoning)} D ${Math.round(b.depth)} F ${Math.round(b.confidence)}</p>
+                        <small>${(b.feedback || '').replace(/</g,'&lt;')}</small></div>`;
+            }
+        }
+
+        document.getElementById('btn-create').onclick = async () => {
+            const r = await fetch('/api/peer/create', { method: 'POST', headers: headers });
+            const d = await r.json();
+            if (!r.ok) { showToast(d.error || 'Failed', 'error'); return; }
+            room = d.roomCode;
+            window.history.replaceState({}, '', '/peer.html?room=' + room);
+            connectWs();
+            await loadSession();
+        };
+
+        document.getElementById('btn-join').onclick = async () => {
+            const c = document.getElementById('join-code').value.trim().toUpperCase();
+            if (c.length < 4) { showToast('Enter room code', 'error'); return; }
+            const r = await fetch('/api/peer/join/' + c, { method: 'POST', headers: headers });
+            const d = await r.json();
+            if (!r.ok) { showToast(d.error || 'Failed', 'error'); return; }
+            room = c;
+            window.history.replaceState({}, '', '/peer.html?room=' + room);
+            connectWs();
+            await loadSession();
+        };
+
+        document.getElementById('btn-ready').onclick = async () => {
+            const r = await fetch('/api/peer/' + encodeURIComponent(room) + '/ready', { method: 'POST', headers: headers });
+            const d = await r.json();
+            if (!r.ok) { showToast(d.error || 'Failed', 'error'); return; }
+            sessionData = d;
+            render();
+        };
+
+        document.getElementById('btn-submit').onclick = async () => {
+            const t = document.getElementById('ans-me').value;
+            if (t.length < 5) { showToast('Write a bit more', 'error'); return; }
+            const r = await fetch('/api/peer/' + encodeURIComponent(room) + '/answer', {
+                method: 'POST',
+                headers: headers,
+                body: JSON.stringify({ questionIndex: currentIdx, answer: t })
+            });
+            const d = await r.json();
+            if (!r.ok) { showToast(d.error || 'Failed', 'error'); return; }
+            sessionData = d;
+            render();
+        };
+
+        document.getElementById('btn-comment').onclick = async () => {
+            const c = document.getElementById('comment-me').value;
+            await fetch('/api/peer/' + encodeURIComponent(room) + '/comment', {
+                method: 'POST',
+                headers: headers,
+                body: JSON.stringify({ questionIndex: currentIdx, comment: c })
+            });
+            showToast('Comment saved', 'success');
+        };
+
+        document.getElementById('btn-next').onclick = async () => {
+            const r = await fetch('/api/peer/' + encodeURIComponent(room) + '/next', {
+                method: 'POST',
+                headers: headers,
+                body: JSON.stringify({})
+            });
+            const d = await r.json();
+            if (r.ok) { sessionData = d; currentIdx = d.currentQuestionIndex; render(); }
+        };
+
+        (async function init() {
+            if (room) {
+                document.getElementById('lobby').style.display = 'none';
+                document.getElementById('session').style.display = 'block';
+                connectWs();
+                await loadSession();
+            }
+        })();
+    </script>
+</body>
+</html>

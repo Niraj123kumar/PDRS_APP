@@ -42,6 +42,26 @@
         .trend-up { color: #166534; font-weight: 700; }
         .trend-down { color: #b91c1c; font-weight: 700; }
         .theme-toggle { cursor: pointer; font-size: 1.25rem; background: none; border: none; padding: 0.5rem; }
+        .results-tabs { display: flex; gap: 0.5rem; margin: 0 auto 1.5rem; max-width: 900px; padding: 0 1rem; flex-wrap: wrap; }
+        .results-tabs button { padding: 0.65rem 1.25rem; border-radius: var(--radius); border: 1px solid var(--border-color, #e2e8f0); background: white; cursor: pointer; font-weight: 600; }
+        body.dark-mode .results-tabs button { background: var(--card-bg); color: var(--text-color); border-color: var(--border-color); }
+        .results-tabs button.active { background: var(--primary-color); color: white; border-color: var(--primary-color); }
+        .tab-panel { display: none; }
+        .tab-panel.active { display: block; }
+        .replay-panel { background: white; border-radius: var(--radius); box-shadow: var(--shadow); padding: 1.5rem; margin-bottom: 1.5rem; }
+        body.dark-mode .replay-panel { background: var(--card-bg); border: 1px solid var(--border-color); }
+        .replay-scrub { width: 100%; margin: 1rem 0; }
+        .replay-q-nav { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1rem; }
+        .replay-q-nav button { padding: 0.4rem 0.75rem; border-radius: 8px; border: 1px solid #cbd5e1; background: #f8fafc; cursor: pointer; font-size: 0.85rem; }
+        body.dark-mode .replay-q-nav button { background: rgba(255,255,255,0.05); color: var(--text-color); border-color: var(--border-color); }
+        .replay-q-nav button.current { background: var(--primary-color); color: white; border-color: var(--primary-color); }
+        .summary-panel { background: white; border-radius: var(--radius); box-shadow: var(--shadow); padding: 1.5rem; margin-bottom: 1.5rem; }
+        body.dark-mode .summary-panel { background: var(--card-bg); border: 1px solid var(--border-color); }
+        .summary-list { list-style: none; margin: 0.75rem 0; padding: 0; }
+        .summary-list li { padding: 0.5rem 0; padding-left: 1.5rem; position: relative; }
+        .strength-item::before { content: '✓'; color: #16a34a; position: absolute; left: 0; font-weight: 800; }
+        .improve-item::before { content: '⚠'; color: #d97706; position: absolute; left: 0; }
+        .next-item::before { content: '→'; color: #2563eb; position: absolute; left: 0; font-weight: 800; }
     </style>
     <script>
         const savedTheme = localStorage.getItem('pdrs_theme');
@@ -58,6 +78,13 @@
     </nav>
 
     <div class="results-container animate-up">
+        <div class="results-tabs" role="tablist">
+            <button type="button" class="active" data-tab="overview" role="tab" aria-selected="true">Results</button>
+            <button type="button" data-tab="replay" role="tab" aria-selected="false">Session replay</button>
+            <button type="button" data-tab="summary" role="tab" aria-selected="false">AI summary</button>
+        </div>
+
+        <div id="tab-panel-overview" class="tab-panel active">
         <div class="score-header">
             <div class="score-circle">
                 <svg>
@@ -108,10 +135,81 @@
             <div id="panel-session-content" class="text-muted">Loading panel artifacts...</div>
         </div>
 
-        <div style="margin: 4rem 0; text-align: center; display: flex; gap: 1rem; justify-content: center;">
+        <div style="margin: 4rem 0; text-align: center; display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
             <button id="export-session-pdf-btn" class="btn" style="width: auto; padding: 1rem 3rem;">Export This Session as PDF</button>
             <button class="btn" style="width: auto; padding: 1rem 3rem;" onclick="window.location.href='/history.html'">View All History</button>
             <button class="btn btn-secondary" style="width: auto; padding: 1rem 3rem;" onclick="window.location.href='/student.html'">Dashboard</button>
+        </div>
+        </div>
+
+        <div id="tab-panel-replay" class="tab-panel">
+            <p id="replay-empty" class="text-muted" style="text-align:center; padding:2rem; display:none;">No replay was recorded for this session. Complete a full rehearsal to capture step-by-step playback.</p>
+            <div id="replay-content" class="replay-panel" style="display:none;">
+                <p id="replay-step-label" style="color: var(--text-muted); font-size:0.9rem; margin-bottom:0.5rem;">Step 1 of 1</p>
+                <input type="range" id="replay-scrub" class="replay-scrub" min="0" max="0" value="0" />
+                <div style="display:flex; flex-wrap:wrap; gap:2rem; align-items:flex-start; margin-bottom:1.5rem;">
+                    <div class="score-circle" style="flex-shrink:0;">
+                        <svg>
+                            <circle class="circle-bg" cx="75" cy="75" r="70"></circle>
+                            <circle id="replay-circle-fill" class="circle-fill" cx="75" cy="75" r="70"></circle>
+                        </svg>
+                        <div class="score-text">
+                            <span id="replay-score-val" class="score-val">0</span>
+                            <span class="score-label">Cumulative</span>
+                        </div>
+                    </div>
+                    <div style="flex:1; min-width:220px;">
+                        <div id="replay-question" style="font-weight:700; margin-bottom:0.5rem; color: var(--primary-color);">Question</div>
+                        <div id="replay-answer" style="white-space:pre-wrap; line-height:1.5; color: var(--text-color);">Answer snapshot</div>
+                    </div>
+                </div>
+                <div class="dimension-grid" style="margin-bottom:0;">
+                    <div class="dim-card">
+                        <div class="dim-header"><span>Clarity</span> <span id="replay-clarity-val">0%</span></div>
+                        <div class="dim-bar"><div id="replay-clarity-fill" class="dim-fill"></div></div>
+                    </div>
+                    <div class="dim-card">
+                        <div class="dim-header"><span>Reasoning</span> <span id="replay-reasoning-val">0%</span></div>
+                        <div class="dim-bar"><div id="replay-reasoning-fill" class="dim-fill"></div></div>
+                    </div>
+                    <div class="dim-card">
+                        <div class="dim-header"><span>Technical Depth</span> <span id="replay-depth-val">0%</span></div>
+                        <div class="dim-bar"><div id="replay-depth-fill" class="dim-fill"></div></div>
+                    </div>
+                    <div class="dim-card">
+                        <div class="dim-header"><span>Confidence</span> <span id="replay-confidence-val">0%</span></div>
+                        <div class="dim-bar"><div id="replay-confidence-fill" class="dim-fill"></div></div>
+                    </div>
+                </div>
+                <p style="font-size:0.85rem; color: var(--text-muted); margin:1rem 0 0.5rem;">Jump to question</p>
+                <div id="replay-q-nav" class="replay-q-nav"></div>
+                <div style="margin-top:1rem; text-align:center;">
+                    <button type="button" id="replay-play-btn" class="btn" style="width:auto; padding:0.75rem 1.5rem;">Play replay from start</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="tab-panel-summary" class="tab-panel">
+            <div class="summary-panel">
+                <p id="summary-pdf-prior" class="text-muted" style="margin-bottom:1rem; display:none;">A summary PDF is already on file for this session.</p>
+                <div style="display:flex; flex-wrap:wrap; gap:0.75rem; margin-bottom:1rem;">
+                    <button type="button" id="btn-generate-summary" class="btn" style="width:auto; padding:0.75rem 1.5rem;">Generate summary</button>
+                    <a id="summary-download-pdf" href="#" class="btn" style="width:auto; padding:0.75rem 1.5rem; display:none;">Download summary PDF</a>
+                </div>
+                <p id="summary-loading" style="color: var(--text-muted); display:none;">Analyzing your performance…</p>
+                <div id="summary-content" style="display:none; margin-top:1rem;">
+                    <h3 style="color: var(--primary-color);">Overall</h3>
+                    <p id="summary-overall" style="line-height:1.6; color: var(--text-color);"></p>
+                    <h4 style="margin-top:1.25rem; color: var(--primary-color);">Dimension analysis</h4>
+                    <p id="summary-dimensions" style="line-height:1.6; color: var(--text-color);"></p>
+                    <h4 style="margin-top:1.25rem; color: #16a34a;">Strengths</h4>
+                    <ul id="summary-strengths" class="summary-list"></ul>
+                    <h4 style="margin-top:1.25rem; color: #d97706;">Areas to improve</h4>
+                    <ul id="summary-improve" class="summary-list"></ul>
+                    <h4 style="margin-top:1.25rem; color: #2563eb;">Next steps</h4>
+                    <ul id="summary-next" class="summary-list"></ul>
+                </div>
+            </div>
         </div>
     </div>
 

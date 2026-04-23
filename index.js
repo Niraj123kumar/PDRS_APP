@@ -17,6 +17,8 @@ const adminRoutes = require('./routes/admin');
 const goalsRoutes = require('./routes/goals');
 const flashcardsRoutes = require('./routes/flashcards');
 const bookmarksRoutes = require('./routes/bookmarks');
+const peerRoutes = require('./routes/peer');
+const templatesRoutes = require('./routes/templates');
 const initWebSocket = require('./websocket');
 const db = require('./db');
 const jwt = require('jsonwebtoken');
@@ -176,6 +178,8 @@ app.use('/api/admin', adminLimiter, adminRoutes);
 app.use('/api/goals', goalsRoutes);
 app.use('/api/flashcards', flashcardsRoutes);
 app.use('/api/bookmarks', bookmarksRoutes);
+app.use('/api/peer', peerRoutes);
+app.use('/api/templates', templatesRoutes);
 
 // Root redirect
 app.get('/', (req, res) => {

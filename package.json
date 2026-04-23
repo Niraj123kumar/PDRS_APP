@@ -12,6 +12,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.90.0",
     "@octokit/rest": "^22.0.1",
+    "archiver": "^7.0.1",
     "bcryptjs": "^3.0.3",
     "better-sqlite3": "^12.9.0",
     "cookie-parser": "^1.4.7",

@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Compare students - PDRS</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <style>
+        .cmp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-top: 1rem; }
+        @media (max-width: 800px) { .cmp-grid { grid-template-columns: 1fr; } }
+        .card-cmp { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 1.25rem; }
+        body.dark-mode .card-cmp { background: #1e293b; border-color: #334155; }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <a href="/faculty.html" style="font-weight: 800; color: var(--primary-color);">← Faculty</a>
+    </nav>
+    <div class="container" style="max-width: 1100px; margin: 0 auto; padding: 1rem;">
+        <h1>Compare students</h1>
+        <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: end;">
+            <div><label>Student A</label><br>
+                <select id="sel-a" style="min-width: 220px; padding: 0.4rem;"></select></div>
+            <div><label>Student B</label><br>
+                <select id="sel-b" style="min-width: 220px; padding: 0.4rem;"></select></div>
+            <button type="button" class="btn" id="btn-compare" style="width: auto; margin-top: 1.1rem;">Compare</button>
+        </div>
+        <p id="cmp-summary" class="insight" style="margin-top:1rem; padding:0.75rem; background:#eff6ff; border-radius:8px; display:none;"></p>
+        <div class="cmp-grid" id="main-cmp" style="display:none;">
+            <div class="card-cmp">
+                <h3 id="n-a">A</h3>
+                <canvas id="radar-a" height="220"></canvas>
+                <p id="stat-a" class="text-muted"></p>
+                <canvas id="spark-a" height="100"></canvas>
+            </div>
+            <div class="card-cmp">
+                <h3 id="n-b">B</h3>
+                <canvas id="radar-b" height="220"></canvas>
+                <p id="stat-b" class="text-muted"></p>
+                <canvas id="spark-b" height="100"></canvas>
+            </div>
+        </div>
+        <h3 id="h2h-h" style="display:none; margin-top:1.5rem">Head to head (dimensions, 0–100)</h3>
+        <table id="h2h" style="display:none; max-width: 600px;" class="table-section"></table>
+    </div>
+    <script src="/js/auth.js"></script>
+    <script>
+        auth.requireAuth();
+        auth.requireRole('faculty');
+        const t = auth.getToken();
+        let rA, rB, sA, sB;
+        const dims = ['clarity', 'reasoning', 'depth', 'confidence'];
+        const params = new URLSearchParams(window.location.search);
+        async function loadStudents() {
+            const st = await fetch('/api/faculty/students', { headers: { 'Authorization': `Bearer ${t}` } }).then(r => r.json());
+            const a = document.getElementById('sel-a');
+            const b = document.getElementById('sel-b');
+            a.innerHTML = b.innerHTML = '<option value="">--</option>' + st.map(s => `<option value="${s.id}">${s.name} (${s.email})</option>`).join('');
+            if (params.get('a')) a.value = params.get('a');
+            if (params.get('b')) b.value = params.get('b');
+        }
+        function bestWorst(d) {
+            const e = Object.entries(d);
+            e.sort((x,y) => y[1]-x[1]);
+            return { best: e[0], worst: e[e.length-1] };
+        }
+        async function run() {
+            const ida = document.getElementById('sel-a').value;
+            const idb = document.getElementById('sel-b').value;
+            if (!ida || !idb || ida === idb) { alert('Pick two different students'); return; }
+            const d = await fetch('/api/faculty/compare/' + ida + '/' + idb, { headers: { 'Authorization': `Bearer ${t}` } }).then(r => r.json());
+            if (d.error) { alert(d.error); return; }
+            const A = d.studentA, B = d.studentB;
+            document.getElementById('n-a').textContent = A.name;
+            document.getElementById('n-b').textContent = B.name;
+            const wa = bestWorst(A.dimensions), wb = bestWorst(B.dimensions);
+            document.getElementById('stat-a').textContent = 'Best: ' + wa.best[0] + ' ' + Math.round(wa.best[1]) + ' — Worst: ' + wa.worst[0] + ' ' + Math.round(wa.worst[1]);
+            document.getElementById('stat-b').textContent = 'Best: ' + wb.best[0] + ' ' + Math.round(wb.best[1]) + ' — Worst: ' + wb.worst[0] + ' ' + Math.round(wb.worst[1]);
+            if (rA) rA.destroy();
+            if (rB) rB.destroy();
+            rA = new Chart(document.getElementById('radar-a').getContext('2d'), {
+                type: 'radar',
+                data: { labels: dims, datasets: [{ label: A.name, data: dims.map(x => A.dimensions[x] || 0), borderColor: '#2563eb' }] },
+                options: { scales: { r: { min: 0, max: 100 } } }
+            });
+            rB = new Chart(document.getElementById('radar-b').getContext('2d'), {
+                type: 'radar',
+                data: { labels: dims, datasets: [{ label: B.name, data: dims.map(x => B.dimensions[x] || 0), borderColor: '#16a34a' }] },
+                options: { scales: { r: { min: 0, max: 100 } } }
+            });
+            const sa = (A.sessions || []).map(s => s.overall_score).filter(x => x != null).reverse();
+            const sb = (B.sessions || []).map(s => s.overall_score).filter(x => x != null).reverse();
+            if (sA) sA.destroy();
+            if (sB) sB.destroy();
+            sA = new Chart(document.getElementById('spark-a').getContext('2d'), { type: 'line', data: { labels: sa.map((_,i) => 'S'+(i+1)), datasets: [{ data: sa, borderColor: '#2563eb' }] }, options: { plugins: { legend: { display: false } } } });
+            sB = new Chart(document.getElementById('spark-b').getContext('2d'), { type: 'line', data: { labels: sb.map((_,i) => 'S'+(i+1)), datasets: [{ data: sb, borderColor: '#16a34a' }] }, options: { plugins: { legend: { display: false } } } });
+            const c = d.comparison;
+            document.getElementById('cmp-summary').style.display = 'block';
+            document.getElementById('cmp-summary').innerHTML = '<strong>Overall leader:</strong> ' + c.winner.overall
+                + ' &nbsp; <strong>Closest dim:</strong> ' + c.closestDimension
+                + ' &nbsp; <strong>Biggest gap:</strong> ' + c.biggestGap.dimension + ' (' + c.biggestGap.gap + ')';
+            const tb = document.getElementById('h2h');
+            tb.innerHTML = '<thead><tr><th>Dim</th><th>'+A.name+'</th><th>'+B.name+'</th><th>Lead</th></tr></thead><tbody>' +
+                dims.map(dim => {
+                    const va = Math.round(A.dimensions[dim]||0), vb = Math.round(B.dimensions[dim]||0);
+                    const w = c.winner[dim] || 'tie';
+                    return `<tr><td>${dim}</td><td>${va}</td><td>${vb}</td><td>${w}</td></tr>`;
+                }).join('') + '</tbody>';
+            document.getElementById('h2h-h').style.display = 'block';
+            tb.style.display = 'table';
+            document.getElementById('main-cmp').style.display = 'grid';
+        }
+        document.getElementById('btn-compare').onclick = run;
+        loadStudents().then(() => { if (params.get('a') && params.get('b')) run(); });
+    </script>
+</body>
+</html>

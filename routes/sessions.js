@@ -1,10 +1,29 @@
 const express = require('express');
 const router = express.Router();
+const Anthropic = require('@anthropic-ai/sdk');
 const db = require('../db');
 const { verifyToken } = require('../middleware/auth');
 const auditService = require('../services/auditService');
 const badgeService = require('../services/badgeService');
 const pdfService = require('../services/pdfService');
+
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+function parseAIJson(raw) {
+    const c = String(raw).replace(/```json|```/g, '').trim();
+    return JSON.parse(c);
+}
+
+async function claudeAsk(system, user) {
+    const r = await anthropic.messages.create({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 4096,
+        system,
+        messages: [{ role: 'user', content: user }],
+        temperature: 0.35
+    });
+    return r.content[0].text;
+}
 
 // POST /api/sessions (auth required)
 router.post('/', verifyToken, (req, res) => {
@@ -39,6 +58,145 @@ router.get('/', verifyToken, (req, res) => {
         res.json(sessions);
     } catch (err) {
         res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /api/sessions/from-template/:templateId
+router.post('/from-template/:templateId', verifyToken, (req, res) => {
+    try {
+        const t = db.prepare('SELECT * FROM session_templates WHERE id = ? AND user_id = ?').get(req.params.templateId, req.user.id);
+        if (!t) return res.status(404).json({ error: 'Template not found' });
+        const info = db.prepare(`
+            INSERT INTO sessions (user_id, project_id, status, questions_json)
+            VALUES (?, ?, 'active', ?)
+        `).run(req.user.id, t.project_id, t.questions_json || '[]');
+        let questions = [];
+        try {
+            questions = JSON.parse(t.questions_json || '[]');
+        } catch (e) { /* */ }
+        res.status(201).json({
+            id: info.lastInsertRowid,
+            user_id: req.user.id,
+            project_id: t.project_id,
+            status: 'active',
+            questions
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /api/sessions/:id/save-replay
+router.post('/:id/save-replay', verifyToken, (req, res) => {
+    const session_id = req.params.id;
+    const { replayData, timeStamps } = req.body;
+    try {
+        const session = db.prepare('SELECT id FROM sessions WHERE id = ? AND user_id = ?').get(session_id, req.user.id);
+        if (!session) return res.status(404).json({ error: 'Session not found' });
+        db.prepare('UPDATE sessions SET replay_data_json = ?, time_stamps_json = ? WHERE id = ?').run(
+            JSON.stringify(replayData != null ? replayData : []),
+            JSON.stringify(timeStamps != null ? timeStamps : []),
+            session_id
+        );
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /api/sessions/:id/replay
+router.get('/:id/replay', verifyToken, (req, res) => {
+    const session_id = req.params.id;
+    try {
+        const session = db.prepare(`
+            SELECT s.*, p.title AS project_title
+            FROM sessions s JOIN projects p ON p.id = s.project_id
+            WHERE s.id = ? AND s.user_id = ?
+        `).get(session_id, req.user.id);
+        if (!session) return res.status(404).json({ error: 'Session not found' });
+        let replay = [];
+        let timeStamps = [];
+        try {
+            replay = session.replay_data_json ? JSON.parse(session.replay_data_json) : [];
+        } catch (e) { /* */ }
+        try {
+            timeStamps = session.time_stamps_json ? JSON.parse(session.time_stamps_json) : [];
+        } catch (e) { /* */ }
+        res.json({
+            session: {
+                id: session.id,
+                project_title: session.project_title,
+                status: session.status,
+                overall_score: session.overall_score,
+                created_at: session.created_at,
+                summary_pdf_url: session.summary_pdf_url || null
+            },
+            replay,
+            timeStamps
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /api/sessions/:id/summarize
+router.post('/:id/summarize', verifyToken, async (req, res) => {
+    const session_id = req.params.id;
+    try {
+        const session = db.prepare('SELECT s.*, p.title AS project_title FROM sessions s JOIN projects p ON p.id = s.project_id WHERE s.id = ? AND s.user_id = ?')
+            .get(session_id, req.user.id);
+        if (!session) return res.status(404).json({ error: 'Session not found' });
+        const answers = db.prepare('SELECT * FROM answers WHERE session_id = ? ORDER BY id ASC').all(session_id);
+        const lines = answers.map((a, i) => `Q${i + 1}: ${a.question}\nAnswer: ${a.answer}\nScores C/R/D/F: ${a.clarity_score}/${a.reasoning_score}/${a.depth_score}/${a.confidence_score}\nFeedback: ${a.feedback || ''}`).join('\n\n');
+        const system = 'You are an academic coach. Return ONLY valid JSON, no markdown.';
+        const user = `Summarize this defense rehearsal session.\n${lines}\n\nReturn JSON with keys:
+overallParagraph (string),
+dimensionAnalysis (string, 2-4 sentences covering clarity, reasoning, depth, confidence),
+strengths (array of 3 strings),
+improvements (array of 3 strings),
+nextSteps (array of 3 strings)`;
+        const raw = await claudeAsk(system, user);
+        const summary = parseAIJson(raw);
+        const buffer = await pdfService.generateSessionSummaryPdf(summary);
+        const url = await pdfService.writeSessionSummaryPdf(session_id, buffer);
+        db.prepare('UPDATE sessions SET summary_pdf_url = ? WHERE id = ?').run(url, session_id);
+        res.json({ summaryUrl: url, summary });
+    } catch (err) {
+        console.error('summarize', err);
+        res.status(500).json({ error: 'Failed to generate summary' });
+    }
+});
+
+// POST /api/sessions/:id/hint
+router.post('/:id/hint', verifyToken, async (req, res) => {
+    const session_id = req.params.id;
+    const { questionIndex, questionText, tier } = req.body;
+    const qIdx = Math.max(0, parseInt(questionIndex, 10) || 0);
+    try {
+        const session = db.prepare('SELECT * FROM sessions WHERE id = ? AND user_id = ?').get(session_id, req.user.id);
+        if (!session) return res.status(404).json({ error: 'Session not found' });
+        let state = {};
+        try {
+            state = session.hints_state_json ? JSON.parse(session.hints_state_json) : {};
+        } catch (e) { /* */ }
+        const key = String(qIdx);
+        const used = Number(state[key] || 0);
+        if (used >= 3) return res.status(400).json({ error: 'No hints left for this question' });
+        const system = 'You are a technical interview coach. Return ONLY valid JSON, no markdown.';
+        const user = `For this interview question, give exactly 3 short hints (not full answers) as JSON:
+{ "keyConcept": "one sentence on a core idea to address",
+  "example": "one sentence suggesting an example structure",
+  "commonMistake": "one sentence on a common pitfall" }
+Question (tier ${tier || '?'}): ${String(questionText || '').slice(0, 2000)}`;
+        const raw = await claudeAsk(system, user);
+        const hintObj = parseAIJson(raw);
+        state[key] = used + 1;
+        db.prepare('UPDATE sessions SET hints_state_json = ? WHERE id = ?').run(JSON.stringify(state), session_id);
+        const nowUsed = used + 1;
+        res.json({ hints: hintObj, used: nowUsed, remaining: Math.max(0, 3 - nowUsed), penaltyPoints: 5 });
+    } catch (err) {
+        console.error('hint', err);
+        res.status(500).json({ error: 'Hint unavailable' });
     }
 });
 
@@ -79,7 +237,7 @@ router.post('/:id/answers', verifyToken, (req, res) => {
 router.patch('/:id', verifyToken, (req, res) => {
     const user_id = req.user.id;
     const session_id = req.params.id;
-    const { status, overall_score } = req.body;
+    const { status, overall_score, time_per_question_json, abandoned_at_question } = req.body;
 
     try {
         const session = db.prepare('SELECT id FROM sessions WHERE id = ? AND user_id = ?').get(session_id, user_id);
@@ -94,6 +252,14 @@ router.patch('/:id', verifyToken, (req, res) => {
         if (overall_score !== undefined) {
             query += 'overall_score = ?, ';
             params.push(overall_score);
+        }
+        if (time_per_question_json !== undefined) {
+            query += 'time_per_question_json = ?, ';
+            params.push(typeof time_per_question_json === 'string' ? time_per_question_json : JSON.stringify(time_per_question_json));
+        }
+        if (abandoned_at_question !== undefined && abandoned_at_question !== null) {
+            query += 'abandoned_at_question = ?, ';
+            params.push(abandoned_at_question);
         }
         query = query.slice(0, -2) + ' WHERE id = ?';
         params.push(session_id);
