@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Notifications - PDRS</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/animations.css">
+    <style>
+        body.dark-mode { --bg-color: #0f172a; --card-bg: #1e293b; --text-color: #f1f5f9; --text-muted: #94a3b8; --border-color: rgba(255,255,255,0.1); }
+        .notif-card { background: white; padding: 1.25rem; border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 1rem; border-left: 4px solid var(--border-color); cursor: pointer; transition: transform 0.2s; position: relative; }
+        body.dark-mode .notif-card { background: var(--card-bg); border-color: var(--border-color); color: var(--text-color); }
+        .notif-card:hover { transform: translateX(5px); }
+        .notif-unread { border-left-color: var(--primary-color); background: #f0f7ff; }
+        body.dark-mode .notif-unread { background: rgba(37, 99, 235, 0.1); border-left-color: var(--primary-color); }
+        .notif-title { font-weight: 700; margin-bottom: 0.25rem; }
+        .notif-meta { font-size: 0.75rem; color: var(--text-muted); margin-top: 0.5rem; }
+        .theme-toggle { cursor: pointer; font-size: 1.25rem; background: none; border: none; padding: 0.5rem; }
+    </style>
+    <script>
+        const savedTheme = localStorage.getItem('pdrs_theme');
+        if (savedTheme === 'dark') document.documentElement.classList.add('dark-mode');
+    </script>
+</head>
+<body class="animate-up">
+    <nav class="navbar">
+        <div style="display: flex; align-items: center; gap: 2rem;">
+            <h1 style="color: var(--primary-color); font-weight: 800; cursor: pointer;" onclick="window.location.href='/'">PDRS</h1>
+        </div>
+        <div style="display: flex; align-items: center; gap: 1.5rem;">
+            <button onclick="toggleTheme()" class="theme-toggle">🌙</button>
+            <button onclick="window.history.back()" class="btn btn-secondary" style="width: auto; padding: 0.5rem 1rem;">Back</button>
+        </div>
+    </nav>
+
+    <div class="container" style="max-width: 800px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+            <h2>Notifications</h2>
+            <button id="read-all-btn" class="btn" style="width: auto; padding: 0.5rem 1rem; font-size: 0.875rem;">Mark all as read</button>
+        </div>
+
+        <div id="notif-loading">
+            <div class="skeleton" style="height: 80px; width: 100%; margin-bottom: 1rem;"></div>
+            <div class="skeleton" style="height: 80px; width: 100%; margin-bottom: 1rem;"></div>
+        </div>
+
+        <div id="notif-list"></div>
+        <div id="notif-empty" class="empty-state" style="display: none;">
+            <p>You're all caught up!</p>
+        </div>
+    </div>
+
+    <script src="/js/auth.js"></script>
+    <script src="/js/toast.js"></script>
+    <script>
+        auth.requireAuth();
+
+        async function loadNotifications() {
+            try {
+                const token = auth.getToken();
+                const res = await fetch('/api/notifications', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const notifs = await res.json();
+                renderNotifications(notifs);
+                document.getElementById('notif-loading').style.display = 'none';
+            } catch (err) {
+                showToast('Failed to load notifications', 'error');
+            }
+        }
+
+        function renderNotifications(notifs) {
+            const list = document.getElementById('notif-list');
+            const empty = document.getElementById('notif-empty');
+
+            if (notifs.length === 0) {
+                list.innerHTML = '';
+                empty.style.display = 'block';
+                return;
+            }
+
+            empty.style.display = 'none';
+            list.innerHTML = notifs.map(n => `
+                <div class="notif-card ${n.is_read ? '' : 'notif-unread'}" onclick="markRead(${n.id})">
+                    <div style="display: flex; align-items: flex-start; gap: 1rem;">
+                        <span style="font-size: 1.5rem;">${n.type === 'panel' ? '🎥' : '🔔'}</span>
+                        <div style="flex-grow: 1;">
+                            <div class="notif-title">${n.title}</div>
+                            <div class="notif-message">${n.message}</div>
+                            <div class="notif-meta">${new Date(n.created_at).toLocaleString()}</div>
+                        </div>
+                        ${!n.is_read ? '<div style="width: 8px; height: 8px; background: var(--primary-color); border-radius: 50%;"></div>' : ''}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function markRead(id) {
+            try {
+                const token = auth.getToken();
+                await fetch(`/api/notifications/${id}/read`, {
+                    method: 'PATCH',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                loadNotifications();
+            } catch (err) {}
+        }
+
+        function toggleTheme() {
+            const isDark = document.documentElement.classList.toggle('dark-mode');
+            localStorage.setItem('pdrs_theme', isDark ? 'dark' : 'light');
+            document.querySelectorAll('.theme-toggle').forEach(btn => {
+                btn.textContent = isDark ? '☀️' : '🌙';
+            });
+        }
+        
+        if (localStorage.getItem('pdrs_theme') === 'dark') {
+            document.querySelectorAll('.theme-toggle').forEach(btn => btn.textContent = '☀️');
+        }
+
+        document.getElementById('read-all-btn').addEventListener('click', async () => {
+            try {
+                const token = auth.getToken();
+                await fetch('/api/notifications/read-all', {
+                    method: 'PATCH',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                showToast('All marked as read', 'success');
+                loadNotifications();
+            } catch (err) {}
+        });
+
+        loadNotifications();
+    </script>
+</body>
+</html>

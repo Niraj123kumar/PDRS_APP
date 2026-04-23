@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Student Dashboard - PDRS</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/animations.css">
+    <style>
+        body.dark-mode { --bg-color: #0f172a; --card-bg: #1e293b; --text-color: #f1f5f9; --text-muted: #94a3b8; --border-color: rgba(255,255,255,0.1); }
+        .dashboard-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 2rem; margin-top: 2rem; }
+        .card { background: white; padding: 1.5rem; border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 1.5rem; }
+        body.dark-mode .card { background: var(--card-bg); border: 1px solid var(--border-color); color: var(--text-color); }
+        
+        .countdown-card { text-align: center; background: linear-gradient(135deg, var(--card-bg) 0%, #f8fafc 100%); border: 1px solid var(--border-color); }
+        body.dark-mode .countdown-card { background: linear-gradient(135deg, var(--card-bg) 0%, #0f172a 100%); }
+        
+        .timer-display { font-size: 2.5rem; font-weight: 900; margin: 1rem 0; font-variant-numeric: tabular-nums; }
+        .timer-green { color: var(--accent-emerald); }
+        .timer-amber { color: var(--accent-amber); }
+        .timer-red { color: var(--accent-red); }
+        .timer-pulse { animation: pulseRed 1s infinite; }
+
+        .session-item { padding: 1rem; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; }
+        .session-item:last-child { border-bottom: none; }
+        .bell-icon { position: relative; cursor: pointer; font-size: 1.25rem; }
+        .bell-badge { position: absolute; top: -5px; right: -8px; background: var(--error-color); color: white; font-size: 0.7rem; padding: 2px 6px; border-radius: 10px; font-weight: 800; }
+        .shake { animation: bellShake 0.5s ease-in-out; }
+
+        .theme-toggle { cursor: pointer; font-size: 1.25rem; background: none; border: none; padding: 0.5rem; }
+    </style>
+    <script>
+        const savedTheme = localStorage.getItem('pdrs_theme');
+        if (savedTheme === 'dark') document.documentElement.classList.add('dark-mode');
+    </script>
+</head>
+<body class="animate-up">
+    <nav class="navbar">
+        <div style="display: flex; align-items: center; gap: 2rem;">
+            <h1 style="color: var(--primary-color); font-weight: 800; cursor: pointer;" onclick="window.location.href='/'">PDRS</h1>
+            <div style="display: flex; gap: 1.5rem;">
+                <a href="/student.html" style="text-decoration: none; color: var(--text-color); font-weight: 600;">Dashboard</a>
+                <a href="/history.html" style="text-decoration: none; color: var(--text-muted);">History</a>
+                <a href="/notifications.html" style="text-decoration: none; color: var(--text-muted);">Notifications</a>
+            </div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 1.5rem;">
+            <button onclick="toggleTheme()" class="theme-toggle">🌙</button>
+            <div class="bell-icon" onclick="window.location.href='/notifications.html'">
+                🔔 <span id="unread-count" class="bell-badge" style="display: none;">0</span>
+            </div>
+            <span id="user-name" style="font-weight: 600;"></span>
+            <button onclick="auth.logout()" class="btn btn-secondary" style="width: auto; padding: 0.5rem 1rem;">Logout</button>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+            <h2>Welcome back, <span id="welcome-name">Student</span>!</h2>
+            <button onclick="window.location.href='/session.html'" class="btn" style="width: auto; padding: 0.75rem 2rem;">+ New Rehearsal</button>
+        </div>
+
+        <div class="dashboard-grid">
+            <div class="left-col">
+                <div class="card">
+                    <h3 style="margin-bottom: 1.5rem;">Recent Sessions</h3>
+                    <div id="loading-sessions">
+                        <div class="skeleton" style="height: 60px; width: 100%; margin-bottom: 0.5rem;"></div>
+                        <div class="skeleton" style="height: 60px; width: 100%; margin-bottom: 0.5rem;"></div>
+                    </div>
+                    <div id="session-list"></div>
+                    <div id="empty-sessions" class="empty-state" style="display: none;">
+                        <p>No sessions found. Start practicing to see your progress!</p>
+                        <button onclick="window.location.href='/session.html'" class="btn" style="width: auto; margin-top: 1rem;">Start Rehearsal</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="right-col">
+                <!-- Countdown Timer Card -->
+                <div class="card countdown-card">
+                    <h4 style="text-transform: uppercase; letter-spacing: 1px; font-size: 0.8rem; color: var(--text-muted);">Defense Countdown</h4>
+                    <div id="timer-container">
+                        <div id="countdown-display" class="timer-display">--:--:--</div>
+                        <p id="countdown-label" style="font-weight: 600;">Until Your Defense</p>
+                    </div>
+                    <div id="set-date-container" style="display: none;">
+                        <p class="text-muted" style="font-size: 0.9rem; margin-bottom: 1rem;">Set your scheduled defense date to track your remaining time.</p>
+                        <input type="datetime-local" id="defense-date-input" style="margin-bottom: 1rem;">
+                        <button id="save-date-btn" class="btn" style="padding: 0.5rem;">Save Date</button>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3 style="margin-bottom: 1.5rem;">Quick Stats</h3>
+                    <div id="stats-content">
+                        <div style="margin-bottom: 1.5rem;">
+                            <small style="color: var(--text-muted); text-transform: uppercase;">Average Score</small>
+                            <div id="avg-score" style="font-size: 2rem; font-weight: 800; color: var(--primary-color);">--</div>
+                        </div>
+                        <div>
+                            <small style="color: var(--text-muted); text-transform: uppercase;">Sessions Completed</small>
+                            <div id="total-sessions" style="font-size: 2rem; font-weight: 800;">--</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/auth.js"></script>
+    <script src="/js/toast.js"></script>
+    <script>
+        auth.requireAuth();
+        auth.requireRole('student');
+
+        const user = auth.getUser();
+        document.getElementById('user-name').textContent = user.name;
+        document.getElementById('welcome-name').textContent = user.name.split(' ')[0];
+
+        let countdownInterval;
+
+        async function loadDashboard() {
+            try {
+                const token = auth.getToken();
+                const [sessionsRes, notifsRes, defenseRes] = await Promise.all([
+                    fetch('/api/sessions', { headers: { 'Authorization': `Bearer ${token}` } }),
+                    fetch('/api/notifications', { headers: { 'Authorization': `Bearer ${token}` } }),
+                    fetch('/api/student/defense-date', { headers: { 'Authorization': `Bearer ${token}` } })
+                ]);
+
+                const sessions = await sessionsRes.json();
+                const notifs = await notifsRes.json();
+                const defenseData = await defenseRes.json();
+
+                renderSessions(sessions);
+                renderStats(sessions);
+                renderNotifications(notifs);
+                initCountdown(defenseData.defenseDate);
+
+                document.getElementById('loading-sessions').style.display = 'none';
+            } catch (err) {
+                showToast('Failed to load dashboard data', 'error');
+            }
+        }
+
+        function renderSessions(sessions) {
+            const list = document.getElementById('session-list');
+            const empty = document.getElementById('empty-sessions');
+
+            if (sessions.length === 0) {
+                empty.style.display = 'block';
+                return;
+            }
+
+            list.innerHTML = sessions.slice(0, 5).map(s => `
+                <div class="session-item">
+                    <div>
+                        <strong>${s.project_title}</strong>
+                        <div style="font-size: 0.8rem; color: var(--text-muted);">${new Date(s.created_at).toLocaleDateString()}</div>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 1rem;">
+                        <span class="status-badge status-${s.status}">${s.status}</span>
+                        <span style="font-weight: 700;">${s.overall_score ? Math.round(s.overall_score) : '--'}</span>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function renderStats(sessions) {
+            const completed = sessions.filter(s => s.status === 'completed');
+            const avg = completed.length > 0 
+                ? Math.round(completed.reduce((acc, s) => acc + s.overall_score, 0) / completed.length) 
+                : '--';
+            
+            document.getElementById('avg-score').textContent = avg + (avg !== '--' ? '%' : '');
+            document.getElementById('total-sessions').textContent = completed.length;
+        }
+
+        function renderNotifications(notifs) {
+            const unreadCount = notifs.filter(n => !n.is_read).length;
+            const badge = document.getElementById('unread-count');
+            const bell = document.querySelector('.bell-icon');
+
+            if (unreadCount > 0) {
+                badge.textContent = unreadCount;
+                badge.style.display = 'block';
+                bell.classList.add('shake');
+                setTimeout(() => bell.classList.remove('shake'), 500);
+            } else {
+                badge.style.display = 'none';
+            }
+        }
+
+        function initCountdown(dateStr) {
+            if (!dateStr || new Date(dateStr) <= new Date()) {
+                document.getElementById('timer-container').style.display = 'none';
+                document.getElementById('set-date-container').style.display = 'block';
+                return;
+            }
+
+            const target = new Date(dateStr).getTime();
+            
+            if (countdownInterval) clearInterval(countdownInterval);
+            
+            countdownInterval = setInterval(() => {
+                const now = new Date().getTime();
+                const dist = target - now;
+
+                if (dist < 0) {
+                    clearInterval(countdownInterval);
+                    document.getElementById('countdown-display').textContent = 'DEFENSE DAY!';
+                    return;
+                }
+
+                const days = Math.floor(dist / (1000 * 60 * 60 * 24));
+                const hours = Math.floor((dist % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                const mins = Math.floor((dist % (1000 * 60 * 60)) / (1000 * 60));
+                const secs = Math.floor((dist % (1000 * 60)) / 1000);
+
+                const display = document.getElementById('countdown-display');
+                display.textContent = `${days}d ${hours}h ${mins}m ${secs}s`;
+                
+                // Color coding
+                display.className = 'timer-display';
+                if (days >= 14) display.classList.add('timer-green');
+                else if (days >= 7) display.classList.add('timer-amber');
+                else display.classList.add('timer-red');
+
+                if (days === 0 && hours < 24) display.classList.add('timer-pulse');
+
+            }, 1000);
+        }
+
+        document.getElementById('save-date-btn').onclick = async () => {
+            const date = document.getElementById('defense-date-input').value;
+            if (!date) return showToast('Please select a date', 'error');
+
+            try {
+                const res = await fetch('/api/student/defense-date', {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${auth.getToken()}`
+                    },
+                    body: JSON.stringify({ date })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error);
+
+                showToast('Defense date saved!', 'success');
+                document.getElementById('timer-container').style.display = 'block';
+                document.getElementById('set-date-container').style.display = 'none';
+                initCountdown(date);
+            } catch (err) {
+                showToast(err.message, 'error');
+            }
+        };
+
+        function toggleTheme() {
+            const isDark = document.documentElement.classList.toggle('dark-mode');
+            localStorage.setItem('pdrs_theme', isDark ? 'dark' : 'light');
+            document.querySelectorAll('.theme-toggle').forEach(btn => {
+                btn.textContent = isDark ? '☀️' : '🌙';
+            });
+        }
+        
+        if (localStorage.getItem('pdrs_theme') === 'dark') {
+            document.querySelectorAll('.theme-toggle').forEach(btn => btn.textContent = '☀️');
+        }
+
+        loadDashboard();
+    </script>
+</body>
+</html>

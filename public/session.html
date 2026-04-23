@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Defense Session - PDRS</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/animations.css">
+    <style>
+        body.dark-mode { --bg-color: #0f172a; --card-bg: #1e293b; --text-color: #f1f5f9; --text-muted: #94a3b8; --border-color: rgba(255,255,255,0.1); }
+        .session-container { max-width: 800px; margin: 2rem auto; padding: 0 1rem; }
+        .progress-bar { width: 100%; height: 10px; background: #e2e8f0; border-radius: 5px; margin-bottom: 2rem; overflow: hidden; }
+        body.dark-mode .progress-bar { background: rgba(255,255,255,0.1); }
+        .progress-fill { height: 100%; background: var(--primary-color); transition: width 0.3s ease; }
+        
+        .card { background: white; padding: 2.5rem; border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 1.5rem; }
+        body.dark-mode .card { background: var(--card-bg); border: 1px solid var(--border-color); color: var(--text-color); }
+        .tier-badge { display: inline-block; padding: 0.35rem 1rem; border-radius: 20px; font-size: 0.8rem; font-weight: 800; margin-bottom: 1.5rem; border: 2px solid; text-transform: uppercase; }
+        .tier-1 { border-color: #2dd4bf; color: #0d9488; }
+        .tier-2 { border-color: #fbbf24; color: #b45309; }
+        .tier-3 { border-color: #f87171; color: #b91c1c; }
+        
+        .question-text { font-size: 1.5rem; font-weight: 700; margin-bottom: 2rem; line-height: 1.4; color: var(--text-color); }
+        .answer-area { width: 100%; min-height: 200px; padding: 1.25rem; border: 1px solid var(--border-color); border-radius: var(--radius); font-size: 1.125rem; resize: vertical; margin-bottom: 0.5rem; font-family: inherit; }
+        body.dark-mode .answer-area { background: rgba(0,0,0,0.2); color: white; }
+        
+        .char-counter { font-size: 0.875rem; text-align: right; margin-bottom: 1.5rem; color: var(--text-muted); }
+        .char-warning { color: #b45309; font-weight: 800; }
+        .char-danger { color: #b91c1c; font-weight: 800; }
+        
+        .controls { display: flex; gap: 1rem; align-items: center; }
+        .voice-btn { background: #f1f5f9; color: var(--text-color); border: 1px solid var(--border-color); width: auto; display: flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1.25rem; font-weight: 600; }
+        body.dark-mode .voice-btn { background: rgba(255,255,255,0.05); }
+        .voice-btn.listening { background: #fee2e2; border-color: #ef4444; color: #ef4444; animation: pulse 1.5s infinite; }
+        
+        .project-selector { text-align: center; padding: 4rem; }
+        .loading-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.9); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 1000; display: none; backdrop-filter: blur(4px); }
+        body.dark-mode .loading-overlay { background: rgba(15, 23, 42, 0.9); }
+        .spinner { width: 50px; height: 50px; border: 5px solid #f3f3f3; border-top: 5px solid var(--primary-color); border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 1.5rem; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .theme-toggle { cursor: pointer; font-size: 1.25rem; background: none; border: none; padding: 0.5rem; }
+    </style>
+    <script>
+        const savedTheme = localStorage.getItem('pdrs_theme');
+        if (savedTheme === 'dark') document.documentElement.classList.add('dark-mode');
+    </script>
+</head>
+<body class="animate-up">
+    <div id="loading-overlay" class="loading-overlay">
+        <div class="spinner"></div>
+        <h3 id="loading-text" style="color: var(--primary-color);">Preparing your AI panel...</h3>
+        <p class="text-muted" style="margin-top: 0.5rem;">This may take a few seconds</p>
+    </div>
+
+    <nav class="navbar">
+        <h1 style="color: var(--primary-color); font-weight: 800; cursor: pointer;" onclick="window.location.href='/'">PDRS</h1>
+        <div style="display: flex; align-items: center; gap: 1.5rem;">
+            <button onclick="toggleTheme()" class="theme-toggle">🌙</button>
+            <button onclick="window.location.href='/student.html'" class="btn btn-secondary" style="width: auto; padding: 0.5rem 1rem;">Exit Session</button>
+        </div>
+    </nav>
+
+    <div class="session-container">
+        <!-- Step 1: Project Selection -->
+        <div id="project-step" class="card project-selector animate-up">
+            <h2 style="margin-bottom: 1rem;">New Defense Rehearsal</h2>
+            <p class="text-muted" style="margin-bottom: 2.5rem;">Choose a project to practice. Our AI will generate unique questions based on your description and tech stack.</p>
+            <div class="form-group">
+                <select id="project-list" style="padding: 1rem; font-size: 1.1rem;">
+                    <option value="">-- Select a Project --</option>
+                </select>
+            </div>
+            <button id="start-btn" class="btn" style="margin-top: 1.5rem; padding: 1rem;">Begin AI Rehearsal</button>
+            <div id="no-projects" style="display: none; margin-top: 2rem;">
+                <p class="text-muted">No projects found. You need to create a project first.</p>
+                <button onclick="window.location.href='/student.html'" class="btn btn-secondary" style="width: auto; margin-top: 1rem;">Go to Dashboard</button>
+            </div>
+        </div>
+
+        <!-- Step 2: Question Flow -->
+        <div id="question-step" style="display: none;" class="animate-up">
+            <div class="progress-bar">
+                <div id="progress-fill" class="progress-fill" style="width: 0%"></div>
+            </div>
+            <div id="question-card" class="card">
+                <div id="tier-badge" class="tier-badge">Fundamentals</div>
+                <div id="question-text" class="question-text">Question will appear here...</div>
+                <textarea id="answer-input" class="answer-area" placeholder="Provide a detailed technical answer..."></textarea>
+                <div id="char-counter" class="char-counter">0 / 1000 characters</div>
+                
+                <div class="controls">
+                    <button id="voice-btn" class="btn voice-btn">🎤 Voice Answer</button>
+                    <button id="submit-answer" class="btn" style="flex-grow: 1;">Submit & Continue</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/auth.js"></script>
+    <script src="/js/toast.js"></script>
+    <script>
+        function toggleTheme() {
+            const isDark = document.documentElement.classList.toggle('dark-mode');
+            localStorage.setItem('pdrs_theme', isDark ? 'dark' : 'light');
+            document.querySelectorAll('.theme-toggle').forEach(btn => {
+                btn.textContent = isDark ? '☀️' : '🌙';
+            });
+        }
+        
+        if (localStorage.getItem('pdrs_theme') === 'dark') {
+            document.querySelectorAll('.theme-toggle').forEach(btn => btn.textContent = '☀️');
+        }
+    </script>
+    <script src="/js/session-logic.js"></script>
+</body>
+</html>

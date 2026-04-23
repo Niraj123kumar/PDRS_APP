@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Defense Panel - PDRS</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/animations.css">
+    <style>
+        body.dark-mode { --bg-color: #0f172a; --card-bg: #1e293b; --text-color: #f1f5f9; --text-muted: #94a3b8; --border-color: rgba(255,255,255,0.1); }
+        .panel-grid { display: grid; grid-template-columns: 1fr 380px; height: calc(100vh - 70px); gap: 1rem; padding: 1rem; }
+        .video-container { background: #0f172a; border-radius: var(--radius); position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+        .faculty-video { width: 100%; height: 100%; object-fit: cover; }
+        .student-video-pip { position: absolute; bottom: 2rem; right: 2rem; width: 280px; height: 180px; background: #1e293b; border: 3px solid white; border-radius: var(--radius); box-shadow: 0 20px 25px -5px rgba(0,0,0,0.3); object-fit: cover; }
+        
+        .sidebar { background: white; border-radius: var(--radius); box-shadow: var(--shadow); padding: 1.5rem; display: flex; flex-direction: column; overflow-y: auto; }
+        body.dark-mode .sidebar { background: var(--card-bg); border: 1px solid var(--border-color); color: var(--text-color); }
+        .q-item { padding: 1rem; border: 1px solid var(--border-color); border-radius: var(--radius); margin-bottom: 0.75rem; cursor: pointer; transition: all 0.2s; background: #f8fafc; }
+        body.dark-mode .q-item { background: rgba(255,255,255,0.05); }
+        .q-item:hover { background: #eff6ff; border-color: var(--primary-color); transform: translateX(5px); }
+        
+        .timer-display { font-size: 1.5rem; font-weight: 800; color: var(--primary-color); background: #eff6ff; padding: 0.5rem 1.5rem; border-radius: 30px; border: 2px solid #dbeafe; }
+        body.dark-mode .timer-display { background: rgba(37, 99, 235, 0.1); border-color: var(--primary-color); }
+        .ws-status-indicator { width: 10px; height: 10px; border-radius: 50%; margin-right: 0.5rem; }
+        .theme-toggle { cursor: pointer; font-size: 1.25rem; background: none; border: none; padding: 0.5rem; }
+    </style>
+    <script>
+        const savedTheme = localStorage.getItem('pdrs_theme');
+        if (savedTheme === 'dark') document.documentElement.classList.add('dark-mode');
+    </script>
+</head>
+<body style="background: #f1f5f9;" class="animate-up">
+    <nav class="navbar" style="height: 70px;">
+        <div style="display: flex; align-items: center;">
+            <div id="ws-status" class="ws-status-indicator" style="background: #94a3b8;"></div>
+            <h1 style="font-size: 1.25rem; font-weight: 800; cursor: pointer;" onclick="window.location.href='/'">Mock Defense</h1>
+        </div>
+        <div style="display: flex; align-items: center; gap: 1.5rem;">
+            <div id="timer" class="timer-display">20:00</div>
+            <button onclick="toggleTheme()" class="theme-toggle">🌙</button>
+            <button onclick="window.history.back()" class="btn btn-secondary" style="width: auto; padding: 0.5rem 1.5rem;">End Session</button>
+        </div>
+    </nav>
+
+    <div class="panel-grid">
+        <div class="video-container">
+            <video id="remote-video" class="faculty-video" autoplay playsinline poster="https://via.placeholder.com/1280x720/0f172a/64748b?text=Waiting+for+Remote+Video"></video>
+            <video id="local-video" class="student-video-pip" autoplay playsinline muted></video>
+        </div>
+
+        <div class="sidebar animate-up">
+            <div id="faculty-controls" style="display: none;">
+                <h3 style="margin-bottom: 1.5rem;">Panel Controls</h3>
+                <div class="form-group">
+                    <label>Select Question</label>
+                    <div id="question-bank" style="max-height: 300px; overflow-y: auto; margin-bottom: 1.5rem;">
+                        <p class="text-muted">Loading question bank...</p>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Real-time Annotation</label>
+                    <textarea id="faculty-note" style="min-height: 120px;" placeholder="Add private notes or feedback..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Score Override</label>
+                    <input type="number" id="score-override" min="0" max="100" placeholder="Adjust live score...">
+                </div>
+                <button id="annotate-btn" class="btn" style="margin-bottom: 0.5rem;">Save Note</button>
+                <button id="end-session" class="btn btn-secondary">Finalize Session</button>
+            </div>
+
+            <div id="student-controls" style="display: none;">
+                <h3 style="margin-bottom: 1.5rem;">Live Rehearsal</h3>
+                <div class="card" style="background: #f8fafc; border: 1px solid #dbeafe; margin-bottom: 1.5rem; padding: 1rem;">
+                    <small style="color: var(--text-muted); text-transform: uppercase; font-weight: 800;">Current Focus</small>
+                    <p id="current-question" style="font-weight: 600; margin-top: 0.5rem;">Waiting for faculty to pose a question...</p>
+                </div>
+                <div class="form-group">
+                    <label>Defense Notes</label>
+                    <textarea id="student-answer" style="min-height: 250px;" placeholder="Use this space for your own notes or technical references..."></textarea>
+                </div>
+                <div style="display: flex; gap: 0.5rem;">
+                    <button class="btn btn-secondary" style="flex: 1;">Toggle Mic</button>
+                    <button class="btn btn-secondary" style="flex: 1;">Toggle Cam</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/auth.js"></script>
+    <script src="/js/toast.js"></script>
+    <script src="/js/websocket.js"></script>
+    <script src="/js/webrtc.js"></script>
+    <script>
+        const user = auth.getUser();
+        if (!user) window.location.href = '/login.html';
+
+        const role = user.role;
+        const urlParams = new URLSearchParams(window.location.search);
+        const targetId = urlParams.get('peerId');
+
+        if (role === 'faculty') {
+            document.getElementById('faculty-controls').style.display = 'block';
+        } else {
+            document.getElementById('student-controls').style.display = 'block';
+        }
+
+        const webrtc = new pdrsWebRTC(
+            (stream) => { document.getElementById('remote-video').srcObject = stream; },
+            (candidate) => { pdrsWS.emit('ice_candidate', targetId, candidate); }
+        );
+
+        async function initMedia() {
+            try {
+                const localStream = await webrtc.startLocalStream();
+                document.getElementById('local-video').srcObject = localStream;
+                
+                if (role === 'faculty' && targetId) {
+                    const offer = await webrtc.createOffer();
+                    pdrsWS.emit('offer', targetId, offer);
+                    showToast('Initiating peer connection...', 'info');
+                }
+            } catch (err) {
+                showToast('Camera/Mic access denied', 'error');
+            }
+        }
+
+        pdrsWS.on('offer', async (data) => {
+            showToast('Incoming connection...', 'info');
+            const answer = await webrtc.handleOffer(data.payload);
+            pdrsWS.emit('answer_sdp', data.senderId, answer);
+        });
+
+        pdrsWS.on('answer_sdp', async (data) => {
+            await webrtc.handleAnswer(data.payload);
+            showToast('Connection established!', 'success');
+        });
+
+        pdrsWS.on('ice_candidate', async (data) => {
+            await webrtc.handleCandidate(data.payload);
+        });
+
+        function toggleTheme() {
+            const isDark = document.documentElement.classList.toggle('dark-mode');
+            localStorage.setItem('pdrs_theme', isDark ? 'dark' : 'light');
+            document.querySelectorAll('.theme-toggle').forEach(btn => {
+                btn.textContent = isDark ? '☀️' : '🌙';
+            });
+        }
+        
+        if (localStorage.getItem('pdrs_theme') === 'dark') {
+            document.querySelectorAll('.theme-toggle').forEach(btn => btn.textContent = '☀️');
+        }
+
+        initMedia();
+    </script>
+</body>
+</html>

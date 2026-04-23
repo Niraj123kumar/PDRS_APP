@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Register - PDRS</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/animations.css">
+    <style>
+        body { display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%); min-height: 100vh; }
+        body.dark-mode { background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); --bg-color: #0f172a; --card-bg: #1e293b; --text-color: #f1f5f9; --text-muted: #94a3b8; --border-color: rgba(255,255,255,0.1); }
+        .auth-card { background: white; padding: 2.5rem; border-radius: var(--radius); box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); width: 100%; max-width: 450px; }
+        body.dark-mode .auth-card { background: var(--card-bg); border: 1px solid var(--border-color); color: var(--text-color); }
+        .role-toggle { display: flex; gap: 1rem; margin-bottom: 1.5rem; background: #f1f5f9; padding: 0.4rem; border-radius: 10px; }
+        body.dark-mode .role-toggle { background: rgba(255,255,255,0.05); }
+        .role-option { flex: 1; text-align: center; }
+        .role-option input { display: none; }
+        .role-label { display: block; padding: 0.6rem; border-radius: 8px; cursor: pointer; font-weight: 600; color: var(--text-muted); transition: all 0.2s; }
+        .role-option input:checked + .role-label { background: white; color: var(--primary-color); box-shadow: var(--shadow); }
+        body.dark-mode .role-option input:checked + .role-label { background: #334155; color: white; }
+        .theme-toggle-fixed { position: fixed; bottom: 2rem; right: 2rem; background: var(--card-bg, white); box-shadow: var(--shadow); border-radius: 50%; width: 50px; height: 50px; display: flex; align-items: center; justify-content: center; z-index: 1000; border: 1px solid var(--border-color, #e2e8f0); cursor: pointer; font-size: 1.25rem; }
+    </style>
+    <script>
+        const savedTheme = localStorage.getItem('pdrs_theme');
+        if (savedTheme === 'dark') document.documentElement.classList.add('dark-mode');
+    </script>
+</head>
+<body class="animate-up">
+    <button onclick="toggleTheme()" class="theme-toggle-fixed" id="theme-btn">🌙</button>
+    <div class="auth-card">
+        <div style="text-align: center; margin-bottom: 2rem;">
+            <h1 style="color: var(--primary-color); font-weight: 800; font-size: 2rem;">Create Account</h1>
+            <p class="text-muted">Join the rehearsal system today.</p>
+        </div>
+
+        <div id="error-box" class="status-badge status-pending" style="display: none; width: 100%; margin-bottom: 1rem; text-transform: none; text-align: center;"></div>
+
+        <form id="register-form">
+            <div class="role-toggle">
+                <div class="role-option">
+                    <input type="radio" name="role" id="role-student" value="student" checked>
+                    <label for="role-student" class="role-label">Student</label>
+                </div>
+                <div class="role-option">
+                    <input type="radio" name="role" id="role-faculty" value="faculty">
+                    <label for="role-faculty" class="role-label">Faculty</label>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="name">Full Name</label>
+                <input type="text" id="name" required placeholder="John Doe">
+            </div>
+            <div class="form-group">
+                <label for="email">Email Address</label>
+                <input type="email" id="email" required placeholder="name@university.edu">
+            </div>
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" required placeholder="••••••••" minlength="6">
+            </div>
+            <button type="submit" class="btn">Register Account</button>
+        </form>
+
+        <div style="text-align: center; margin-top: 1.5rem;">
+            <p class="text-muted">Already have an account? <a href="/login.html" style="color: var(--primary-color); font-weight: 600; text-decoration: none;">Login</a></p>
+        </div>
+    </div>
+
+    <script src="/js/auth.js"></script>
+    <script src="/js/toast.js"></script>
+    <script>
+        document.getElementById('register-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const name = document.getElementById('name').value;
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const role = document.querySelector('input[name="role"]:checked').value;
+            const errorBox = document.getElementById('error-box');
+
+            try {
+                const response = await fetch('/api/auth/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, email, password, role })
+                });
+
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error || 'Registration failed');
+
+                auth.saveToken(data.token, data.user);
+                showToast('Registration successful!', 'success');
+                setTimeout(() => {
+                    window.location.href = data.user.role === 'faculty' ? '/faculty.html' : '/student.html';
+                }, 500);
+
+            } catch (err) {
+                errorBox.textContent = err.message;
+                errorBox.style.display = 'block';
+            }
+        });
+
+        function toggleTheme() {
+            const isDark = document.documentElement.classList.toggle('dark-mode');
+            localStorage.setItem('pdrs_theme', isDark ? 'dark' : 'light');
+            document.getElementById('theme-btn').textContent = isDark ? '☀️' : '🌙';
+        }
+        
+        if (localStorage.getItem('pdrs_theme') === 'dark') {
+            document.getElementById('theme-btn').textContent = '☀️';
+        }
+    </script>
+</body>
+</html>

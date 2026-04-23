@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Faculty Dashboard - PDRS</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/animations.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <style>
+        body.dark-mode { --bg-color: #0f172a; --card-bg: #1e293b; --text-color: #f1f5f9; --text-muted: #94a3b8; --border-color: rgba(255,255,255,0.1); }
+        .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.5rem; margin-bottom: 2rem; }
+        .stat-card { background: white; padding: 1.5rem; border-radius: var(--radius); box-shadow: var(--shadow); text-align: center; }
+        body.dark-mode .stat-card { background: var(--card-bg); border: 1px solid var(--border-color); color: var(--text-color); }
+        .stat-val { font-size: 2rem; font-weight: 800; color: var(--primary-color); display: block; }
+        
+        .charts-section { display: grid; grid-template-columns: 2fr 1fr; gap: 1.5rem; margin-bottom: 2rem; }
+        .chart-card { background: white; padding: 1.5rem; border-radius: var(--radius); box-shadow: var(--shadow); }
+        body.dark-mode .chart-card { background: var(--card-bg); border: 1px solid var(--border-color); color: var(--text-color); }
+
+        .table-section { background: white; padding: 1.5rem; border-radius: var(--radius); box-shadow: var(--shadow); }
+        body.dark-mode .table-section { background: var(--card-bg); border: 1px solid var(--border-color); color: var(--text-color); }
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; padding: 1rem; border-bottom: 2px solid var(--border-color); color: var(--text-muted); font-size: 0.875rem; }
+        td { padding: 1rem; border-bottom: 1px solid var(--border-color); }
+        tr:hover { background: #f8fafc; cursor: pointer; }
+        body.dark-mode tr:hover { background: rgba(255,255,255,0.05); }
+
+        .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: none; align-items: center; justify-content: center; z-index: 1000; }
+        .modal-content { background: white; padding: 2rem; border-radius: var(--radius); max-width: 800px; width: 90%; max-height: 90vh; overflow-y: auto; position: relative; }
+        body.dark-mode .modal-content { background: var(--card-bg); color: var(--text-color); border: 1px solid var(--border-color); }
+        
+        .at-risk-row { border-left: 4px solid var(--error-color); animation: pulseRed 2s infinite; }
+        .theme-toggle { cursor: pointer; font-size: 1.25rem; background: none; border: none; padding: 0.5rem; }
+    </style>
+    <script>
+        const savedTheme = localStorage.getItem('pdrs_theme');
+        if (savedTheme === 'dark') document.documentElement.classList.add('dark-mode');
+    </script>
+</head>
+<body class="animate-up">
+    <nav class="navbar">
+        <div style="display: flex; align-items: center; gap: 2rem;">
+            <h1 style="color: var(--primary-color); font-weight: 800; cursor: pointer;" onclick="window.location.href='/'">PDRS Faculty</h1>
+        </div>
+        <div style="display: flex; align-items: center; gap: 1.5rem;">
+            <button onclick="toggleTheme()" class="theme-toggle">🌙</button>
+            <span id="faculty-name" style="font-weight: 600;"></span>
+            <button onclick="auth.logout()" class="btn btn-secondary" style="width: auto; padding: 0.5rem 1rem;">Logout</button>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div id="stats-loading" class="stats-grid">
+            <div class="skeleton" style="height: 100px;"></div>
+            <div class="skeleton" style="height: 100px;"></div>
+            <div class="skeleton" style="height: 100px;"></div>
+            <div class="skeleton" style="height: 100px;"></div>
+        </div>
+        <div id="stats-grid" class="stats-grid" style="display: none;">
+            <div class="stat-card"><span id="stat-students" class="stat-val">0</span><small class="text-muted">Total Students</small></div>
+            <div class="stat-card"><span id="stat-sessions" class="stat-val">0</span><small class="text-muted">Sessions (7d)</small></div>
+            <div class="stat-card"><span id="stat-avg" class="stat-val">0%</span><small class="text-muted">Avg Cohort Score</small></div>
+            <div class="stat-card" style="border: 1px solid #fee2e2;"><span id="stat-risk" class="stat-val" style="color: #ef4444;">0</span><small class="text-muted">At-Risk</small></div>
+        </div>
+
+        <div class="charts-section">
+            <div class="chart-card">
+                <h3>Performance Distribution</h3>
+                <canvas id="cohortChart"></canvas>
+            </div>
+            <div class="chart-card">
+                <h3>Session Requests</h3>
+                <div id="requests-list">
+                    <p style="color: var(--text-muted); text-align: center; margin-top: 2rem;">No pending requests</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="table-section">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                <h3>Student Roster</h3>
+                <input type="text" id="student-search" placeholder="Search by name or email..." style="width: 300px;">
+            </div>
+            <table id="student-table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Email</th>
+                        <th>Sessions</th>
+                        <th>Avg Score</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody id="student-body"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div id="profile-modal" class="modal">
+        <div class="modal-content animate-up">
+            <button onclick="closeModal()" style="position: absolute; top: 1rem; right: 1rem; background: none; border: none; font-size: 1.5rem; cursor: pointer;">&times;</button>
+            <h2 id="modal-name">Student Name</h2>
+            <p id="modal-email" style="color: var(--text-muted); margin-bottom: 2rem;"></p>
+            
+            <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 2rem;">
+                <div>
+                    <h4>Projects</h4>
+                    <div id="modal-projects" style="margin-top: 1rem;"></div>
+                </div>
+                <div>
+                    <h4>Progress Timeline</h4>
+                    <canvas id="historyChart" style="height: 250px;"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/auth.js"></script>
+    <script src="/js/charts.js"></script>
+    <script src="/js/toast.js"></script>
+    <script>
+        auth.requireAuth();
+        auth.requireRole('faculty');
+
+        const user = auth.getUser();
+        document.getElementById('faculty-name').textContent = user.name;
+
+        let cohortChart, historyChart;
+
+        async function init() {
+            try {
+                const token = auth.getToken();
+                const [stats, cohort, students, atRisk, requests] = await Promise.all([
+                    fetch('/api/faculty/stats', { headers: { 'Authorization': `Bearer ${token}` } }).then(r => r.json()),
+                    fetch('/api/faculty/cohort', { headers: { 'Authorization': `Bearer ${token}` } }).then(r => r.json()),
+                    fetch('/api/faculty/students', { headers: { 'Authorization': `Bearer ${token}` } }).then(r => r.json()),
+                    fetch('/api/faculty/at-risk', { headers: { 'Authorization': `Bearer ${token}` } }).then(r => r.json()),
+                    fetch('/api/faculty/session-requests', { headers: { 'Authorization': `Bearer ${token}` } }).then(r => r.json())
+                ]);
+
+                // Render Stats
+                document.getElementById('stat-students').textContent = stats.totalStudents;
+                document.getElementById('stat-sessions').textContent = stats.sessionsThisWeek;
+                document.getElementById('stat-avg').textContent = stats.avgCohortScore + '%';
+                document.getElementById('stat-risk').textContent = stats.atRiskCount;
+                document.getElementById('stats-loading').style.display = 'none';
+                document.getElementById('stats-grid').style.display = 'grid';
+
+                // Render Cohort Chart
+                charts.renderCohortBarChart('cohortChart', ['0-20', '21-40', '41-60', '61-80', '81-100'], cohort.cohortChart);
+
+                // Render Table
+                const atRiskIds = atRisk.map(s => s.id);
+                renderTable(students, atRiskIds);
+
+                // Render Requests
+                const reqList = document.getElementById('requests-list');
+                if (requests.length > 0) {
+                    reqList.innerHTML = requests.map(r => `
+                        <div style="padding: 1rem; border: 1px solid var(--border-color); border-radius: var(--radius); margin-bottom: 0.75rem; display: flex; justify-content: space-between; align-items: center;">
+                            <div><strong>${r.student_name}</strong></div>
+                            <div style="display: flex; gap: 0.5rem;">
+                                <button onclick="handleRequest(${r.id}, 'accept')" class="btn" style="width: auto; padding: 0.4rem 0.75rem; font-size: 0.8rem;">Accept</button>
+                                <button onclick="handleRequest(${r.id}, 'decline')" class="btn btn-secondary" style="width: auto; padding: 0.4rem 0.75rem; font-size: 0.8rem;">Decline</button>
+                            </div>
+                        </div>
+                    `).join('');
+                }
+
+                // Search logic
+                document.getElementById('student-search').addEventListener('input', (e) => {
+                    const term = e.target.value.toLowerCase();
+                    const filtered = students.filter(s => s.name.toLowerCase().includes(term) || s.email.toLowerCase().includes(term));
+                    renderTable(filtered, atRiskIds);
+                });
+
+            } catch (err) {
+                showToast('Failed to initialize dashboard', 'error');
+            }
+        }
+
+        function renderTable(students, atRiskIds) {
+            const body = document.getElementById('student-body');
+            body.innerHTML = students.map(s => `
+                <tr onclick="openProfile(${s.id})" class="${atRiskIds.includes(s.id) ? 'at-risk-row' : ''}">
+                    <td><strong>${s.name}</strong></td>
+                    <td>${s.email}</td>
+                    <td>${s.session_count}</td>
+                    <td>${s.avg_score ? Math.round(s.avg_score) + '%' : '--'}</td>
+                    <td><span style="color: ${atRiskIds.includes(s.id) ? '#ef4444' : '#166534'}; font-weight: 600;">${atRiskIds.includes(s.id) ? 'At Risk' : 'Healthy'}</span></td>
+                </tr>
+            `).join('');
+        }
+
+        async function openProfile(id) {
+            try {
+                const token = auth.getToken();
+                const data = await fetch(`/api/faculty/student/${id}`, { headers: { 'Authorization': `Bearer ${token}` } }).then(r => r.json());
+                
+                document.getElementById('modal-name').textContent = data.student.name;
+                document.getElementById('modal-email').textContent = data.student.email;
+                document.getElementById('modal-projects').innerHTML = data.projects.map(p => `
+                    <div style="padding: 0.75rem; background: #f8fafc; border-radius: 8px; margin-bottom: 0.5rem;">
+                        <div style="font-weight: 600;">${p.title}</div>
+                        <small style="color: var(--text-muted)">${p.tech_stack}</small>
+                    </div>
+                `).join('') || '<p class="text-muted">No projects yet</p>';
+
+                const ctx = document.getElementById('historyChart').getContext('2d');
+                if (historyChart) historyChart.destroy();
+                historyChart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: data.sessions.map(s => new Date(s.created_at).toLocaleDateString()).reverse(),
+                        datasets: [{
+                            label: 'Overall Score',
+                            data: data.sessions.map(s => s.overall_score).reverse(),
+                            borderColor: '#2563eb',
+                            tension: 0.3,
+                            fill: true,
+                            backgroundColor: 'rgba(37, 99, 235, 0.1)'
+                        }]
+                    },
+                    options: { responsive: true, scales: { y: { min: 0, max: 100 } } }
+                });
+
+                document.getElementById('profile-modal').style.display = 'flex';
+            } catch (err) {
+                showToast('Failed to load student profile', 'error');
+            }
+        }
+
+        function closeModal() {
+            document.getElementById('profile-modal').style.display = 'none';
+        }
+
+        async function handleRequest(id, action) {
+            try {
+                const token = auth.getToken();
+                const res = await fetch(`/api/faculty/session-request/${id}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify({ status: action === 'accept' ? 'approved' : 'rejected' })
+                });
+                if (res.ok) {
+                    showToast(`Request ${action}ed!`, 'success');
+                    init();
+                }
+            } catch (err) {
+                showToast('Action failed', 'error');
+            }
+        }
+
+        function toggleTheme() {
+            const isDark = document.documentElement.classList.toggle('dark-mode');
+            localStorage.setItem('pdrs_theme', isDark ? 'dark' : 'light');
+            document.querySelectorAll('.theme-toggle').forEach(btn => {
+                btn.textContent = isDark ? '☀️' : '🌙';
+            });
+        }
+        
+        if (localStorage.getItem('pdrs_theme') === 'dark') {
+            document.querySelectorAll('.theme-toggle').forEach(btn => btn.textContent = '☀️');
+        }
+
+        init();
+    </script>
+</body>
+</html>

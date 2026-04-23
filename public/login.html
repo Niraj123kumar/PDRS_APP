@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - PDRS</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/animations.css">
+    <style>
+        body { display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%); min-height: 100vh; }
+        body.dark-mode { background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); --bg-color: #0f172a; --card-bg: #1e293b; --text-color: #f1f5f9; --text-muted: #94a3b8; --border-color: rgba(255,255,255,0.1); }
+        .auth-card { background: white; padding: 2.5rem; border-radius: var(--radius); box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); width: 100%; max-width: 400px; }
+        body.dark-mode .auth-card { background: var(--card-bg); border: 1px solid var(--border-color); color: var(--text-color); }
+        .auth-header { text-align: center; margin-bottom: 2rem; }
+        .auth-header h1 { color: var(--primary-color); font-weight: 800; font-size: 2rem; }
+        .theme-toggle-fixed { position: fixed; bottom: 2rem; right: 2rem; background: var(--card-bg, white); box-shadow: var(--shadow); border-radius: 50%; width: 50px; height: 50px; display: flex; align-items: center; justify-content: center; z-index: 1000; border: 1px solid var(--border-color, #e2e8f0); cursor: pointer; font-size: 1.25rem; }
+    </style>
+    <script>
+        const savedTheme = localStorage.getItem('pdrs_theme');
+        if (savedTheme === 'dark') document.documentElement.classList.add('dark-mode');
+    </script>
+</head>
+<body class="animate-up">
+    <button onclick="toggleTheme()" class="theme-toggle-fixed" id="theme-btn">🌙</button>
+    <div class="auth-card">
+        <div class="auth-header">
+            <h1>PDRS Login</h1>
+            <p class="text-muted">Welcome back! Please login.</p>
+        </div>
+        
+        <div id="error-box" class="status-badge status-pending" style="display: none; width: 100%; margin-bottom: 1rem; text-transform: none; text-align: center;"></div>
+        
+        <form id="login-form">
+            <div class="form-group">
+                <label for="email">Email Address</label>
+                <input type="email" id="email" required placeholder="name@university.edu">
+            </div>
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" required placeholder="••••••••">
+            </div>
+            <button type="submit" class="btn">Login to Dashboard</button>
+        </form>
+
+        <div style="text-align: center; margin-top: 1.5rem;">
+            <p class="text-muted">Don't have an account? <a href="/register.html" style="color: var(--primary-color); font-weight: 600; text-decoration: none;">Register</a></p>
+        </div>
+    </div>
+
+    <script src="/js/auth.js"></script>
+    <script src="/js/toast.js"></script>
+    <script>
+        document.getElementById('login-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const errorBox = document.getElementById('error-box');
+
+            try {
+                const response = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error || 'Login failed');
+
+                auth.saveToken(data.token, data.user);
+                showToast('Login successful!', 'success');
+                setTimeout(() => {
+                    window.location.href = data.user.role === 'faculty' ? '/faculty.html' : '/student.html';
+                }, 500);
+
+            } catch (err) {
+                errorBox.textContent = err.message;
+                errorBox.style.display = 'block';
+            }
+        });
+
+        function toggleTheme() {
+            const isDark = document.documentElement.classList.toggle('dark-mode');
+            localStorage.setItem('pdrs_theme', isDark ? 'dark' : 'light');
+            document.getElementById('theme-btn').textContent = isDark ? '☀️' : '🌙';
+        }
+        
+        if (localStorage.getItem('pdrs_theme') === 'dark') {
+            document.getElementById('theme-btn').textContent = '☀️';
+        }
+    </script>
+</body>
+</html>

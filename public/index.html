@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDRS - Project Defense Rehearsal System</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/animations.css">
+    <style>
+        :root {
+            --accent-emerald: #10b981;
+            --accent-indigo: #6366f1;
+            --accent-amber: #f59e0b;
+            --accent-red: #ef4444;
+        }
+
+        body.dark-mode {
+            --bg-color: #0f172a;
+            --card-bg: #1e293b;
+            --text-color: #f1f5f9;
+            --text-muted: #94a3b8;
+            --border-color: rgba(255,255,255,0.1);
+        }
+
+        .hero { text-align: center; padding: 6rem 2rem; background: linear-gradient(135deg, var(--bg-color) 0%, var(--card-bg) 100%); }
+        .hero h1 { font-size: 3.5rem; color: var(--primary-color); margin-bottom: 1.5rem; font-weight: 800; }
+        
+        .role-chooser { display: grid; grid-template-columns: repeat(2, 1fr); gap: 2rem; max-width: 900px; margin: 4rem auto; }
+        .role-card { padding: 3rem; border-radius: var(--radius); text-align: center; cursor: pointer; transition: all 0.3s; border: 2px solid transparent; background: var(--card-bg); box-shadow: var(--shadow); }
+        .role-card:hover { transform: translateY(-10px); }
+        .role-student:hover { border-color: var(--accent-emerald); }
+        .role-faculty:hover { border-color: var(--accent-indigo); }
+        .role-icon { font-size: 3rem; margin-bottom: 1rem; }
+        .role-card h3 { font-size: 1.5rem; margin-bottom: 1.5rem; }
+        .role-features { list-style: none; text-align: left; margin-bottom: 2rem; }
+        .role-features li { margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem; font-size: 0.95rem; }
+        .role-features li::before { content: '✓'; font-weight: bold; }
+
+        .feature-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2rem; margin-top: 4rem; }
+        .feature-card { background: var(--card-bg); padding: 2rem; border-radius: var(--radius); box-shadow: var(--shadow); transition: transform 0.3s; }
+        .feature-card:hover { transform: translateY(-5px); }
+
+        .how-it-works { padding: 6rem 0; text-align: center; }
+        .step-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 2rem; margin-top: 3rem; }
+        .step-card { position: relative; }
+        .step-num { font-size: 4rem; font-weight: 900; opacity: 0.1; position: absolute; top: -20px; left: 50%; transform: translateX(-50%); }
+
+        .theme-toggle { cursor: pointer; font-size: 1.25rem; background: none; border: none; padding: 0.5rem; }
+        .theme-toggle-fixed { position: fixed; bottom: 2rem; right: 2rem; background: var(--card-bg); box-shadow: var(--shadow); border-radius: 50%; width: 50px; height: 50px; display: flex; align-items: center; justify-content: center; z-index: 1000; border: 1px solid var(--border-color); }
+
+        .banner { padding: 1rem; border-radius: var(--radius); margin-bottom: 2rem; text-align: center; font-weight: 600; display: none; }
+        .banner-denied { background: #fee2e2; color: var(--accent-red); border: 2px solid var(--accent-red); }
+        .banner-welcome { background: #ecfdf5; color: var(--accent-emerald); border: 2px solid var(--accent-emerald); }
+
+        .status-badge-ai { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1.25rem; border-radius: 30px; font-weight: 700; font-size: 0.85rem; margin: 2rem auto; }
+        .badge-claude { background: #d1fae5; color: #065f46; border: 1px solid #34d399; }
+        .badge-other { background: #ffedd5; color: #9a3412; border: 1px solid #fb923c; }
+
+        .role-badge { background: var(--primary-color); color: white; padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.75rem; font-weight: 800; text-transform: uppercase; }
+
+        @media (max-width: 768px) {
+            .role-chooser, .feature-grid, .step-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+    <script>
+        // Apply theme immediately to prevent flash
+        const savedTheme = localStorage.getItem('pdrs_theme');
+        if (savedTheme === 'dark') document.documentElement.classList.add('dark-mode');
+    </script>
+</head>
+<body class="animate-up">
+    <nav class="navbar">
+        <h1 style="color: var(--primary-color); font-weight: 800; cursor: pointer;" onclick="window.location.href='/'">PDRS</h1>
+        <div style="display: flex; align-items: center; gap: 1.5rem;">
+            <div id="user-nav-info" style="display: none; align-items: center; gap: 1rem;">
+                <span id="nav-role-badge" class="role-badge"></span>
+                <button onclick="switchRole()" class="btn-text" style="background:none; border:none; color:var(--primary-color); cursor:pointer; font-weight:600; font-size:0.85rem;">Switch Role</button>
+            </div>
+            <button onclick="toggleTheme()" class="theme-toggle">🌙</button>
+            <div id="auth-buttons">
+                <a href="/login.html" class="btn" style="width: auto; background: none; color: var(--primary-color); border: 2px solid var(--primary-color); padding: 0.5rem 1.5rem;">Login</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div id="access-banner" class="banner banner-denied">Access Denied: Faculty permissions required.</div>
+        <div id="welcome-banner" class="banner banner-welcome">
+            Welcome back! You are logged in as <span id="welcome-role"></span>.
+            <div style="margin-top: 1rem; display: flex; gap: 1rem; justify-content: center;">
+                <button id="continue-btn" class="btn" style="width: auto; padding: 0.5rem 2rem;">Continue to Dashboard</button>
+                <button onclick="switchRole()" class="btn btn-secondary" style="width: auto; padding: 0.5rem 2rem;">Switch Role</button>
+            </div>
+        </div>
+    </div>
+
+    <header class="hero">
+        <div class="container">
+            <h1>Master Your Project Defense</h1>
+            <p>The ultimate AI-powered rehearsal system for students to practice, improve, and excel in technical project defenses.</p>
+            
+            <div id="ai-status" class="status-badge-ai">
+                <span id="ai-provider-icon">●</span> AI Engine: <span id="ai-provider-name">Checking...</span>
+            </div>
+
+            <!-- Role Chooser -->
+            <div id="role-chooser-section">
+                <div class="role-chooser">
+                    <div class="role-card role-student" onclick="selectRole('student')">
+                        <div class="role-icon">🎓</div>
+                        <h3>I'm a Student</h3>
+                        <ul class="role-features">
+                            <li>Submit project stack</li>
+                            <li>10 AI questions</li>
+                            <li>Live scoring</li>
+                            <li>Track improvement</li>
+                            <li>Coaching suggestions</li>
+                            <li>Peer practice</li>
+                        </ul>
+                        <button class="btn" style="background: var(--accent-emerald);">Enter Student Portal</button>
+                    </div>
+
+                    <div class="role-card role-faculty" onclick="selectRole('faculty')">
+                        <div class="role-icon">🧑‍🏫</div>
+                        <h3>I'm Faculty</h3>
+                        <ul class="role-features">
+                            <li>Cohort analytics</li>
+                            <li>At-risk alerts</li>
+                            <li>Live mock panels</li>
+                            <li>Score answers</li>
+                            <li>Export reports</li>
+                            <li>Custom question bank</li>
+                        </ul>
+                        <button class="btn" style="background: var(--accent-indigo);">Enter Faculty Portal</button>
+                    </div>
+                </div>
+                
+                <button id="demo-btn" class="btn btn-secondary" style="width: auto; padding: 1rem 3rem; margin-top: 1rem;">
+                    ⚡ Try Demo (no login needed)
+                </button>
+            </div>
+
+            <div class="feature-grid">
+                <div class="feature-card"><h3>📋 Submit Project</h3><p>Upload your project details and tech stack.</p></div>
+                <div class="feature-card"><h3>🤖 AI Interrogation</h3><p>Get grilled by our tiered AI panel.</p></div>
+                <div class="feature-card"><h3>📊 Scored & Tracked</h3><p>Instant feedback across 4 dimensions.</p></div>
+                <div class="feature-card"><h3>🎯 Personalized Coaching</h3><p>AI-generated practice for your weak spots.</p></div>
+                <div class="feature-card"><h3>🎙 Live Panel Sessions</h3><p>Real-time mock defense with faculty.</p></div>
+                <div class="feature-card"><h3>📈 Faculty Analytics</h3><p>Comprehensive cohort tracking and insights.</p></div>
+            </div>
+        </div>
+    </header>
+
+    <section class="how-it-works">
+        <div class="container">
+            <h2>How It Works</h2>
+            <div class="step-grid">
+                <div class="step-card"><div class="step-num">01</div><h3>Onboarding</h3><p>Set up your profile and projects.</p></div>
+                <div class="step-card"><div class="step-num">02</div><h3>AI Questions</h3><p>Practice with 10 technical tiers.</p></div>
+                <div class="step-card"><div class="step-num">03</div><h3>Defense Session</h3><p>Simulate the real pressure.</p></div>
+                <div class="step-card"><div class="step-num">04</div><h3>Coaching</h3><p>Review and improve your score.</p></div>
+            </div>
+        </div>
+    </section>
+
+    <button onclick="toggleTheme()" class="theme-toggle-fixed">🌙</button>
+
+    <footer style="text-align: center; padding: 4rem; color: var(--text-muted); border-top: 1px solid var(--border-color);">
+        &copy; 2026 Project Defense Rehearsal System (PDRS). All rights reserved.
+    </footer>
+
+    <script src="/js/auth.js"></script>
+    <script src="/js/toast.js"></script>
+    <script>
+        // Check for access denied
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('access') === 'faculty-required') {
+            const banner = document.getElementById('access-banner');
+            banner.style.display = 'block';
+            setTimeout(() => banner.style.display = 'none', 5000);
+        }
+
+        // Check for returning user
+        const token = auth.getToken();
+        const user = auth.getUser();
+        if (token && user) {
+            document.getElementById('role-chooser-section').style.display = 'none';
+            document.getElementById('welcome-banner').style.display = 'block';
+            document.getElementById('welcome-role').textContent = user.role;
+            document.getElementById('user-nav-info').style.display = 'flex';
+            document.getElementById('nav-role-badge').textContent = user.role;
+            document.getElementById('auth-buttons').style.display = 'none';
+            
+            document.getElementById('continue-btn').onclick = () => {
+                window.location.href = user.role === 'faculty' ? '/faculty.html' : '/student.html';
+            };
+        }
+
+        function selectRole(role) {
+            localStorage.setItem('pdrs_role', role);
+            window.location.href = role === 'faculty' ? '/login.html' : '/register.html';
+        }
+
+        function switchRole() {
+            localStorage.removeItem('pdrs_token');
+            localStorage.removeItem('pdrs_user');
+            localStorage.removeItem('pdrs_role');
+            window.location.reload();
+        }
+
+        async function checkAIStatus() {
+            try {
+                const res = await fetch('/api/health');
+                const data = await res.json();
+                const badge = document.getElementById('ai-status');
+                const name = document.getElementById('ai-provider-name');
+                
+                name.textContent = data.provider === 'claude' ? 'Claude 3.5 Sonnet' : 'Generic Engine';
+                badge.className = `status-badge-ai ${data.provider === 'claude' ? 'badge-claude' : 'badge-other'}`;
+            } catch (err) {
+                document.getElementById('ai-provider-name').textContent = 'Offline';
+            }
+        }
+
+        function toggleTheme() {
+            const isDark = document.documentElement.classList.toggle('dark-mode');
+            localStorage.setItem('pdrs_theme', isDark ? 'dark' : 'light');
+            document.querySelectorAll('.theme-toggle, .theme-toggle-fixed').forEach(btn => {
+                btn.textContent = isDark ? '☀️' : '🌙';
+            });
+        }
+
+        // Init theme icons
+        if (localStorage.getItem('pdrs_theme') === 'dark') {
+            document.querySelectorAll('.theme-toggle, .theme-toggle-fixed').forEach(btn => btn.textContent = '☀️');
+        }
+
+        // Demo button
+        document.getElementById('demo-btn').onclick = async () => {
+            showToast('Loading demo session...', 'info');
+            try {
+                const res = await fetch('/api/demo/student');
+                const data = await res.json();
+                auth.saveToken(data.token, data.user);
+                window.location.href = '/student.html';
+            } catch (err) {
+                showToast('Demo unavailable', 'error');
+            }
+        };
+
+        checkAIStatus();
+    </script>
+</body>
+</html>
