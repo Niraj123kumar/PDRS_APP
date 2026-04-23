@@ -19,6 +19,9 @@
         .role-option input:checked + .role-label { background: white; color: var(--primary-color); box-shadow: var(--shadow); }
         body.dark-mode .role-option input:checked + .role-label { background: #334155; color: white; }
         .theme-toggle-fixed { position: fixed; bottom: 2rem; right: 2rem; background: var(--card-bg, white); box-shadow: var(--shadow); border-radius: 50%; width: 50px; height: 50px; display: flex; align-items: center; justify-content: center; z-index: 1000; border: 1px solid var(--border-color, #e2e8f0); cursor: pointer; font-size: 1.25rem; }
+        .auth-divider { text-align: center; color: var(--text-muted); margin: 1rem 0; font-weight: 700; }
+        .google-btn { display: flex; align-items: center; justify-content: center; gap: 0.65rem; background: #fff; color: #111827; border: 1px solid #d1d5db; }
+        .google-btn svg { width: 18px; height: 18px; }
     </style>
     <script>
         const savedTheme = localStorage.getItem('pdrs_theme');
@@ -61,6 +64,11 @@
             </div>
             <button type="submit" class="btn">Register Account</button>
         </form>
+        <div class="auth-divider">- or -</div>
+        <button id="google-register-btn" class="btn google-btn" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#EA4335" d="M12 10.2v3.9h5.5c-.2 1.3-1.5 3.9-5.5 3.9-3.3 0-6-2.7-6-6s2.7-6 6-6c1.9 0 3.2.8 3.9 1.5l2.7-2.6C16.8 3.2 14.6 2.2 12 2.2 6.6 2.2 2.2 6.6 2.2 12s4.4 9.8 9.8 9.8c5.6 0 9.3-4 9.3-9.6 0-.6-.1-1.1-.2-1.6H12z"/></svg>
+            Sign up with Google
+        </button>
 
         <div style="text-align: center; margin-top: 1.5rem;">
             <p class="text-muted">Already have an account? <a href="/login.html" style="color: var(--primary-color); font-weight: 600; text-decoration: none;">Login</a></p>
@@ -91,13 +99,17 @@
                 auth.saveToken(data.token, data.user);
                 showToast('Registration successful!', 'success');
                 setTimeout(() => {
-                    window.location.href = data.user.role === 'faculty' ? '/faculty.html' : '/student.html';
+                    window.location.href = data.user.role === 'admin' ? '/admin.html' : (data.user.role === 'faculty' ? '/faculty.html' : '/student.html');
                 }, 500);
 
             } catch (err) {
                 errorBox.textContent = err.message;
                 errorBox.style.display = 'block';
             }
+        });
+
+        document.getElementById('google-register-btn').addEventListener('click', () => {
+            window.location.href = '/api/auth/google';
         });
 
         function toggleTheme() {
@@ -109,6 +121,33 @@
         if (localStorage.getItem('pdrs_theme') === 'dark') {
             document.getElementById('theme-btn').textContent = '☀️';
         }
+
+        (async function handleGoogleRedirect() {
+            const hash = window.location.hash || '';
+            const params = new URLSearchParams(window.location.search);
+            const error = params.get('error');
+            const errorBox = document.getElementById('error-box');
+            if (error === 'google-failed') {
+                errorBox.textContent = 'Google signup failed. Please try again.';
+                errorBox.style.display = 'block';
+            }
+
+            if (!hash.startsWith('#token=')) return;
+            const token = decodeURIComponent(hash.replace('#token=', ''));
+            try {
+                const meRes = await fetch('/api/auth/me', {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                const meData = await meRes.json();
+                if (!meRes.ok || !meData.user) throw new Error('Failed to load user profile');
+                auth.saveToken(token, meData.user);
+                history.replaceState(null, '', window.location.pathname);
+                window.location.href = meData.user.role === 'admin' ? '/admin.html' : (meData.user.role === 'faculty' ? '/faculty.html' : '/student.html');
+            } catch (err) {
+                errorBox.textContent = 'Google signup failed. Please register again.';
+                errorBox.style.display = 'block';
+            }
+        })();
     </script>
 </body>
 </html>

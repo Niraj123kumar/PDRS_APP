@@ -36,7 +36,20 @@
     <div class="container" style="max-width: 800px;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
             <h2>Notifications</h2>
-            <button id="read-all-btn" class="btn" style="width: auto; padding: 0.5rem 1rem; font-size: 0.875rem;">Mark all as read</button>
+            <div style="display:flex; gap:0.5rem; align-items:center;">
+                <select id="type-filter" style="padding:0.45rem;">
+                    <option value="">All types</option>
+                    <option value="badge">Badge</option>
+                    <option value="defense">Defense</option>
+                    <option value="weekly_report">Weekly report</option>
+                    <option value="at_risk">At-risk alert</option>
+                    <option value="session_request_accepted">Accepted</option>
+                    <option value="session_request_declined">Declined</option>
+                    <option value="panel">Panel</option>
+                </select>
+                <button id="read-all-btn" class="btn" style="width: auto; padding: 0.5rem 1rem; font-size: 0.875rem;">Mark all as read</button>
+                <button class="btn btn-secondary" style="width:auto; padding:0.5rem 1rem;" onclick="window.location.href='/notifications-settings.html'">Settings</button>
+            </div>
         </div>
 
         <div id="notif-loading">
@@ -54,6 +67,17 @@
     <script src="/js/toast.js"></script>
     <script>
         auth.requireAuth();
+        let allNotifications = [];
+        const typeIcons = {
+            badge: '🏆',
+            defense: '📅',
+            weekly_report: '📊',
+            at_risk: '⚠️',
+            session_request_accepted: '✅',
+            session_request_declined: '❌',
+            panel: '🎙',
+            default: '🔔'
+        };
 
         async function loadNotifications() {
             try {
@@ -62,7 +86,8 @@
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 const notifs = await res.json();
-                renderNotifications(notifs);
+                allNotifications = Array.isArray(notifs) ? notifs : [];
+                renderNotifications(allNotifications);
                 document.getElementById('notif-loading').style.display = 'none';
             } catch (err) {
                 showToast('Failed to load notifications', 'error');
@@ -72,18 +97,20 @@
         function renderNotifications(notifs) {
             const list = document.getElementById('notif-list');
             const empty = document.getElementById('notif-empty');
+            const filter = document.getElementById('type-filter').value;
+            const filtered = filter ? notifs.filter((n) => n.type === filter) : notifs;
 
-            if (notifs.length === 0) {
+            if (filtered.length === 0) {
                 list.innerHTML = '';
                 empty.style.display = 'block';
                 return;
             }
 
             empty.style.display = 'none';
-            list.innerHTML = notifs.map(n => `
+            list.innerHTML = filtered.map(n => `
                 <div class="notif-card ${n.is_read ? '' : 'notif-unread'}" onclick="markRead(${n.id})">
                     <div style="display: flex; align-items: flex-start; gap: 1rem;">
-                        <span style="font-size: 1.5rem;">${n.type === 'panel' ? '🎥' : '🔔'}</span>
+                        <span style="font-size: 1.5rem;">${typeIcons[n.type] || typeIcons.default}</span>
                         <div style="flex-grow: 1;">
                             <div class="notif-title">${n.title}</div>
                             <div class="notif-message">${n.message}</div>
@@ -93,6 +120,7 @@
                     </div>
                 </div>
             `).join('');
+            updateUnreadBadge(notifs);
         }
 
         async function markRead(id) {
@@ -130,7 +158,32 @@
             } catch (err) {}
         });
 
+        document.getElementById('type-filter').addEventListener('change', () => renderNotifications(allNotifications));
+
+        function updateUnreadBadge(notifs) {
+            const unread = (notifs || []).filter((n) => !n.is_read).length;
+            document.title = unread > 0 ? `(${unread}) Notifications - PDRS` : 'Notifications - PDRS';
+        }
+
+        function connectRealtime() {
+            const token = auth.getToken();
+            if (!token) return;
+            const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
+            const ws = new WebSocket(`${protocol}://${location.host}?token=${encodeURIComponent(token)}`);
+            ws.onmessage = (event) => {
+                try {
+                    const msg = JSON.parse(event.data);
+                    if (msg.type === 'notification' && msg.payload) {
+                        allNotifications.unshift(msg.payload);
+                        renderNotifications(allNotifications);
+                    }
+                } catch (_) {}
+            };
+            ws.onclose = () => setTimeout(connectRealtime, 4000);
+        }
+
         loadNotifications();
+        connectRealtime();
     </script>
 </body>
 </html>

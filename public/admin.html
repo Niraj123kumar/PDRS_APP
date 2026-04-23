@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard - PDRS</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <style>
+        .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin: 1rem 0; }
+        .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 1rem; }
+        .tabs { display: flex; gap: 0.5rem; margin: 1rem 0; }
+        .hidden { display: none; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border-bottom: 1px solid #e2e8f0; padding: 0.6rem; text-align: left; font-size: 0.9rem; }
+        .filters { display: flex; gap: 0.5rem; margin-bottom: 0.8rem; }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <h1 style="color: var(--primary-color);">PDRS Admin</h1>
+        <div>
+            <a href="/student.html">Student</a>
+            <button class="btn btn-secondary" onclick="auth.logout()" style="width:auto; margin-left: 0.7rem;">Logout</button>
+        </div>
+    </nav>
+    <div class="container">
+        <div class="grid">
+            <div class="card"><small>Total Users</small><h2 id="stat-users">-</h2></div>
+            <div class="card"><small>Sessions Today</small><h2 id="stat-active">-</h2></div>
+            <div class="card"><small>Active Panels</small><h2 id="stat-panels">-</h2></div>
+            <div class="card"><small>Suspicious Logins</small><h2 id="stat-suspicious">-</h2></div>
+        </div>
+
+        <div class="tabs">
+            <button class="btn btn-secondary" data-tab="users">Users</button>
+            <button class="btn btn-secondary" data-tab="suspended">Suspended</button>
+            <button class="btn btn-secondary" data-tab="suspicious">Suspicious</button>
+            <button class="btn btn-secondary" data-tab="audit">Audit Log</button>
+            <button class="btn" id="export-btn">Export CSV</button>
+        </div>
+
+        <section id="tab-users">
+            <div class="filters">
+                <input id="search-user" placeholder="Search name/email">
+                <select id="filter-role">
+                    <option value="">All roles</option>
+                    <option value="student">Student</option>
+                    <option value="faculty">Faculty</option>
+                    <option value="admin">Admin</option>
+                </select>
+            </div>
+            <table>
+                <thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Role</th><th>Sessions</th><th>Last Active</th><th>Action</th></tr></thead>
+                <tbody id="users-body"></tbody>
+            </table>
+        </section>
+
+        <section id="tab-suspended" class="hidden">
+            <table>
+                <thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Reason</th><th>Action</th></tr></thead>
+                <tbody id="suspended-body"></tbody>
+            </table>
+        </section>
+
+        <section id="tab-suspicious" class="hidden">
+            <table>
+                <thead><tr><th>ID</th><th>User</th><th>Email</th><th>IP</th><th>Reason</th><th>Action</th></tr></thead>
+                <tbody id="suspicious-body"></tbody>
+            </table>
+        </section>
+
+        <section id="tab-audit" class="hidden">
+            <pre id="audit-view" style="white-space: pre-wrap; background: #f8fafc; padding: 1rem; border-radius: 10px;"></pre>
+        </section>
+    </div>
+
+    <script src="/js/auth.js"></script>
+    <script src="/js/toast.js"></script>
+    <script>
+        auth.requireAuth();
+        auth.requireRole('admin');
+        const token = auth.getToken();
+
+        function api(path, options = {}) {
+            return fetch(path, {
+                ...options,
+                headers: { ...(options.headers || {}), Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+            }).then((r) => r.json().then((d) => ({ ok: r.ok, data: d })));
+        }
+
+        function switchTab(tab) {
+            ['users', 'suspended', 'suspicious', 'audit'].forEach((key) => {
+                document.getElementById(`tab-${key}`).classList.toggle('hidden', key !== tab);
+            });
+        }
+
+        document.querySelectorAll('[data-tab]').forEach((btn) => btn.onclick = () => switchTab(btn.dataset.tab));
+
+        async function loadStats() {
+            const { ok, data } = await api('/api/admin/stats');
+            if (!ok) return;
+            document.getElementById('stat-users').textContent = data.totalUsers;
+            document.getElementById('stat-active').textContent = data.activeToday;
+            document.getElementById('stat-panels').textContent = data.totalPanels;
+            document.getElementById('stat-suspicious').textContent = data.suspiciousOpen;
+        }
+
+        async function loadUsers() {
+            const q = document.getElementById('search-user').value.toLowerCase();
+            const role = document.getElementById('filter-role').value;
+            const { ok, data } = await api('/api/admin/users?page=1&limit=100');
+            if (!ok) return;
+            const users = data.users.filter((u) => (!role || u.role === role) && (`${u.name} ${u.email}`.toLowerCase().includes(q)));
+            document.getElementById('users-body').innerHTML = users.map((u) => `
+                <tr>
+                    <td>${u.id}</td><td>${u.name}</td><td>${u.email}</td><td>${u.role}</td>
+                    <td>${u.session_count || 0}</td><td>${u.last_active || '-'}</td>
+                    <td><button class="btn btn-secondary" style="width:auto;" onclick="suspendUser(${u.id})">Suspend</button></td>
+                </tr>
+            `).join('');
+            const suspended = users.filter((u) => Number(u.is_suspended) === 1);
+            document.getElementById('suspended-body').innerHTML = suspended.map((u) => `
+                <tr>
+                    <td>${u.id}</td><td>${u.name}</td><td>${u.email}</td><td>${u.suspension_reason || '-'}</td>
+                    <td><button class="btn" style="width:auto;" onclick="unsuspendUser(${u.id})">Unsuspend</button></td>
+                </tr>
+            `).join('');
+        }
+
+        async function loadSuspicious() {
+            const { ok, data } = await api('/api/admin/suspicious-logins');
+            if (!ok) return;
+            document.getElementById('suspicious-body').innerHTML = data.map((a) => `
+                <tr>
+                    <td>${a.id}</td><td>${a.name || '-'}</td><td>${a.email || '-'}</td><td>${a.ip_address || '-'}</td>
+                    <td>${a.reason}</td><td><button class="btn" style="width:auto;" onclick="resolveAlert(${a.id})">Resolve</button></td>
+                </tr>
+            `).join('');
+        }
+
+        async function loadAudit() {
+            const { ok, data } = await api('/api/auth/audit?limit=200');
+            if (!ok) return;
+            document.getElementById('audit-view').textContent = JSON.stringify(data, null, 2);
+        }
+
+        async function suspendUser(id) {
+            const reason = prompt('Suspension reason');
+            if (!reason) return;
+            await api(`/api/admin/users/${id}/suspend`, { method: 'PATCH', body: JSON.stringify({ reason }) });
+            await refreshAll();
+        }
+
+        async function unsuspendUser(id) {
+            await api(`/api/admin/users/${id}/unsuspend`, { method: 'PATCH' });
+            await refreshAll();
+        }
+
+        async function resolveAlert(id) {
+            await api(`/api/admin/suspicious-logins/${id}/resolve`, { method: 'PATCH' });
+            await refreshAll();
+        }
+
+        document.getElementById('search-user').oninput = loadUsers;
+        document.getElementById('filter-role').onchange = loadUsers;
+        document.getElementById('export-btn').onclick = () => {
+            window.location.href = '/api/admin/export.csv';
+        };
+
+        async function refreshAll() {
+            await Promise.all([loadStats(), loadUsers(), loadSuspicious(), loadAudit()]);
+        }
+        refreshAll();
+    </script>
+</body>
+</html>

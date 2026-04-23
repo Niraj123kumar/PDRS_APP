@@ -5,6 +5,21 @@ document.addEventListener('DOMContentLoaded', async () => {
     const list = document.getElementById('session-list');
     const loading = document.getElementById('loading-history');
     const empty = document.getElementById('empty-history');
+    const exportBtn = document.getElementById('export-progress-btn');
+    if (exportBtn) {
+        exportBtn.onclick = async () => {
+            const res = await fetch('/api/student/export-report', {
+                headers: { Authorization: `Bearer ${auth.getToken()}` }
+            });
+            if (!res.ok) return showToast('Failed to export report', 'error');
+            const blob = await res.blob();
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = 'progress-report.pdf';
+            link.click();
+            URL.revokeObjectURL(link.href);
+        };
+    }
 
     try {
         const token = auth.getToken();

@@ -13,13 +13,21 @@ const studentRoutes = require('./routes/student');
 const aiRoutes = require('./routes/ai');
 const facultyRoutes = require('./routes/faculty');
 const panelRoutes = require('./routes/panel');
+const adminRoutes = require('./routes/admin');
+const goalsRoutes = require('./routes/goals');
+const flashcardsRoutes = require('./routes/flashcards');
+const bookmarksRoutes = require('./routes/bookmarks');
 const initWebSocket = require('./websocket');
 const db = require('./db');
 const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const fs = require('fs');
 const cookieParser = require('cookie-parser');
+const session = require('express-session');
 const tokenService = require('./services/tokenService');
+const passport = require('./services/googleAuth');
+const { runPIIMigrationOnce } = require('./services/migrationService');
+const { startCronJobs } = require('./services/cronService');
 
 const app = express();
 const server = http.createServer(app);
@@ -33,20 +41,56 @@ app.locals.wsApp = wsApp;
 
 // Security Middleware
 app.use(helmet({
-    contentSecurityPolicy: false,
+    contentSecurityPolicy: {
+        directives: {
+            defaultSrc: ["'self'"],
+            scriptSrc: ["'self'", 'https://cdnjs.cloudflare.com'],
+            styleSrc: ["'self'", "'unsafe-inline'"],
+            connectSrc: ["'self'", 'wss:', 'ws:']
+        }
+    },
+    hsts: true,
+    noSniff: true,
+    frameguard: { action: 'deny' },
+    permissionsPolicy: {
+        features: {
+            camera: [],
+            microphone: [],
+            geolocation: []
+        }
+    }
 }));
 app.use(cors());
 
 // Rate Limiting
+const rateLimitHandler = (req, res) => {
+    const resetAt = req.rateLimit?.resetTime ? new Date(req.rateLimit.resetTime).getTime() : Date.now() + 60000;
+    const retryAfterSeconds = Math.max(1, Math.ceil((resetAt - Date.now()) / 1000));
+    res.status(429).json({ error: 'Too many requests', retryAfter: Math.ceil(retryAfterSeconds) });
+};
 const limiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 100
+    max: 100,
+    standardHeaders: true,
+    legacyHeaders: false,
+    handler: rateLimitHandler
 });
-app.use('/api/', limiter);
+const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 5, standardHeaders: true, legacyHeaders: false, handler: rateLimitHandler });
+const otpLimiter = rateLimit({ windowMs: 10 * 60 * 1000, max: 3, standardHeaders: true, legacyHeaders: false, handler: rateLimitHandler });
+const adminLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 30, standardHeaders: true, legacyHeaders: false, handler: rateLimitHandler });
 
 app.use(express.json());
 app.use(cookieParser());
+app.use(session({
+    secret: process.env.SESSION_SECRET || 'pdrs_session_secret_dev',
+    resave: false,
+    saveUninitialized: false
+}));
+app.use(passport.initialize());
+app.use(passport.session());
 app.use(express.static(path.join(__dirname, 'public')));
+runPIIMigrationOnce();
+startCronJobs();
 
 // Configure Multer for Rubrics
 const rubricStorage = multer.diskStorage({
@@ -116,6 +160,10 @@ app.get('/api/demo/student', (req, res) => {
 });
 
 // Routes
+app.use('/api/', limiter);
+app.use('/api/auth/verify-otp', otpLimiter);
+app.use('/api/auth/verify-totp', otpLimiter);
+app.use('/api/auth', authLimiter);
 app.use('/api/auth', authRoutes);
 app.use('/api/projects', projectRoutes);
 app.use('/api/sessions', sessionRoutes);
@@ -124,6 +172,10 @@ app.use('/api/student', studentRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/faculty', facultyRoutes);
 app.use('/api/panel', panelRoutes);
+app.use('/api/admin', adminLimiter, adminRoutes);
+app.use('/api/goals', goalsRoutes);
+app.use('/api/flashcards', flashcardsRoutes);
+app.use('/api/bookmarks', bookmarksRoutes);
 
 // Root redirect
 app.get('/', (req, res) => {

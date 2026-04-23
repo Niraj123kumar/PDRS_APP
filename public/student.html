@@ -28,6 +28,7 @@
         .shake { animation: bellShake 0.5s ease-in-out; }
 
         .theme-toggle { cursor: pointer; font-size: 1.25rem; background: none; border: none; padding: 0.5rem; }
+        .small-input { margin-bottom: 0.65rem; }
     </style>
     <script>
         const savedTheme = localStorage.getItem('pdrs_theme');
@@ -57,7 +58,11 @@
     <div class="container">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
             <h2>Welcome back, <span id="welcome-name">Student</span>!</h2>
-            <button onclick="window.location.href='/session.html'" class="btn" style="width: auto; padding: 0.75rem 2rem;">+ New Rehearsal</button>
+            <div style="display:flex; gap:0.5rem;">
+                <button onclick="window.location.href='/flashcards.html'" class="btn btn-secondary" style="width: auto; padding: 0.75rem 1rem;">Flashcards</button>
+                <button id="export-progress-btn" class="btn btn-secondary" style="width: auto; padding: 0.75rem 1rem;">Export Progress Report</button>
+                <button onclick="window.location.href='/session.html'" class="btn" style="width: auto; padding: 0.75rem 2rem;">+ New Rehearsal</button>
+            </div>
         </div>
 
         <div class="dashboard-grid">
@@ -77,17 +82,28 @@
             </div>
 
             <div class="right-col">
-                <!-- Countdown Timer Card -->
+                <!-- Defense Scheduling Card -->
                 <div class="card countdown-card">
-                    <h4 style="text-transform: uppercase; letter-spacing: 1px; font-size: 0.8rem; color: var(--text-muted);">Defense Countdown</h4>
-                    <div id="timer-container">
+                    <h4 style="text-transform: uppercase; letter-spacing: 1px; font-size: 0.8rem; color: var(--text-muted);">Defense Scheduling</h4>
+                    <div id="timer-container" style="display:none;">
                         <div id="countdown-display" class="timer-display">--:--:--</div>
                         <p id="countdown-label" style="font-weight: 600;">Until Your Defense</p>
+                        <a id="google-event-link" href="#" target="_blank" style="display:none;">Open Google Calendar Event</a>
+                        <div style="display:flex; gap:0.5rem; justify-content:center; margin-top:0.8rem;">
+                            <button id="edit-date-btn" class="btn btn-secondary" style="width:auto; padding:0.45rem 0.7rem;">Edit Date</button>
+                            <button id="remove-calendar-btn" class="btn btn-secondary" style="width:auto; padding:0.45rem 0.7rem;">Remove from Calendar</button>
+                        </div>
                     </div>
-                    <div id="set-date-container" style="display: none;">
-                        <p class="text-muted" style="font-size: 0.9rem; margin-bottom: 1rem;">Set your scheduled defense date to track your remaining time.</p>
-                        <input type="datetime-local" id="defense-date-input" style="margin-bottom: 1rem;">
-                        <button id="save-date-btn" class="btn" style="padding: 0.5rem;">Save Date</button>
+                    <div id="set-date-container">
+                        <p class="text-muted" style="font-size: 0.9rem; margin-bottom: 1rem;">Set your defense schedule and optionally create a Google Calendar event.</p>
+                        <input type="datetime-local" id="defense-date-input" class="small-input">
+                        <input type="text" id="defense-title-input" class="small-input" placeholder="Defense title (e.g. PDRS Final Defense)">
+                        <input type="text" id="faculty-emails-input" class="small-input" placeholder="Faculty emails (comma separated)">
+                        <label style="display:flex; gap:0.5rem; align-items:center; justify-content:center; margin-bottom:0.75rem;">
+                            <input type="checkbox" id="connect-calendar-toggle" checked>
+                            Connect Google Calendar
+                        </label>
+                        <button id="schedule-defense-btn" class="btn" style="padding: 0.5rem;">Schedule Defense</button>
                     </div>
                 </div>
 
@@ -104,7 +120,33 @@
                         </div>
                     </div>
                 </div>
+
+                <div class="card">
+                    <h3 style="margin-bottom: 1rem;">Dimension Progress</h3>
+                    <div id="dimension-bars"></div>
+                </div>
+
+                <div class="card">
+                    <h3 style="margin-bottom: 1rem;">Score Prediction</h3>
+                    <div id="prediction-widget" class="text-muted">Loading prediction...</div>
+                </div>
             </div>
+        </div>
+
+        <div class="card">
+            <h3 style="margin-bottom: 1rem;">Goals</h3>
+            <div id="goals-section"></div>
+        </div>
+        <div class="card">
+            <h3 style="margin-bottom: 1rem;">Badges</h3>
+            <div id="badges-section" style="display:grid; grid-template-columns: repeat(4, 1fr); gap:0.6rem;"></div>
+        </div>
+        <div class="card">
+            <h3 style="margin-bottom: 1rem;">Bookmarks</h3>
+            <div id="bookmarks-section"></div>
+        </div>
+        <div class="card">
+            <h3>Coaching Streak <span id="streak-count">0</span> 🔥</h3>
         </div>
     </div>
 
@@ -137,6 +179,12 @@
                 renderStats(sessions);
                 renderNotifications(notifs);
                 initCountdown(defenseData.defenseDate);
+                renderAdvancedInsights();
+                if (defenseData.googleEventUrl) {
+                    const googleLink = document.getElementById('google-event-link');
+                    googleLink.href = defenseData.googleEventUrl;
+                    googleLink.style.display = 'inline-block';
+                }
 
                 document.getElementById('loading-sessions').style.display = 'none';
             } catch (err) {
@@ -232,18 +280,21 @@
             }, 1000);
         }
 
-        document.getElementById('save-date-btn').onclick = async () => {
+        document.getElementById('schedule-defense-btn').onclick = async () => {
             const date = document.getElementById('defense-date-input').value;
+            const title = document.getElementById('defense-title-input').value || 'PDRS Defense';
+            const facultyEmails = document.getElementById('faculty-emails-input').value;
             if (!date) return showToast('Please select a date', 'error');
 
             try {
-                const res = await fetch('/api/student/defense-date', {
+                const connectCalendar = document.getElementById('connect-calendar-toggle').checked;
+                const res = await fetch('/api/student/schedule-defense', {
                     method: 'POST',
                     headers: { 
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${auth.getToken()}`
                     },
-                    body: JSON.stringify({ date })
+                    body: JSON.stringify({ date, title, facultyEmails: connectCalendar ? facultyEmails : '' })
                 });
                 const data = await res.json();
                 if (!res.ok) throw new Error(data.error);
@@ -252,9 +303,31 @@
                 document.getElementById('timer-container').style.display = 'block';
                 document.getElementById('set-date-container').style.display = 'none';
                 initCountdown(date);
+                const googleLink = document.getElementById('google-event-link');
+                if (data.googleEventUrl) {
+                    googleLink.href = data.googleEventUrl;
+                    googleLink.style.display = 'inline-block';
+                }
             } catch (err) {
                 showToast(err.message, 'error');
             }
+        };
+
+        document.getElementById('edit-date-btn').onclick = () => {
+            document.getElementById('timer-container').style.display = 'none';
+            document.getElementById('set-date-container').style.display = 'block';
+        };
+
+        document.getElementById('remove-calendar-btn').onclick = () => {
+            fetch('/api/student/calendar-event', {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${auth.getToken()}` }
+            }).then(() => {
+                const googleLink = document.getElementById('google-event-link');
+                googleLink.style.display = 'none';
+                googleLink.href = '#';
+                showToast('Removed from Google Calendar', 'success');
+            }).catch(() => showToast('Failed to remove calendar event', 'error'));
         };
 
         function toggleTheme() {
@@ -270,6 +343,130 @@
         }
 
         loadDashboard();
+
+        async function renderAdvancedInsights() {
+            const token = auth.getToken();
+            const [insightsRes, goalsRes, badgesRes, predictRes] = await Promise.all([
+                fetch('/api/student/dashboard-insights', { headers: { 'Authorization': `Bearer ${token}` } }),
+                fetch('/api/goals', { headers: { 'Authorization': `Bearer ${token}` } }),
+                fetch('/api/student/badges', { headers: { 'Authorization': `Bearer ${token}` } }),
+                fetch('/api/ai/predict-score', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify({ userId: auth.getUser().id })
+                })
+            ]);
+            const insights = await insightsRes.json();
+            const goals = await goalsRes.json();
+            const badges = await badgesRes.json();
+            const prediction = await predictRes.json();
+
+            document.getElementById('streak-count').textContent = insights.streakDays || 0;
+            renderDimensionBars(insights.latestDimensions, goals);
+            renderGoals(goals);
+            renderBadges(badges.allBadges || []);
+            renderBookmarks(insights.bookmarks || []);
+            renderPrediction(prediction);
+        }
+
+        function renderDimensionBars(latest, goals) {
+            const dims = ['clarity', 'reasoning', 'depth', 'confidence'];
+            const container = document.getElementById('dimension-bars');
+            if (!latest) {
+                container.innerHTML = '<div class="text-muted">No session history yet.</div>';
+                return;
+            }
+            container.innerHTML = dims.map((d) => {
+                const val = Math.round(Number(latest[`${d}_avg`] || 0));
+                const goal = goals.find((g) => g.dimension === d);
+                const color = val >= 80 ? '#16a34a' : (val >= 60 ? '#f59e0b' : '#ef4444');
+                return `<div style="margin-bottom:0.6rem;">
+                    <div style="display:flex; justify-content:space-between;"><span>${d}</span><span>${val} / target ${goal ? Math.round(goal.target_score) : '--'}</span></div>
+                    <div style="height:10px;background:#e2e8f0;border-radius:6px;"><div style="height:100%; width:${val}%; background:${color}; border-radius:6px;"></div></div>
+                </div>`;
+            }).join('');
+        }
+
+        function renderGoals(goals) {
+            const c = document.getElementById('goals-section');
+            if (!goals.length) {
+                c.innerHTML = '<p class="text-muted">No goals yet. Create goals from coaching workflow.</p>';
+                return;
+            }
+            c.innerHTML = goals.map((g) => `
+                <div style="border:1px solid var(--border-color); border-radius:10px; padding:0.7rem; margin-bottom:0.5rem;">
+                    <strong>${g.dimension}</strong> target ${Math.round(g.target_score)} | current ${Math.round(g.current_score || 0)}
+                    ${g.achieved ? '<span style="color:#16a34a; margin-left:0.5rem;">Achieved ✅</span>' : ''}
+                    <button onclick="editGoal(${g.id}, ${g.target_score})" class="btn btn-secondary" style="width:auto; padding:0.2rem 0.5rem; margin-left:0.5rem;">Edit</button>
+                </div>
+            `).join('');
+        }
+
+        window.editGoal = async (id, currentTarget) => {
+            const newTarget = prompt('New target score', currentTarget);
+            if (!newTarget) return;
+            await fetch(`/api/goals/${id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${auth.getToken()}` },
+                body: JSON.stringify({ targetScore: Number(newTarget) })
+            });
+            renderAdvancedInsights();
+        };
+
+        function renderBadges(allBadges) {
+            const c = document.getElementById('badges-section');
+            c.innerHTML = allBadges.map((b) => `
+                <div title="${b.description}" style="border:1px solid var(--border-color); border-radius:8px; padding:0.6rem; text-align:center; opacity:${b.earned ? 1 : 0.45};">
+                    <div style="font-size:1.3rem;">${b.earned ? '🏅' : '🔒'}</div>
+                    <div style="font-size:0.8rem;">${b.badge_name}</div>
+                </div>
+            `).join('');
+        }
+
+        function renderBookmarks(bookmarks) {
+            const c = document.getElementById('bookmarks-section');
+            if (!bookmarks.length) {
+                c.innerHTML = '<div class="text-muted">No bookmarks yet.</div>';
+                return;
+            }
+            c.innerHTML = bookmarks.map((b) => `
+                <details style="margin-bottom:0.5rem;">
+                    <summary>Q${Number(b.question_index) + 1}: ${b.question_text}</summary>
+                    <p style="margin-top:0.4rem;">${b.note || 'No note'}</p>
+                    <button onclick="window.location.href='/session.html'" class="btn btn-secondary" style="width:auto; padding:0.3rem 0.6rem;">Practice Again</button>
+                </details>
+            `).join('');
+        }
+
+        function renderPrediction(pred) {
+            const c = document.getElementById('prediction-widget');
+            if (!pred || !pred.predictedGrade || pred.predictedGrade === 'N/A') {
+                c.textContent = 'Complete 2+ sessions to enable prediction.';
+                return;
+            }
+            const trendArrow = (t) => t === 'improving' ? '↑' : (t === 'declining' ? '↓' : '→');
+            c.innerHTML = `
+                <div><strong>Predicted Score:</strong> ${pred.predictedScore}</div>
+                <div><strong>On track for grade ${pred.predictedGrade}</strong></div>
+                <div style="margin-top:0.5rem;">
+                    ${Object.entries(pred.trendPerDimension || {}).map(([k,v]) => `${k}: ${trendArrow(v.trend)} ${v.current} -> ${v.projected}`).join('<br>')}
+                </div>
+                <p style="margin-top:0.5rem;">${pred.recommendation || ''}</p>
+            `;
+        }
+
+        document.getElementById('export-progress-btn').onclick = async () => {
+            const res = await fetch('/api/student/export-report', {
+                headers: { Authorization: `Bearer ${auth.getToken()}` }
+            });
+            if (!res.ok) return showToast('Failed to export PDF', 'error');
+            const blob = await res.blob();
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = 'progress-report.pdf';
+            link.click();
+            URL.revokeObjectURL(link.href);
+        };
     </script>
 </body>
 </html>

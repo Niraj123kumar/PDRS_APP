@@ -39,6 +39,13 @@
         .spinner { width: 50px; height: 50px; border: 5px solid #f3f3f3; border-top: 5px solid var(--primary-color); border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 1.5rem; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         .theme-toggle { cursor: pointer; font-size: 1.25rem; background: none; border: none; padding: 0.5rem; }
+        .or-divider { margin: 1rem 0; color: var(--text-muted); font-weight: 700; }
+        .modal-backdrop { position: fixed; inset: 0; background: rgba(15,23,42,0.55); display: none; align-items: center; justify-content: center; z-index: 1100; }
+        .modal-content { background: white; width: min(620px, 92vw); border-radius: var(--radius); padding: 1.25rem; box-shadow: var(--shadow); }
+        body.dark-mode .modal-content { background: var(--card-bg); border: 1px solid var(--border-color); color: var(--text-color); }
+        .preview-card { border: 1px solid var(--border-color); border-radius: 10px; padding: 0.9rem; margin-top: 0.8rem; }
+        .confidence-meter { height: 10px; background: #e2e8f0; border-radius: 8px; overflow: hidden; margin-bottom: 0.75rem; }
+        .confidence-fill { height: 100%; width: 0; background: #f59e0b; transition: width 0.25s ease; }
     </style>
     <script>
         const savedTheme = localStorage.getItem('pdrs_theme');
@@ -65,6 +72,23 @@
         <div id="project-step" class="card project-selector animate-up">
             <h2 style="margin-bottom: 1rem;">New Defense Rehearsal</h2>
             <p class="text-muted" style="margin-bottom: 2.5rem;">Choose a project to practice. Our AI will generate unique questions based on your description and tech stack.</p>
+            <div class="form-group" style="text-align:left;">
+                <label for="project-title">Project Title</label>
+                <div style="display:flex; gap:0.5rem;">
+                    <input id="project-title" placeholder="My Capstone Project">
+                    <button id="github-import-btn" class="btn btn-secondary" type="button" style="width:auto;">GitHub Import</button>
+                </div>
+            </div>
+            <div class="form-group" style="text-align:left;">
+                <label for="project-description">Description</label>
+                <textarea id="project-description" style="min-height:100px;" placeholder="Brief project summary"></textarea>
+            </div>
+            <div class="form-group" style="text-align:left;">
+                <label for="project-tech-stack">Tech Stack</label>
+                <input id="project-tech-stack" placeholder="Node.js, Express, SQLite">
+            </div>
+            <button id="save-project-btn" class="btn btn-secondary" style="margin-bottom:1rem;">Save Project</button>
+            <div class="or-divider">- or -</div>
             <div class="form-group">
                 <select id="project-list" style="padding: 1rem; font-size: 1.1rem;">
                     <option value="">-- Select a Project --</option>
@@ -85,13 +109,23 @@
             <div id="question-card" class="card">
                 <div id="tier-badge" class="tier-badge">Fundamentals</div>
                 <div id="question-text" class="question-text">Question will appear here...</div>
+                <details style="margin-bottom:0.75rem;">
+                    <summary><strong>Model answer + key points</strong></summary>
+                    <p id="model-answer" class="text-muted" style="margin-top:0.5rem;"></p>
+                    <ul id="key-points"></ul>
+                </details>
                 <textarea id="answer-input" class="answer-area" placeholder="Provide a detailed technical answer..."></textarea>
                 <div id="char-counter" class="char-counter">0 / 1000 characters</div>
+                <div class="confidence-meter"><div id="confidence-fill" class="confidence-fill"></div></div>
+                <div id="confidence-label" class="text-muted" style="font-size:0.85rem; margin-bottom:0.8rem;">Confidence: --</div>
+                <textarea id="question-note" style="min-height:70px;" placeholder="Add personal note for this question"></textarea>
                 
                 <div class="controls">
                     <button id="voice-btn" class="btn voice-btn">🎤 Voice Answer</button>
+                    <button id="bookmark-btn" class="btn btn-secondary" style="width:auto;">Bookmark</button>
                     <button id="submit-answer" class="btn" style="flex-grow: 1;">Submit & Continue</button>
                 </div>
+                <div id="voice-analysis" class="text-muted" style="margin-top:0.75rem;"></div>
             </div>
         </div>
     </div>
@@ -111,6 +145,23 @@
             document.querySelectorAll('.theme-toggle').forEach(btn => btn.textContent = '☀️');
         }
     </script>
+    <div id="github-modal" class="modal-backdrop">
+        <div class="modal-content">
+            <h3>Import from GitHub README</h3>
+            <div class="form-group">
+                <label for="github-repo-url">Repository URL</label>
+                <input id="github-repo-url" placeholder="https://github.com/user/repo">
+            </div>
+            <button id="github-preview-btn" class="btn">Fetch Preview</button>
+            <div id="github-preview" class="preview-card" style="display:none;">
+                <h4 id="preview-title"></h4>
+                <p id="preview-description" class="text-muted"></p>
+                <p><strong>Tech Stack:</strong> <span id="preview-tech"></span></p>
+                <button id="github-confirm-btn" class="btn btn-secondary">Confirm Import</button>
+            </div>
+            <button id="github-close-btn" class="btn btn-secondary" style="margin-top:0.75rem;">Close</button>
+        </div>
+    </div>
     <script src="/js/session-logic.js"></script>
 </body>
 </html>

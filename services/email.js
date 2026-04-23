@@ -109,9 +109,65 @@ async function sendWeeklyReport(email, name, stats) {
     });
 }
 
+async function sendSecurityAlert(email, reason, userAgent, ipAddress) {
+    const html = emailShell(
+        'Suspicious Login Alert',
+        `
+            <p style="color: #334155;">We detected a potentially suspicious login for your account.</p>
+            <ul style="color: #334155;">
+                <li>Reason: <strong>${reason}</strong></li>
+                <li>IP: <strong>${ipAddress || 'Unknown'}</strong></li>
+                <li>Device: <strong>${userAgent || 'Unknown'}</strong></li>
+            </ul>
+            <p style="color: #334155;">If this was not you, please change your password immediately.</p>
+        `
+    );
+    await sendEmail({ to: email, subject: 'PDRS Security Alert', html });
+}
+
+async function sendSuspensionEmail(email, reason) {
+    const html = emailShell(
+        'Account Suspended',
+        `
+            <p style="color: #334155;">Your PDRS account has been suspended.</p>
+            <p style="color: #334155;">Reason: <strong>${reason || 'Policy violation'}</strong></p>
+            <p style="color: #334155;">Contact support/admin to appeal.</p>
+        `
+    );
+    await sendEmail({ to: email, subject: 'PDRS Account Suspended', html });
+}
+
+async function sendReinstatementEmail(email) {
+    const html = emailShell(
+        'Account Reinstated',
+        `
+            <p style="color: #334155;">Your PDRS account access has been restored.</p>
+            <p style="color: #334155;">You may now log in and continue using the platform.</p>
+        `
+    );
+    await sendEmail({ to: email, subject: 'PDRS Account Reinstated', html });
+}
+
+async function sendFacultyInactivityAlert(email, facultyName, inactiveStudents) {
+    const list = (inactiveStudents || []).map((s) => `<li>${s.name} (${s.email}) - defense: ${s.defense_date}</li>`).join('');
+    const html = emailShell(
+        'At-Risk Inactive Students',
+        `
+            <p style="color:#334155;">Hi ${facultyName || 'Faculty'}, these students are inactive with upcoming defenses:</p>
+            <ul style="color:#334155;">${list}</ul>
+        `
+    );
+    await sendEmail({ to: email, subject: 'PDRS Inactivity Alert', html });
+}
+
 module.exports = {
+    sendEmail,
     sendOTP,
     sendWelcome,
     sendDefenseReminder,
-    sendWeeklyReport
+    sendWeeklyReport,
+    sendSecurityAlert,
+    sendSuspensionEmail,
+    sendReinstatementEmail,
+    sendFacultyInactivityAlert
 };

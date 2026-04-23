@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flashcards - PDRS</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <style>
+        .container-card { max-width: 760px; margin: 2rem auto; padding: 1rem; }
+        .flashcard-wrap { perspective: 1000px; margin: 1rem 0; }
+        .flashcard { position: relative; min-height: 260px; transform-style: preserve-3d; transition: transform 0.6s; cursor: pointer; }
+        .flashcard.flipped { transform: rotateY(180deg); }
+        .face { position: absolute; inset: 0; backface-visibility: hidden; border: 1px solid #e2e8f0; border-radius: 12px; background: #fff; padding: 1rem; display: flex; align-items: center; justify-content: center; text-align: center; }
+        .back { transform: rotateY(180deg); background: #f8fafc; }
+        .stars { display: flex; gap: 0.4rem; justify-content: center; margin-top: 1rem; }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <h1 style="color: var(--primary-color);">Flashcards</h1>
+        <button class="btn btn-secondary" style="width:auto;" onclick="window.location.href='/student.html'">Dashboard</button>
+    </nav>
+    <div class="container-card">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+            <h3>Due Today: <span id="due-count">0</span></h3>
+            <div style="display:flex; gap:0.5rem;">
+                <button id="new-card-btn" class="btn btn-secondary" style="width:auto;">Add New Card</button>
+                <button id="generate-btn" class="btn" style="width:auto;">Generate from Project</button>
+            </div>
+        </div>
+        <div style="margin-top:0.5rem;">Progress: <span id="progress-text">0 of 0 reviewed today</span></div>
+        <div style="height:10px; background:#e2e8f0; border-radius:6px; margin-top:0.4rem;"><div id="progress-fill" style="height:100%; width:0%; background:#2563eb; border-radius:6px;"></div></div>
+
+        <div id="empty-state" style="display:none; margin-top:2rem; text-align:center;">All caught up! 🎉</div>
+        <div class="flashcard-wrap">
+            <div id="flashcard" class="flashcard">
+                <div id="card-front" class="face"></div>
+                <div id="card-back" class="face back"></div>
+            </div>
+        </div>
+        <div class="stars" id="rating-stars"></div>
+    </div>
+
+    <script src="/js/auth.js"></script>
+    <script>
+        auth.requireAuth();
+        auth.requireRole('student');
+        const flashcardEl = document.getElementById('flashcard');
+        const frontEl = document.getElementById('card-front');
+        const backEl = document.getElementById('card-back');
+        const dueCountEl = document.getElementById('due-count');
+        const progressText = document.getElementById('progress-text');
+        const progressFill = document.getElementById('progress-fill');
+        const emptyState = document.getElementById('empty-state');
+        const ratingStars = document.getElementById('rating-stars');
+        let cards = [];
+        let currentIndex = 0;
+        let reviewed = 0;
+
+        async function loadCards() {
+            const res = await fetch('/api/flashcards', { headers: { Authorization: `Bearer ${auth.getToken()}` } });
+            const data = await res.json();
+            cards = data.cards || [];
+            dueCountEl.textContent = data.dueCount || cards.length;
+            currentIndex = 0;
+            reviewed = 0;
+            renderCard();
+        }
+
+        function renderCard() {
+            if (!cards.length || currentIndex >= cards.length) {
+                frontEl.textContent = '';
+                backEl.textContent = '';
+                emptyState.style.display = 'block';
+                ratingStars.innerHTML = '';
+                progressText.textContent = `${reviewed} of ${Math.max(reviewed, cards.length)} reviewed today`;
+                progressFill.style.width = '100%';
+                return;
+            }
+            emptyState.style.display = 'none';
+            const card = cards[currentIndex];
+            flashcardEl.classList.remove('flipped');
+            frontEl.textContent = card.question;
+            backEl.textContent = card.answer;
+            renderStars(card.id);
+            updateProgress();
+        }
+
+        function updateProgress() {
+            progressText.textContent = `${reviewed} of ${cards.length} reviewed today`;
+            progressFill.style.width = `${cards.length ? (reviewed / cards.length) * 100 : 0}%`;
+        }
+
+        function renderStars(cardId) {
+            ratingStars.innerHTML = Array.from({ length: 5 }).map((_, i) => `<button class="btn btn-secondary" style="width:auto; padding:0.4rem 0.6rem;" onclick="reviewCard(${cardId}, ${i + 1})">${i + 1}★</button>`).join('');
+        }
+
+        window.reviewCard = async (cardId, difficulty) => {
+            await fetch(`/api/flashcards/${cardId}/review`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${auth.getToken()}` },
+                body: JSON.stringify({ difficulty })
+            });
+            reviewed += 1;
+            currentIndex += 1;
+            renderCard();
+        };
+
+        flashcardEl.addEventListener('click', () => flashcardEl.classList.toggle('flipped'));
+
+        document.getElementById('new-card-btn').onclick = async () => {
+            const question = prompt('Question');
+            const answer = prompt('Answer');
+            if (!question || !answer) return;
+            await fetch('/api/flashcards', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${auth.getToken()}` },
+                body: JSON.stringify({ question, answer })
+            });
+            loadCards();
+        };
+
+        document.getElementById('generate-btn').onclick = async () => {
+            const projectId = prompt('Project ID to generate cards from');
+            if (!projectId) return;
+            await fetch('/api/flashcards/generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${auth.getToken()}` },
+                body: JSON.stringify({ projectId: Number(projectId) })
+            });
+            loadCards();
+        };
+
+        loadCards();
+    </script>
+</body>
+</html>

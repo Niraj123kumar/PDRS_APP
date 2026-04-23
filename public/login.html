@@ -18,6 +18,9 @@
         .otp-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 0.5rem; margin: 1rem 0; }
         .otp-cell { text-align: center; font-size: 1.25rem; font-weight: 700; }
         .shake { animation: shake 0.25s linear 2; }
+        .auth-divider { text-align: center; color: var(--text-muted); margin: 1rem 0; font-weight: 700; }
+        .google-btn { display: flex; align-items: center; justify-content: center; gap: 0.65rem; background: #fff; color: #111827; border: 1px solid #d1d5db; }
+        .google-btn svg { width: 18px; height: 18px; }
         @keyframes shake {
             0% { transform: translateX(0); }
             25% { transform: translateX(-6px); }
@@ -51,6 +54,11 @@
             </div>
             <button type="submit" class="btn">Login to Dashboard</button>
         </form>
+        <div class="auth-divider">- or -</div>
+        <button id="google-login-btn" class="btn google-btn" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#EA4335" d="M12 10.2v3.9h5.5c-.2 1.3-1.5 3.9-5.5 3.9-3.3 0-6-2.7-6-6s2.7-6 6-6c1.9 0 3.2.8 3.9 1.5l2.7-2.6C16.8 3.2 14.6 2.2 12 2.2 6.6 2.2 2.2 6.6 2.2 12s4.4 9.8 9.8 9.8c5.6 0 9.3-4 9.3-9.6 0-.6-.1-1.1-.2-1.6H12z"/></svg>
+            Continue with Google
+        </button>
 
         <div id="otp-step" class="hidden-step">
             <p class="text-muted">Enter the 6-digit code sent to <span id="otp-email-mask"></span>.</p>
@@ -145,13 +153,17 @@
                 auth.setDeviceId(data.deviceId);
                 showToast('Login successful!', 'success');
                 setTimeout(() => {
-                    window.location.href = data.user.role === 'faculty' ? '/faculty.html' : '/student.html';
+                    window.location.href = data.user.role === 'admin' ? '/admin.html' : (data.user.role === 'faculty' ? '/faculty.html' : '/student.html');
                 }, 500);
 
             } catch (err) {
                 errorBox.textContent = err.message;
                 errorBox.style.display = 'block';
             }
+        });
+
+        document.getElementById('google-login-btn').addEventListener('click', () => {
+            window.location.href = '/api/auth/google';
         });
 
         const otpInputs = Array.from(document.querySelectorAll('.otp-cell'));
@@ -179,7 +191,7 @@
                 if (!response.ok) throw new Error(data.error || 'Invalid code');
                 auth.saveToken(data.token, data.user);
                 auth.setDeviceId(data.deviceId);
-                window.location.href = data.user.role === 'faculty' ? '/faculty.html' : '/student.html';
+                window.location.href = data.user.role === 'admin' ? '/admin.html' : (data.user.role === 'faculty' ? '/faculty.html' : '/student.html');
             } catch (err) {
                 document.getElementById('otp-grid').classList.add('shake');
                 otpInputs.forEach(i => i.style.borderColor = '#dc2626');
@@ -226,7 +238,7 @@
             }
             auth.saveToken(data.token, data.user);
             auth.setDeviceId(data.deviceId);
-            window.location.href = data.user.role === 'faculty' ? '/faculty.html' : '/student.html';
+            window.location.href = data.user.role === 'admin' ? '/admin.html' : (data.user.role === 'faculty' ? '/faculty.html' : '/student.html');
         });
 
         document.getElementById('use-email-otp').addEventListener('click', async () => {
@@ -251,6 +263,33 @@
         if (localStorage.getItem('pdrs_theme') === 'dark') {
             document.getElementById('theme-btn').textContent = '☀️';
         }
+
+        (async function handleGoogleRedirect() {
+            const hash = window.location.hash || '';
+            const params = new URLSearchParams(window.location.search);
+            const error = params.get('error');
+            const errorBox = document.getElementById('error-box');
+            if (error === 'google-failed') {
+                errorBox.textContent = 'Google sign-in failed. Please try again.';
+                errorBox.style.display = 'block';
+            }
+
+            if (!hash.startsWith('#token=')) return;
+            const token = decodeURIComponent(hash.replace('#token=', ''));
+            try {
+                const meRes = await fetch('/api/auth/me', {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                const meData = await meRes.json();
+                if (!meRes.ok || !meData.user) throw new Error('Failed to load user profile');
+                auth.saveToken(token, meData.user);
+                history.replaceState(null, '', window.location.pathname);
+                window.location.href = meData.user.role === 'admin' ? '/admin.html' : (meData.user.role === 'faculty' ? '/faculty.html' : '/student.html');
+            } catch (err) {
+                errorBox.textContent = 'Google sign-in failed. Please login again.';
+                errorBox.style.display = 'block';
+            }
+        })();
     </script>
 </body>
 </html>

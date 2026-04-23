@@ -9,6 +9,21 @@ document.addEventListener('DOMContentLoaded', async () => {
         window.location.href = '/student.html';
         return;
     }
+    const exportBtn = document.getElementById('export-session-pdf-btn');
+    if (exportBtn) {
+        exportBtn.onclick = async () => {
+            const res = await fetch(`/api/sessions/${sessionId}/export-pdf`, {
+                headers: { Authorization: `Bearer ${auth.getToken()}` }
+            });
+            if (!res.ok) return showToast('Failed to export PDF', 'error');
+            const blob = await res.blob();
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = 'session.pdf';
+            link.click();
+            URL.revokeObjectURL(link.href);
+        };
+    }
 
     try {
         const token = auth.getToken();
@@ -116,7 +131,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             
             const list = document.getElementById('coaching-list');
             document.getElementById('coaching-loading').style.display = 'none';
-            list.innerHTML = data.questions.map(q => `<li class="coaching-item">${q}</li>`).join('');
+            const allQuestions = data.questions ? Object.values(data.questions).flat() : [];
+            const tips = data.tips ? Object.entries(data.tips).map(([k, v]) => `${k}: ${v}`) : [];
+            list.innerHTML = allQuestions.slice(0, 6).map(q => `<li class="coaching-item">${q}</li>`).join('')
+                + tips.slice(0, 4).map(t => `<li class="coaching-item"><strong>Tip:</strong> ${t}</li>`).join('');
         } catch (err) {
             document.getElementById('coaching-loading').textContent = 'AI Coaching temporarily unavailable.';
         }

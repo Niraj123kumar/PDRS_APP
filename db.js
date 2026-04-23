@@ -1,6 +1,7 @@
 const Database = require('better-sqlite3');
 const path = require('path');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 
 const db = new Database(path.join(__dirname, 'pdrs.db'));
 
@@ -16,6 +17,17 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash TEXT NOT NULL,
     role TEXT CHECK(role IN ('student', 'faculty', 'admin')) NOT NULL,
     defense_date DATETIME,
+    google_id TEXT,
+    github_username TEXT,
+    avatar_url TEXT,
+    calendar_token TEXT,
+    google_event_id TEXT,
+    google_event_url TEXT,
+    encrypted_email TEXT,
+    encrypted_name TEXT,
+    is_suspended INTEGER DEFAULT 0,
+    suspension_reason TEXT,
+    force_password_change INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -25,6 +37,7 @@ CREATE TABLE IF NOT EXISTS projects (
     title TEXT NOT NULL,
     description TEXT,
     tech_stack TEXT,
+    github_repo_url TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
@@ -250,14 +263,159 @@ CREATE TABLE IF NOT EXISTS panel_annotations (
 
 CREATE TABLE IF NOT EXISTS login_attempts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
     email TEXT NOT NULL,
     ip TEXT,
     success INTEGER NOT NULL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS suspicious_logins (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
+    email TEXT,
+    ip_address TEXT,
+    reason TEXT,
+    resolved INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS coaching_sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    weak_dimensions TEXT,
+    questions_json TEXT,
+    tips_json TEXT,
+    improvement_plan_json TEXT,
+    completed INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS dimension_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
+    session_id INTEGER,
+    clarity_avg REAL,
+    reasoning_avg REAL,
+    depth_avg REAL,
+    confidence_avg REAL,
+    recorded_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS bookmarks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
+    session_id INTEGER,
+    question_index INTEGER,
+    question_text TEXT,
+    note TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS question_notes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
+    session_id INTEGER,
+    question_index INTEGER,
+    note TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS user_goals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
+    dimension TEXT,
+    target_score REAL,
+    current_score REAL,
+    achieved INTEGER DEFAULT 0,
+    achieved_at DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS badges (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
+    badge_type TEXT,
+    badge_name TEXT,
+    description TEXT,
+    earned_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS flashcards (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
+    question TEXT,
+    answer TEXT,
+    difficulty INTEGER DEFAULT 3,
+    next_review DATETIME,
+    review_count INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
+    endpoint TEXT,
+    p256dh TEXT,
+    auth TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS scheduled_reminders (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
+    type TEXT,
+    scheduled_for DATETIME,
+    sent INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 `;
 
 db.exec(schema);
+
+function addColumnIfMissing(tableName, columnName, definition) {
+    const columns = db.prepare(`PRAGMA table_info(${tableName})`).all();
+    const exists = columns.some((col) => col.name === columnName);
+    if (!exists) {
+        db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${definition}`);
+    }
+}
+
+addColumnIfMissing('users', 'google_id', 'TEXT');
+addColumnIfMissing('users', 'github_username', 'TEXT');
+addColumnIfMissing('users', 'avatar_url', 'TEXT');
+addColumnIfMissing('users', 'calendar_token', 'TEXT');
+addColumnIfMissing('users', 'google_event_id', 'TEXT');
+addColumnIfMissing('users', 'google_event_url', 'TEXT');
+addColumnIfMissing('users', 'encrypted_email', 'TEXT');
+addColumnIfMissing('users', 'encrypted_name', 'TEXT');
+addColumnIfMissing('users', 'is_suspended', 'INTEGER DEFAULT 0');
+addColumnIfMissing('users', 'suspension_reason', 'TEXT');
+addColumnIfMissing('users', 'force_password_change', 'INTEGER DEFAULT 0');
+addColumnIfMissing('users', 'phone_number', 'TEXT');
+addColumnIfMissing('users', 'phone_verified', 'INTEGER DEFAULT 0');
+addColumnIfMissing('users', 'sms_notifications', 'INTEGER DEFAULT 0');
+addColumnIfMissing('users', 'push_notifications', 'INTEGER DEFAULT 0');
+addColumnIfMissing('users', 'email_notifications', 'INTEGER DEFAULT 1');
+addColumnIfMissing('users', 'email_weekly_reports', 'INTEGER DEFAULT 1');
+addColumnIfMissing('users', 'email_defense_reminders', 'INTEGER DEFAULT 1');
+addColumnIfMissing('users', 'email_inactivity_alerts', 'INTEGER DEFAULT 1');
+addColumnIfMissing('projects', 'github_repo_url', 'TEXT');
+addColumnIfMissing('login_attempts', 'user_id', 'INTEGER');
 
 // Seed demo accounts
 const seedUsers = () => {
@@ -278,5 +436,21 @@ const seedUsers = () => {
 };
 
 seedUsers();
+
+const seedAdminUser = () => {
+    const existingAdmin = db.prepare("SELECT id FROM users WHERE role = 'admin' LIMIT 1").get();
+    if (existingAdmin) return;
+    const adminEmail = process.env.ADMIN_EMAIL || 'admin@pdrs.local';
+    const generatedPassword = crypto.randomBytes(10).toString('hex');
+    const hash = bcrypt.hashSync(generatedPassword, 12);
+    db.prepare(`
+        INSERT INTO users (name, email, password_hash, role, force_password_change)
+        VALUES (?, ?, ?, 'admin', 1)
+    `).run('Platform Admin', adminEmail, hash);
+    console.log(`[security] Admin account created: ${adminEmail}`);
+    console.log(`[security] Temporary admin password (change immediately): ${generatedPassword}`);
+};
+
+seedAdminUser();
 
 module.exports = db;

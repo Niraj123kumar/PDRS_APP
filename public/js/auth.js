@@ -35,7 +35,7 @@ const auth = {
     requireRole(role) {
         const user = this.getUser();
         if (!user || user.role !== role) {
-            const redirect = user?.role === 'faculty' ? '/faculty.html' : '/student.html';
+            const redirect = user?.role === 'admin' ? '/admin.html' : (user?.role === 'faculty' ? '/faculty.html' : '/student.html');
             window.location.href = redirect;
         }
     },

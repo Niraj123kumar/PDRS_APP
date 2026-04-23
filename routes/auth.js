@@ -7,6 +7,10 @@ const emailService = require('../services/email');
 const totpService = require('../services/totpService');
 const tokenService = require('../services/tokenService');
 const auditService = require('../services/auditService');
+const passport = require('../services/googleAuth');
+const ipDetection = require('../services/ipDetection');
+const { encryptField } = require('../services/encryption');
+const googleEnabled = Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET && process.env.GOOGLE_CALLBACK_URL);
 
 function maskEmail(email) {
     const [local, domain] = String(email || '').split('@');
@@ -49,6 +53,12 @@ function recordDevice(userId, req) {
     return info.lastInsertRowid;
 }
 
+function getRequestIp(req) {
+    const forwarded = req.headers['x-forwarded-for'];
+    if (forwarded) return String(forwarded).split(',')[0].trim();
+    return req.ip;
+}
+
 // POST /api/auth/register
 router.post('/register', (req, res) => {
     const { name, email, password, role } = req.body;
@@ -64,9 +74,12 @@ router.post('/register', (req, res) => {
 
     try {
         const password_hash = bcrypt.hashSync(password, 12);
-        const info = db.prepare('INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, ?, ?)').run(name, email, password_hash, role);
+        const info = db.prepare(`
+            INSERT INTO users (name, email, password_hash, role, encrypted_email, encrypted_name)
+            VALUES (?, ?, ?, ?, ?, ?)
+        `).run(name, email, password_hash, role, encryptField(email), encryptField(name));
         
-        const user = { id: info.lastInsertRowid, name, email, role };
+        const user = { id: info.lastInsertRowid, name, email: maskEmail(email), role };
         const token = tokenService.generateAccessToken(user);
         emailService.sendWelcome(email, name).catch(() => {});
         auditService.logAction(user.id, email, 'REGISTER', 'user', user.id, req, { role });
@@ -83,22 +96,25 @@ router.post('/register', (req, res) => {
 // POST /api/auth/login
 router.post('/login', (req, res) => {
     const { email, password } = req.body;
-    const ip = req.ip;
+    const ip = getRequestIp(req);
 
     try {
         const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
 
         if (!user || !bcrypt.compareSync(password, user.password_hash)) {
-            db.prepare('INSERT INTO login_attempts (email, ip, success) VALUES (?, ?, 0)').run(email, ip);
+            db.prepare('INSERT INTO login_attempts (user_id, email, ip, success) VALUES (?, ?, ?, 0)').run(user?.id || null, email, ip);
             return res.status(401).json({ error: 'Wrong credentials' });
         }
+        if (Number(user.is_suspended) === 1) {
+            return res.status(403).json({ error: 'Account suspended', reason: user.suspension_reason || 'No reason provided' });
+        }
 
-        db.prepare('INSERT INTO login_attempts (email, ip, success) VALUES (?, ?, 1)').run(email, ip);
+        db.prepare('INSERT INTO login_attempts (user_id, email, ip, success) VALUES (?, ?, ?, 1)').run(user.id, email, ip);
 
         const totp = db.prepare('SELECT enabled FROM totp_secrets WHERE user_id = ?').get(user.id);
         const maskedEmail = maskEmail(user.email);
         if (totp && Number(totp.enabled) === 1) {
-            return res.json({ requiresTOTP: true, email: maskedEmail, maskedEmail });
+            return res.json({ requiresTOTP: true, email: maskedEmail, maskedEmail, forcePasswordChange: Number(user.force_password_change) === 1 });
         }
 
         const otp = generateOTPCode();
@@ -106,7 +122,7 @@ router.post('/login', (req, res) => {
         db.prepare("INSERT INTO otp_codes (email, code, expires_at, used) VALUES (?, ?, datetime('now', '+10 minutes'), 0)")
             .run(user.email, otp);
         emailService.sendOTP(user.email, otp).catch(() => {});
-        res.json({ requiresOTP: true, maskedEmail, email: user.email });
+        res.json({ requiresOTP: true, maskedEmail, email: user.email, forcePasswordChange: Number(user.force_password_change) === 1 });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -137,7 +153,13 @@ router.post('/verify-otp', (req, res) => {
             maxAge: 7 * 24 * 60 * 60 * 1000
         });
         auditService.logAction(user.id, user.email, 'LOGIN', 'auth', null, req, { method: 'otp' });
-        res.json({ token: accessToken, user: { id: user.id, name: user.name, email: user.email, role: user.role }, deviceId });
+        ipDetection.checkSuspiciousLogin(user.id, getRequestIp(req), req).catch(() => {});
+        res.json({
+            token: accessToken,
+            user: { id: user.id, name: user.name, email: maskEmail(user.email), role: user.role },
+            deviceId,
+            forcePasswordChange: Number(user.force_password_change) === 1
+        });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -165,7 +187,13 @@ router.post('/verify-totp', (req, res) => {
             maxAge: 7 * 24 * 60 * 60 * 1000
         });
         auditService.logAction(user.id, user.email, 'LOGIN', 'auth', null, req, { method: 'totp' });
-        res.json({ token: accessToken, user: { id: user.id, name: user.name, email: user.email, role: user.role }, deviceId });
+        ipDetection.checkSuspiciousLogin(user.id, getRequestIp(req), req).catch(() => {});
+        res.json({
+            token: accessToken,
+            user: { id: user.id, name: user.name, email: maskEmail(user.email), role: user.role },
+            deviceId,
+            forcePasswordChange: Number(user.force_password_change) === 1
+        });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -356,6 +384,74 @@ router.post('/logout', verifyToken, (req, res) => {
     res.json({ success: true });
 });
 
+// POST /api/auth/change-password
+router.post('/change-password', verifyToken, (req, res) => {
+    const { currentPassword, newPassword } = req.body;
+    if (!newPassword || String(newPassword).length < 8) {
+        return res.status(400).json({ error: 'New password must be at least 8 characters' });
+    }
+    try {
+        const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
+        if (!user) return res.status(404).json({ error: 'User not found' });
+        if (!bcrypt.compareSync(currentPassword || '', user.password_hash)) {
+            return res.status(401).json({ error: 'Current password is incorrect' });
+        }
+        const newHash = bcrypt.hashSync(newPassword, 12);
+        db.prepare('UPDATE users SET password_hash = ?, force_password_change = 0 WHERE id = ?').run(newHash, user.id);
+        db.prepare('UPDATE refresh_tokens SET revoked = 1 WHERE user_id = ?').run(user.id);
+        res.clearCookie('pdrs_refresh');
+        auditService.logAction(user.id, user.email, 'CHANGE_PASSWORD', 'auth', null, req, {});
+        return res.json({ success: true });
+    } catch (err) {
+        return res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /api/auth/google
+router.get('/google', (req, res, next) => {
+    if (!googleEnabled) {
+        return res.redirect('/login.html?error=google-failed');
+    }
+    return passport.authenticate('google', {
+        scope: ['profile', 'email', 'https://www.googleapis.com/auth/calendar'],
+        accessType: 'offline',
+        prompt: 'consent'
+    })(req, res, next);
+});
+
+// GET /api/auth/google/callback
+router.get('/google/callback', (req, res, next) => {
+    if (!googleEnabled) {
+        return res.redirect('/login.html?error=google-failed');
+    }
+    passport.authenticate('google', { session: true }, (err, user) => {
+        if (err || !user) {
+            return res.redirect('/login.html?error=google-failed');
+        }
+
+        try {
+            const accessToken = tokenService.generateAccessToken(user);
+            const refreshToken = tokenService.generateRefreshToken(user);
+            tokenService.saveRefreshToken(user.id, refreshToken);
+            res.cookie('pdrs_refresh', refreshToken, {
+                httpOnly: true,
+                secure: process.env.NODE_ENV === 'production',
+                sameSite: 'Strict',
+                maxAge: 7 * 24 * 60 * 60 * 1000
+            });
+
+            if (user.googleAccessToken) {
+                db.prepare('UPDATE users SET calendar_token = ? WHERE id = ?').run(user.googleAccessToken, user.id);
+            }
+            auditService.logAction(user.id, user.email, 'LOGIN', 'auth', null, req, { method: 'google' });
+            ipDetection.checkSuspiciousLogin(user.id, getRequestIp(req), req).catch(() => {});
+            return res.redirect(`/student.html#token=${accessToken}`);
+        } catch (callbackErr) {
+            return next(callbackErr);
+        }
+    })(req, res, next);
+});
+
 // GET /api/auth/audit
 router.get('/audit', verifyToken, (req, res) => {
     const { action, from, to, limit } = req.query;
@@ -372,6 +468,27 @@ router.get('/audit', verifyToken, (req, res) => {
         res.json(rows);
     } catch (err) {
         res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /api/auth/me
+router.get('/me', verifyToken, (req, res) => {
+    try {
+        const user = db.prepare('SELECT id, name, email, role, avatar_url, github_username, force_password_change FROM users WHERE id = ?').get(req.user.id);
+        if (!user) return res.status(404).json({ error: 'User not found' });
+        return res.json({
+            user: {
+                id: user.id,
+                name: user.name,
+                email: maskEmail(user.email),
+                role: user.role,
+                avatar_url: user.avatar_url,
+                github_username: user.github_username,
+                force_password_change: Number(user.force_password_change) === 1
+            }
+        });
+    } catch (err) {
+        return res.status(500).json({ error: err.message });
     }
 });
 
