@@ -18,6 +18,8 @@ const db = require('./db');
 const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const fs = require('fs');
+const cookieParser = require('cookie-parser');
+const tokenService = require('./services/tokenService');
 
 const app = express();
 const server = http.createServer(app);
@@ -27,6 +29,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'pdrs_super_secret_key_123';
 
 // Initialize WebSocket
 const wsApp = initWebSocket(server);
+app.locals.wsApp = wsApp;
 
 // Security Middleware
 app.use(helmet({
@@ -42,6 +45,7 @@ const limiter = rateLimit({
 app.use('/api/', limiter);
 
 app.use(express.json());
+app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Configure Multer for Rubrics
@@ -104,7 +108,7 @@ app.get('/api/demo/student', (req, res) => {
         if (!user) return res.status(404).json({ error: 'Demo user not found' });
         
         const userPayload = { id: user.id, name: user.name, email: user.email, role: user.role };
-        const token = jwt.sign(userPayload, JWT_SECRET, { expiresIn: '24h' });
+        const token = tokenService.generateAccessToken(userPayload);
         res.json({ token, user: userPayload });
     } catch (err) {
         res.status(500).json({ error: err.message });

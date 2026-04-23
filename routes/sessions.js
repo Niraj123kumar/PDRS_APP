@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const { verifyToken } = require('../middleware/auth');
+const auditService = require('../services/auditService');
 
 // POST /api/sessions (auth required)
 router.post('/', verifyToken, (req, res) => {
@@ -14,6 +15,7 @@ router.post('/', verifyToken, (req, res) => {
 
     try {
         const info = db.prepare("INSERT INTO sessions (user_id, project_id, status) VALUES (?, ?, 'active')").run(user_id, project_id);
+        auditService.logAction(req.user.id, req.user.email, 'CREATE_SESSION', 'session', info.lastInsertRowid, req, { project_id });
         res.status(201).json({ id: info.lastInsertRowid, user_id, project_id, status: 'active' });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -31,6 +33,7 @@ router.get('/', verifyToken, (req, res) => {
             WHERE s.user_id = ? 
             ORDER BY s.created_at DESC
         `).all(user_id);
+        auditService.logAction(req.user.id, req.user.email, 'VIEW_SESSION', 'session', null, req, { list: true });
         res.json(sessions);
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -46,6 +49,7 @@ router.get('/:id', verifyToken, (req, res) => {
         if (!session) return res.status(404).json({ error: 'Session not found' });
 
         const answers = db.prepare('SELECT * FROM answers WHERE session_id = ?').all(session_id);
+        auditService.logAction(req.user.id, req.user.email, 'VIEW_SESSION', 'session', session_id, req, {});
         res.json({ ...session, answers });
     } catch (err) {
         res.status(500).json({ error: err.message });

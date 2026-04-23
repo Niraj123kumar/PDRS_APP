@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audit Log - PDRS</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <style>
+        body { background: #f8fafc; }
+        .wrap { max-width: 1100px; margin: 2rem auto; padding: 0 1rem; }
+        .filters { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; }
+        table { width: 100%; border-collapse: collapse; background: #fff; border: 1px solid #e2e8f0; }
+        th, td { padding: 0.6rem; border-bottom: 1px solid #e2e8f0; text-align: left; font-size: 0.9rem; }
+    </style>
+</head>
+<body>
+    <div class="wrap">
+        <h2>Audit Log</h2>
+        <div class="filters">
+            <select id="action-filter">
+                <option value="">All actions</option>
+                <option>LOGIN</option>
+                <option>LOGOUT</option>
+                <option>REGISTER</option>
+                <option>VIEW_SESSION</option>
+                <option>CREATE_SESSION</option>
+                <option>DELETE_ACCOUNT</option>
+                <option>ENABLE_TOTP</option>
+                <option>DISABLE_TOTP</option>
+                <option>VIEW_STUDENT</option>
+                <option>EXPORT_REPORT</option>
+                <option>CREATE_PANEL</option>
+                <option>JOIN_PANEL</option>
+                <option>END_PANEL</option>
+            </select>
+            <input type="date" id="from-date">
+            <input type="date" id="to-date">
+            <button class="btn btn-secondary" style="width:auto;" onclick="loadAudit()">Apply</button>
+            <button class="btn btn-secondary" style="width:auto;" onclick="exportCSV()">Export CSV</button>
+        </div>
+        <table>
+            <thead><tr><th>Timestamp</th><th>Action</th><th>Resource</th><th>IP</th></tr></thead>
+            <tbody id="audit-body"></tbody>
+        </table>
+    </div>
+    <script src="/js/auth.js"></script>
+    <script src="/js/toast.js"></script>
+    <script src="/js/api.js"></script>
+    <script>
+        auth.requireAuth();
+        let auditRows = [];
+        async function loadAudit() {
+            const action = document.getElementById('action-filter').value;
+            const from = document.getElementById('from-date').value;
+            const to = document.getElementById('to-date').value;
+            const params = new URLSearchParams();
+            if (action) params.set('action', action);
+            if (from) params.set('from', from);
+            if (to) params.set('to', to);
+            const res = await apiFetch(`/api/auth/audit?${params.toString()}`);
+            auditRows = await res.json();
+            document.getElementById('audit-body').innerHTML = auditRows.map(r => `
+                <tr><td>${r.created_at}</td><td>${r.action}</td><td>${r.resource || ''}</td><td>${r.ip_address || ''}</td></tr>
+            `).join('');
+        }
+        function exportCSV() {
+            const lines = ['timestamp,action,resource,ip'];
+            auditRows.forEach(r => lines.push(`"${r.created_at}","${r.action}","${r.resource || ''}","${r.ip_address || ''}"`));
+            const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = 'audit-log.csv';
+            a.click();
+            URL.revokeObjectURL(a.href);
+        }
+        loadAudit();
+    </script>
+</body>
+</html>

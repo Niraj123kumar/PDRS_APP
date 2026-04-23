@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Security Settings - PDRS</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <style>
+        body { background: #f8fafc; }
+        .container { max-width: 960px; margin: 2rem auto; padding: 0 1rem; }
+        .card { background: #fff; border-radius: 12px; border: 1px solid #e2e8f0; padding: 1rem 1.2rem; margin-bottom: 1rem; }
+        .danger { border-color: #fecaca; background: #fff5f5; }
+        .badge-success { background: #dcfce7; color: #166534; padding: 0.3rem 0.55rem; border-radius: 999px; font-size: 0.8rem; font-weight: 600; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { text-align: left; border-bottom: 1px solid #e2e8f0; padding: 0.6rem; font-size: 0.9rem; }
+        .current-device { background: #eff6ff; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Security Settings</h2>
+
+        <section class="card">
+            <h3>Two-Factor Authentication</h3>
+            <div id="totp-status"></div>
+            <button id="enable-totp-btn" class="btn" style="width:auto;">Enable Authenticator App</button>
+            <button id="disable-totp-btn" class="btn btn-secondary" style="width:auto; display:none;">Disable</button>
+            <div id="totp-setup-box" style="display:none; margin-top:1rem;">
+                <img id="totp-qr" alt="TOTP QR code" style="max-width:220px; display:block;">
+                <p>Manual key: <code id="totp-manual-key"></code></p>
+                <input id="totp-confirm-token" maxlength="6" placeholder="Enter 6-digit code">
+                <button id="confirm-totp-btn" class="btn" style="width:auto;">Confirm</button>
+            </div>
+        </section>
+
+        <section class="card">
+            <h3>My Devices</h3>
+            <table>
+                <thead>
+                    <tr><th>Device</th><th>Browser</th><th>IP</th><th>Last Active</th><th></th></tr>
+                </thead>
+                <tbody id="devices-body"></tbody>
+            </table>
+            <button id="remove-others-btn" class="btn btn-secondary" style="width:auto; margin-top:0.7rem;">Remove All Other Devices</button>
+        </section>
+
+        <section class="card">
+            <h3>Session Timeout</h3>
+            <label><input type="checkbox" id="auto-logout-toggle"> Auto logout after inactivity</label>
+            <select id="timeout-select">
+                <option value="900000">15 min</option>
+                <option value="1800000">30 min</option>
+                <option value="3600000">1 hour</option>
+                <option value="7200000">2 hours</option>
+            </select>
+            <button id="save-timeout-btn" class="btn btn-secondary" style="width:auto;">Save</button>
+        </section>
+
+        <section class="card danger">
+            <h3>Danger Zone</h3>
+            <button id="delete-account-btn" class="btn" style="background:#dc2626;">Delete My Account</button>
+            <div id="delete-account-box" style="display:none; margin-top:1rem;">
+                <p>Type <strong>DELETE MY ACCOUNT</strong> and enter your password.</p>
+                <input id="delete-confirmation" placeholder="DELETE MY ACCOUNT">
+                <input id="delete-password" type="password" placeholder="Password">
+                <button id="confirm-delete-btn" class="btn" style="background:#dc2626;">Confirm Delete</button>
+            </div>
+        </section>
+    </div>
+
+    <script src="/js/auth.js"></script>
+    <script src="/js/toast.js"></script>
+    <script>
+        auth.requireAuth();
+        const token = auth.getToken();
+        const headers = () => ({ Authorization: `Bearer ${token}`, 'x-device-id': auth.getDeviceId() || '' });
+        let devices = [];
+
+        async function loadTOTPStatus() {
+            const res = await fetch('/api/auth/totp-status', { headers: headers() });
+            const data = await res.json();
+            const status = document.getElementById('totp-status');
+            document.getElementById('disable-totp-btn').style.display = data.enabled ? 'inline-block' : 'none';
+            document.getElementById('enable-totp-btn').style.display = data.enabled ? 'none' : 'inline-block';
+            status.innerHTML = data.enabled ? '<span class="badge-success">Authenticator App Active</span>' : '<span class="text-muted">Authenticator app is disabled.</span>';
+        }
+
+        async function loadDevices() {
+            const res = await fetch('/api/auth/devices', { headers: headers() });
+            devices = await res.json();
+            const current = String(auth.getDeviceId() || '');
+            document.getElementById('devices-body').innerHTML = devices.map(d => `
+                <tr class="${String(d.id) === current ? 'current-device' : ''}">
+                    <td>${d.device_name || '-'}</td>
+                    <td>${d.browser || '-'}</td>
+                    <td>${d.ip || '-'}</td>
+                    <td>${d.last_active || '-'}</td>
+                    <td><button onclick="removeDevice(${d.id})" class="btn btn-secondary" style="width:auto;">Remove</button></td>
+                </tr>
+            `).join('');
+        }
+
+        async function removeDevice(id) {
+            const res = await fetch(`/api/auth/devices/${id}`, { method: 'DELETE', headers: headers() });
+            const data = await res.json();
+            if (!res.ok) return showToast(data.error || 'Failed to remove device', 'error');
+            if (data.invalidateToken) return auth.logout();
+            loadDevices();
+        }
+
+        document.getElementById('remove-others-btn').onclick = async () => {
+            const current = String(auth.getDeviceId() || '');
+            for (const d of devices) {
+                if (String(d.id) !== current) {
+                    await fetch(`/api/auth/devices/${d.id}`, { method: 'DELETE', headers: headers() });
+                }
+            }
+            loadDevices();
+        };
+
+        document.getElementById('enable-totp-btn').onclick = async () => {
+            const res = await fetch('/api/auth/setup-totp', { method: 'POST', headers: headers() });
+            const data = await res.json();
+            if (!res.ok) return showToast(data.error || 'Unable to setup TOTP', 'error');
+            document.getElementById('totp-setup-box').style.display = 'block';
+            document.getElementById('totp-qr').src = data.qrCodeDataUrl;
+            document.getElementById('totp-manual-key').textContent = data.manualEntryKey;
+        };
+
+        document.getElementById('confirm-totp-btn').onclick = async () => {
+            const tokenVal = document.getElementById('totp-confirm-token').value.trim();
+            const res = await fetch('/api/auth/confirm-totp', {
+                method: 'POST',
+                headers: { ...headers(), 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token: tokenVal })
+            });
+            const data = await res.json();
+            if (!res.ok) return showToast(data.error || 'Invalid code', 'error');
+            showToast('TOTP enabled', 'success');
+            document.getElementById('totp-setup-box').style.display = 'none';
+            loadTOTPStatus();
+        };
+
+        document.getElementById('disable-totp-btn').onclick = async () => {
+            const res = await fetch('/api/auth/totp', { method: 'DELETE', headers: headers() });
+            const data = await res.json();
+            if (!res.ok) return showToast(data.error || 'Failed to disable', 'error');
+            showToast('TOTP disabled', 'success');
+            loadTOTPStatus();
+        };
+
+        document.getElementById('save-timeout-btn').onclick = () => {
+            const enabled = document.getElementById('auto-logout-toggle').checked;
+            const timeoutMs = document.getElementById('timeout-select').value;
+            localStorage.setItem('pdrs_auto_logout_enabled', String(enabled));
+            localStorage.setItem('pdrs_timeout_ms', String(timeoutMs));
+            showToast('Session timeout preferences saved', 'success');
+        };
+
+        document.getElementById('delete-account-btn').onclick = () => {
+            document.getElementById('delete-account-box').style.display = 'block';
+        };
+
+        document.getElementById('confirm-delete-btn').onclick = async () => {
+            const confirmation = document.getElementById('delete-confirmation').value;
+            const password = document.getElementById('delete-password').value;
+            const res = await fetch('/api/auth/account', {
+                method: 'DELETE',
+                headers: { ...headers(), 'Content-Type': 'application/json' },
+                body: JSON.stringify({ password, confirmation })
+            });
+            const data = await res.json();
+            if (!res.ok) return showToast(data.error || 'Delete failed', 'error');
+            auth.logout();
+        };
+
+        (function init() {
+            document.getElementById('auto-logout-toggle').checked = localStorage.getItem('pdrs_auto_logout_enabled') !== 'false';
+            document.getElementById('timeout-select').value = localStorage.getItem('pdrs_timeout_ms') || '1800000';
+            loadTOTPStatus();
+            loadDevices();
+        })();
+    </script>
+</body>
+</html>

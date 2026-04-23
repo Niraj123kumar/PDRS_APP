@@ -99,6 +99,121 @@ CREATE TABLE IF NOT EXISTS raise_hand_events (
    FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE
 ); 
 
+CREATE TABLE IF NOT EXISTS panel_scores (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    panel_session_id INTEGER,
+    faculty_id INTEGER,
+    faculty_name TEXT,
+    question_index INTEGER,
+    clarity INTEGER,
+    reasoning INTEGER,
+    depth INTEGER,
+    confidence INTEGER,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (panel_session_id) REFERENCES panel_sessions(id) ON DELETE CASCADE,
+    FOREIGN KEY (faculty_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS whiteboard_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    panel_session_id INTEGER,
+    faculty_id INTEGER,
+    event_type TEXT,
+    data_json TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (panel_session_id) REFERENCES panel_sessions(id) ON DELETE CASCADE,
+    FOREIGN KEY (faculty_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS panel_attendance (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    panel_session_id INTEGER,
+    user_id INTEGER,
+    user_name TEXT,
+    role TEXT,
+    joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    left_at DATETIME,
+    total_minutes INTEGER,
+    FOREIGN KEY (panel_session_id) REFERENCES panel_sessions(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS custom_questions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    faculty_id INTEGER,
+    question TEXT NOT NULL,
+    category TEXT,
+    difficulty TEXT DEFAULT 'medium',
+    times_used INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (faculty_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS breakout_rooms (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    panel_session_id INTEGER,
+    room_name TEXT,
+    faculty_ids_json TEXT,
+    messages_json TEXT DEFAULT '[]',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    closed_at DATETIME,
+    FOREIGN KEY (panel_session_id) REFERENCES panel_sessions(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS otp_codes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    email TEXT NOT NULL,
+    code TEXT NOT NULL,
+    expires_at DATETIME NOT NULL,
+    used INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS totp_secrets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER UNIQUE,
+    secret TEXT NOT NULL,
+    enabled INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS user_devices (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
+    device_name TEXT,
+    device_type TEXT,
+    browser TEXT,
+    ip_address TEXT,
+    last_active DATETIME DEFAULT CURRENT_TIMESTAMP,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS refresh_tokens (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    token_hash TEXT NOT NULL,
+    expires_at DATETIME NOT NULL,
+    revoked INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS audit_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
+    user_email TEXT,
+    action TEXT NOT NULL,
+    resource TEXT,
+    resource_id TEXT,
+    ip_address TEXT,
+    user_agent TEXT,
+    details_json TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+);
+
 CREATE TABLE IF NOT EXISTS session_requests (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     student_id INTEGER NOT NULL,

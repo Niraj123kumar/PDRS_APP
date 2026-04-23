@@ -9,6 +9,7 @@ function initWebSocket(server) {
     const rooms = new Map(); // roomCode -> Set(userIds)
     const userRooms = new Map(); // userId -> roomCode
     const userRoles = new Map(); // userId -> role
+    const roomTimers = new Map(); // roomCode -> interval
 
     wss.on('connection', (ws, req) => {
         const url = new URL(req.url, `http://${req.headers.host}`);
@@ -31,7 +32,7 @@ function initWebSocket(server) {
             ws.on('message', (message) => {
                 try {
                     const data = JSON.parse(message);
-                    handleMessage(ws, data, clients, rooms, userRooms, userRoles);
+                    handleMessage(ws, data, clients, rooms, userRooms, userRoles, roomTimers);
                 } catch (err) {
                     console.error('WS Message error:', err);
                 }
@@ -45,9 +46,23 @@ function initWebSocket(server) {
                         room.delete(userId);
                         broadcastToRoom(roomCode, {
                             type: 'room-leave',
-                            payload: { userId, role: userRoles.get(userId) }
+                            payload: {
+                                userId,
+                                role: userRoles.get(userId),
+                                participants: Array.from(room).map(id => ({
+                                    userId: id,
+                                    role: userRoles.get(id)
+                                }))
+                            }
                         }, clients, rooms);
-                        if (room.size === 0) rooms.delete(roomCode);
+                        if (room.size === 0) {
+                            rooms.delete(roomCode);
+                            const roomTimer = roomTimers.get(roomCode);
+                            if (roomTimer) {
+                                clearInterval(roomTimer);
+                                roomTimers.delete(roomCode);
+                            }
+                        }
                     }
                     userRooms.delete(userId);
                 }
@@ -68,6 +83,12 @@ function initWebSocket(server) {
             if (client && client.readyState === WebSocket.OPEN) {
                 client.send(JSON.stringify(data));
             }
+        },
+        broadcastRoom: (roomCode, type, payload = {}) => {
+            broadcastToRoom(roomCode, { type, payload }, clients, rooms);
+        },
+        broadcastFacultyRoom: (roomCode, type, payload = {}) => {
+            broadcastToFacultyInRoom(roomCode, { type, payload }, clients, rooms, userRoles);
         }
     };
 }
@@ -100,7 +121,7 @@ function broadcastToFacultyInRoom(roomCode, data, clients, rooms, userRoles) {
     }
 }
 
-function handleMessage(ws, data, clients, rooms, userRooms, userRoles) {
+function handleMessage(ws, data, clients, rooms, userRooms, userRoles, roomTimers) {
     const { type, roomCode, payload, targetId } = data;
     const userId = ws.userId;
 
@@ -131,12 +152,42 @@ function handleMessage(ws, data, clients, rooms, userRooms, userRoles) {
         case 'panel-question-answered':
         case 'session-paused':
         case 'session-resumed':
+        case 'transcript-chunk':
+            if (roomCode) {
+                broadcastToRoom(roomCode, { type, payload, senderId: userId }, clients, rooms);
+            }
+            break;
+
         case 'timer-set':
+            if (roomCode) {
+                const seconds = Number(payload && payload.seconds);
+                if (!Number.isFinite(seconds) || seconds < 1) return;
+
+                const existingTimer = roomTimers.get(roomCode);
+                if (existingTimer) {
+                    clearInterval(existingTimer);
+                    roomTimers.delete(roomCode);
+                }
+
+                broadcastToRoom(roomCode, { type: 'timer-set', payload: { seconds }, senderId: userId }, clients, rooms);
+
+                let remaining = seconds;
+                const interval = setInterval(() => {
+                    remaining -= 1;
+                    broadcastToRoom(roomCode, { type: 'timer-tick', payload: { seconds: remaining } }, clients, rooms);
+                    if (remaining <= 0) {
+                        clearInterval(interval);
+                        roomTimers.delete(roomCode);
+                    }
+                }, 1000);
+                roomTimers.set(roomCode, interval);
+            }
+            break;
+
         case 'timer-tick':
         case 'teacher-interrupt':
         case 'screen-share-start':
         case 'screen-share-stop':
-        case 'transcript-chunk':
             if (roomCode) {
                 broadcastToRoom(roomCode, { type, payload, senderId: userId }, clients, rooms);
             }

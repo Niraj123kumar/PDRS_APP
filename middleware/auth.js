@@ -1,4 +1,4 @@
-const jwt = require('jsonwebtoken');
+const tokenService = require('../services/tokenService');
 
 const verifyToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
@@ -8,13 +8,13 @@ const verifyToken = (req, res, next) => {
         return res.status(401).json({ error: 'Authentication required' });
     }
 
-    jwt.verify(token, process.env.JWT_SECRET || 'your_jwt_secret_here', (err, user) => {
-        if (err) {
-            return res.status(401).json({ error: 'Authentication required' });
-        }
+    try {
+        const user = tokenService.verifyAccessToken(token);
         req.user = user;
         next();
-    });
+    } catch (err) {
+        return res.status(401).json({ error: 'Authentication required' });
+    }
 };
 
 module.exports = { verifyToken };

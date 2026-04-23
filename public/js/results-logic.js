@@ -28,6 +28,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         renderResults(session, prevSession);
         fetchCoaching(session.answers);
+        fetchPanelArtifacts(sessionId);
 
     } catch (err) {
         console.error('Failed to load results', err);
@@ -119,6 +120,47 @@ document.addEventListener('DOMContentLoaded', async () => {
         } catch (err) {
             document.getElementById('coaching-loading').textContent = 'AI Coaching temporarily unavailable.';
         }
+    }
+
+    async function fetchPanelArtifacts(sessionId) {
+        const container = document.getElementById('panel-session-content');
+        if (!container) return;
+        try {
+            const res = await fetch(`/api/panel/session/${sessionId}/details`, {
+                headers: { 'Authorization': `Bearer ${auth.getToken()}` }
+            });
+            if (!res.ok) {
+                container.textContent = 'No panel session data available.';
+                return;
+            }
+            const data = await res.json();
+            const flagged = computeFlagged(data.scores || []);
+            container.innerHTML = `
+                <div style="margin-bottom:0.75rem;"><strong>Score Grid</strong></div>
+                <div style="font-size:0.9rem; margin-bottom:0.75rem;">
+                    ${(data.scores || []).map(s => `${s.faculty_name} (Q${s.question_index + 1}) C${s.clarity} R${s.reasoning} D${s.depth} F${s.confidence}`).join('<br>') || 'No scores yet'}
+                </div>
+                <div style="margin-bottom:0.75rem; color:${flagged.length ? '#d97706' : 'var(--text-muted)'};">
+                    ${flagged.length ? `Flagged disagreements: ${flagged.join(', ')}` : 'No disagreement flags'}
+                </div>
+                <div style="margin-bottom:0.75rem;"><strong>Attendance</strong><br>${(data.attendance || []).map(a => `${a.user_name} (${a.role}) - ${a.total_minutes || 0}m`).join('<br>') || 'No attendance'}</div>
+                <details><summary><strong>Transcript</strong></summary><div style="margin-top:0.5rem;">${data.panelSession.full_transcript || 'No transcript'}</div></details>
+                <div style="margin-top:0.75rem;"><strong>Whiteboard Snapshots</strong><br>${(data.whiteboard || []).length} events captured</div>
+            `;
+        } catch (err) {
+            container.textContent = 'Failed to load panel artifacts.';
+        }
+    }
+
+    function computeFlagged(scores) {
+        const dims = ['clarity', 'reasoning', 'depth', 'confidence'];
+        return dims.filter(dim => {
+            const values = scores.map(s => Number(s[dim])).filter(v => Number.isFinite(v));
+            if (!values.length) return false;
+            const mean = values.reduce((a, b) => a + b, 0) / values.length;
+            const variance = values.reduce((acc, x) => acc + ((x - mean) ** 2), 0) / values.length;
+            return Math.sqrt(variance) > 1.0;
+        });
     }
 
     function animateNumber(el, start, end, duration) {

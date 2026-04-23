@@ -3,6 +3,7 @@ const router = express.Router();
 const db = require('../db');
 const { verifyToken } = require('../middleware/auth');
 const { requireRole } = require('../middleware/roles');
+const auditService = require('../services/auditService');
 
 // GET /api/faculty/stats (faculty auth)
 router.get('/stats', verifyToken, requireRole('faculty'), (req, res) => {
@@ -104,6 +105,7 @@ router.get('/student/:id', verifyToken, requireRole('faculty'), (req, res) => {
 
         const sessions = db.prepare('SELECT s.*, p.title as project_title FROM sessions s JOIN projects p ON s.project_id = p.id WHERE s.user_id = ? ORDER BY s.created_at DESC').all(req.params.id);
         const projects = db.prepare('SELECT * FROM projects WHERE user_id = ?').all(req.params.id);
+        auditService.logAction(req.user.id, req.user.email, 'VIEW_STUDENT', 'student', req.params.id, req, {});
 
         res.json({ student, sessions, projects });
     } catch (err) {
@@ -157,6 +159,66 @@ router.patch('/session-requests/:id', verifyToken, requireRole('faculty'), (req,
         }
 
         res.json({ message: `Request ${action}ed successfully` });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /api/faculty/question-bank (faculty auth)
+router.get('/question-bank', verifyToken, requireRole('faculty'), (req, res) => {
+    try {
+        const rows = db.prepare(`
+            SELECT id, question, category, difficulty, times_used, created_at
+            FROM custom_questions
+            WHERE faculty_id = ?
+            ORDER BY created_at DESC
+        `).all(req.user.id);
+        res.json(rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /api/faculty/question-bank (faculty auth)
+router.post('/question-bank', verifyToken, requireRole('faculty'), (req, res) => {
+    const { question, category, difficulty } = req.body;
+    const allowed = new Set(['easy', 'medium', 'hard']);
+    try {
+        if (!question || !String(question).trim()) return res.status(400).json({ error: 'question is required' });
+        const safeDifficulty = allowed.has(difficulty) ? difficulty : 'medium';
+        const info = db.prepare(`
+            INSERT INTO custom_questions (faculty_id, question, category, difficulty)
+            VALUES (?, ?, ?, ?)
+        `).run(req.user.id, String(question).trim(), category || null, safeDifficulty);
+        const saved = db.prepare('SELECT * FROM custom_questions WHERE id = ?').get(info.lastInsertRowid);
+        res.json(saved);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// DELETE /api/faculty/question-bank/:id (faculty auth)
+router.delete('/question-bank/:id', verifyToken, requireRole('faculty'), (req, res) => {
+    try {
+        const result = db.prepare('DELETE FROM custom_questions WHERE id = ? AND faculty_id = ?')
+            .run(req.params.id, req.user.id);
+        if (result.changes === 0) return res.status(404).json({ error: 'Question not found' });
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// PATCH /api/faculty/question-bank/:id/use (faculty auth)
+router.patch('/question-bank/:id/use', verifyToken, requireRole('faculty'), (req, res) => {
+    try {
+        const result = db.prepare(`
+            UPDATE custom_questions
+            SET times_used = times_used + 1
+            WHERE id = ? AND faculty_id = ?
+        `).run(req.params.id, req.user.id);
+        if (result.changes === 0) return res.status(404).json({ error: 'Question not found' });
+        res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
