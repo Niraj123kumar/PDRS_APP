@@ -306,7 +306,7 @@ router.post('/room/:roomCode/transcript', verifyToken, (req, res) => {
         if (typeof chunk !== 'string' || chunk.length === 0) {
             return res.status(400).json({ error: 'chunk is required' });
         }
-        db.prepare("UPDATE panel_sessions SET full_transcript = full_transcript || ? WHERE room_code = ?")
+        db.prepare("UPDATE panel_sessions SET full_transcript = COALESCE(full_transcript, '') || ? WHERE room_code = ?")
             .run(chunk, roomCode);
 
         const wsApp = req.app.locals.wsApp;

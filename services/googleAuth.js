@@ -32,11 +32,13 @@ if (hasGoogleConfig) {
 
                     const existingGoogle = db.prepare('SELECT * FROM users WHERE google_id = ?').get(googleId);
                     if (existingGoogle) {
+                        if (existingGoogle.is_suspended) return done(null, false, { message: 'Account suspended' });
                         return done(null, { ...existingGoogle, googleAccessToken: accessToken, googleRefreshToken: refreshToken });
                     }
 
                     const existingEmail = db.prepare('SELECT * FROM users WHERE LOWER(email) = LOWER(?)').get(email);
                     if (existingEmail) {
+                        if (existingEmail.is_suspended) return done(null, false, { message: 'Account suspended' });
                         db.prepare(`
                             UPDATE users
                             SET google_id = ?, avatar_url = COALESCE(?, avatar_url),

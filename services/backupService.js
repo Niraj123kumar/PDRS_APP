@@ -52,11 +52,20 @@ class BackupService {
         const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all();
         
         for (const table of tables) {
-            const data = db.prepare(`SELECT * FROM ${table.name}`).all();
-            fs.writeFileSync(
-                path.join(exportDir, `${table.name}.json`),
-                JSON.stringify(data, null, 2)
-            );
+            const exportFile = path.join(exportDir, `${table.name}.json`);
+            const outStream = fs.createWriteStream(exportFile);
+            outStream.write('[\n');
+            let first = true;
+            
+            const stmt = db.prepare(`SELECT * FROM ${table.name}`);
+            for (const row of stmt.iterate()) {
+                if (!first) outStream.write(',\n');
+                outStream.write(JSON.stringify(row, null, 2));
+                first = false;
+            }
+            
+            outStream.write('\n]');
+            outStream.end();
         }
 
         const zipPath = path.join(this.backupDir, `export_${timestamp}.zip`);

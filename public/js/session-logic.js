@@ -46,6 +46,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const hintPanel = document.getElementById('hint-panel');
     const modalRestore = document.getElementById('modal-restore');
     const modalAbandon = document.getElementById('modal-abandon');
+    const voiceIndicator = document.getElementById('voice-indicator');
+    const timerRing = document.getElementById('timer-ring');
+    const timerText = document.getElementById('timer-text');
 
     let currentSessionId = null;
     let questions = [];
@@ -65,6 +68,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const replayData = [];
     const timeStamps = [];
     let autosaveSec = 0;
+    let questionTimerInterval = null;
+    let timeLimit = 120; // 2 minutes per question
     const LS = () => `pdrs_session_${currentSessionId}_draft`;
     const SYNCQ = 'pdrs_offline_sync';
 
@@ -403,12 +408,12 @@ document.addEventListener('DOMContentLoaded', () => {
         saveLocalDraft();
         if (typeof showToast === 'function') showToast('Progress saved in browser', 'success');
     });
-    btnAbandon.addEventListener('click', () => { modalAbandon.style.display = 'flex'; });
-    document.getElementById('modal-abandon-no').onclick = () => { modalAbandon.style.display = 'none'; };
-    document.getElementById('modal-abandon-yes').onclick = () => {
-        sessionCompleted = true;
-        window.location.href = '/student.html';
-    };
+    btnAbandon.addEventListener('click', () => {
+        ui.showConfirm('Abandon Session', 'Your current progress on this run will be left incomplete. Are you sure?', () => {
+            sessionCompleted = true;
+            window.location.href = '/student.html';
+        });
+    });
 
     btnHints.addEventListener('click', async () => {
         const q = questions[currentIndex];
@@ -429,6 +434,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
             hintPenalty += d.penaltyPoints || 5;
+            hintUsedForCurrent = true;
+            const hintIndicator = document.getElementById('hint-indicator');
+            if (hintIndicator) hintIndicator.style.display = 'inline-block';
+
             const h = d.hints || {};
             hintPanel.innerHTML = `<strong>Key concept:</strong> ${(h.keyConcept || '').replace(/</g, '&lt;')}<br><strong>Example idea:</strong> ${(h.example || '').replace(/</g, '&lt;')}<br><strong>Common mistake:</strong> ${(h.commonMistake || '').replace(/</g, '&lt;')}`;
             hintPanel.style.display = 'block';
@@ -438,11 +447,55 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    function startQuestionTimer() {
+        if (questionTimerInterval) clearInterval(questionTimerInterval);
+        let timeLeft = timeLimit;
+        const total = timeLimit;
+        const dashArray = 175.93;
+
+        const update = () => {
+            if (paused) return;
+            timeLeft--;
+            if (timeLeft <= 0) {
+                timeLeft = 0;
+                timerRing.style.stroke = 'var(--error-color)';
+            } else if (timeLeft < 30) {
+                timerRing.style.stroke = 'var(--accent-red)';
+            } else {
+                timerRing.style.stroke = 'var(--primary-color)';
+            }
+
+            const offset = dashArray - (dashArray * (timeLeft / total));
+            timerRing.style.strokeDashoffset = offset;
+            
+            const m = Math.floor(timeLeft / 60);
+            const s = timeLeft % 60;
+            timerText.textContent = `${m}:${s.toString().padStart(2, '0')}`;
+        };
+
+        update();
+        questionTimerInterval = setInterval(update, 1000);
+    }
+
+    let hintUsedForCurrent = false;
+
     function renderQuestion(preserveDraft) {
         const q = questions[currentIndex];
         questionText.textContent = q.question;
         tierBadge.textContent = `TIER ${q.tier}: ${q.tier_label || 'Question'}`;
         tierBadge.className = `tier-badge tier-${q.tier}`;
+        
+        // Reset hint indicator
+        hintUsedForCurrent = false;
+        const hintIndicator = document.getElementById('hint-indicator');
+        if (hintIndicator) hintIndicator.style.display = 'none';
+
+        // Card entrance animation
+        const card = document.getElementById('question-card');
+        card.classList.remove('animate-up');
+        void card.offsetWidth; // trigger reflow
+        card.classList.add('animate-up');
+
         if (!preserveDraft) {
             answerInput.value = '';
             questionNote.value = '';
@@ -465,6 +518,7 @@ document.addEventListener('DOMContentLoaded', () => {
         progressFill.style.width = `${progress}%`;
         questionStartedAt = Date.now();
         mediaSplit();
+        startQuestionTimer();
     }
 
     function updateCharCount() {
@@ -472,7 +526,7 @@ document.addEventListener('DOMContentLoaded', () => {
         charCounter.textContent = `${len} / 1000 characters`;
         charCounter.className = 'char-counter';
         if (len >= 950) charCounter.classList.add('char-danger');
-        else if (len >= 200) charCounter.classList.add('char-warning');
+        else if (len >= 800) charCounter.classList.add('char-warning');
     }
 
     answerInput.addEventListener('input', updateCharCount);
@@ -502,9 +556,9 @@ document.addEventListener('DOMContentLoaded', () => {
     submitBtn.addEventListener('click', async () => {
         if (paused) return;
         const answer = answerInput.value.trim();
-        if (answer.length < 10) return alert('Please provide a more detailed answer.');
+        if (answer.length < 10) return showToast('Please provide a more detailed answer.', 'error');
 
-        showLoading('Evaluating your response...');
+        ui.setLoading(submitBtn, true);
         
         try {
             const q = questions[currentIndex];
@@ -517,6 +571,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 body: JSON.stringify({ question: q.question, answer })
             });
             const scores = await scoreRes.json();
+
+            // Show score reveal
+            const reveal = document.getElementById('score-reveal');
+            document.getElementById('score-clarity').textContent = Math.round(scores.clarity);
+            document.getElementById('score-reasoning').textContent = Math.round(scores.reasoning);
+            document.getElementById('score-depth').textContent = Math.round(scores.depth);
+            document.getElementById('score-confidence').textContent = Math.round(scores.confidence);
+            document.getElementById('score-feedback').textContent = scores.feedback || 'Great job! Keep going.';
+            
+            reveal.style.display = 'block';
+            reveal.classList.add('animate-up');
 
             const doAnswer = async () => {
                 await fetch(`/api/sessions/${currentSessionId}/answers`, {
@@ -568,33 +633,39 @@ document.addEventListener('DOMContentLoaded', () => {
             await saveReplayRemote();
 
             totalScore += (scores.clarity + scores.reasoning + scores.depth + scores.confidence) / 4;
-            currentIndex++;
 
-            if (currentIndex < 10) {
-                renderQuestion();
-            } else {
-                let finalScore = totalScore / 10;
-                finalScore = Math.max(0, finalScore - hintPenalty);
-                await fetch(`/api/sessions/${currentSessionId}`, {
-                    method: 'PATCH',
-                    headers: { 
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${auth.getToken()}`
-                    },
-                    body: JSON.stringify({
-                        status: 'completed',
-                        overall_score: finalScore,
-                        time_per_question_json: JSON.stringify(timeByQuestion)
-                    })
-                });
-                sessionCompleted = true;
-                try { localStorage.removeItem(LS()); } catch (e) { /* */ }
-                window.location.href = `/results.html?sessionId=${currentSessionId}`;
-            }
+            // Wait for "Next Question" click
+            document.getElementById('btn-next-question').onclick = async () => {
+                reveal.style.display = 'none';
+                currentIndex++;
+
+                if (currentIndex < 10) {
+                    renderQuestion();
+                } else {
+                    let finalScore = totalScore / 10;
+                    finalScore = Math.max(0, finalScore - hintPenalty);
+                    await fetch(`/api/sessions/${currentSessionId}`, {
+                        method: 'PATCH',
+                        headers: { 
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${auth.getToken()}`
+                        },
+                        body: JSON.stringify({
+                            status: 'completed',
+                            overall_score: finalScore,
+                            time_per_question_json: JSON.stringify(timeByQuestion)
+                        })
+                    });
+                    sessionCompleted = true;
+                    try { localStorage.removeItem(LS()); } catch (e) { /* */ }
+                    window.location.href = `/results.html?sessionId=${currentSessionId}`;
+                }
+            };
+
         } catch (err) {
-            alert('Failed to score answer. Please try again.');
+            showToast('Failed to score answer. Please try again.', 'error');
         } finally {
-            hideLoading();
+            ui.setLoading(submitBtn, false, 'Submit & Continue');
         }
     });
 
@@ -612,13 +683,15 @@ document.addEventListener('DOMContentLoaded', () => {
             if (isListening) {
                 recognition.stop();
                 voiceBtn.classList.remove('listening');
-                voiceBtn.textContent = '🎤 Speak Answer';
+                voiceBtn.innerHTML = '🎤 Speak Answer';
+                voiceIndicator.style.display = 'none';
             } else {
                 voiceStartedAt = Date.now();
                 lastPauseCount = 0;
                 recognition.start();
                 voiceBtn.classList.add('listening');
-                voiceBtn.textContent = '🛑 Stop Listening';
+                voiceBtn.innerHTML = '<span class="voice-indicator"></span>🛑 Stop Listening';
+                voiceIndicator.style.display = 'inline-block';
             }
             isListening = !isListening;
         });
@@ -633,6 +706,7 @@ document.addEventListener('DOMContentLoaded', () => {
             updateCharCount();
         };
         recognition.onend = async () => {
+            voiceIndicator.style.display = 'none';
             if (voiceStartedAt > 0 && answerInput.value.trim()) {
                 const elapsedMin = Math.max(1 / 60, (Date.now() - voiceStartedAt) / 60000);
                 lastWordsPerMinute = Math.round(answerInput.value.trim().split(/\s+/).length / elapsedMin);
@@ -655,19 +729,26 @@ document.addEventListener('DOMContentLoaded', () => {
     bookmarkBtn.addEventListener('click', async () => {
         const q = questions[currentIndex];
         if (!q) return;
-        await fetch(`/api/sessions/${currentSessionId}/bookmark`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${auth.getToken()}`
-            },
-            body: JSON.stringify({
-                questionIndex: currentIndex,
-                questionText: q.question,
-                note: questionNote.value || ''
-            })
-        });
-        alert('Bookmarked');
+        ui.setLoading(bookmarkBtn, true);
+        try {
+            await fetch(`/api/sessions/${currentSessionId}/bookmark`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${auth.getToken()}`
+                },
+                body: JSON.stringify({
+                    questionIndex: currentIndex,
+                    questionText: q.question,
+                    note: questionNote.value || ''
+                })
+            });
+            showToast('Question bookmarked ✅', 'success');
+        } catch (e) {
+            showToast('Failed to bookmark', 'error');
+        } finally {
+            ui.setLoading(bookmarkBtn, false, 'Bookmark');
+        }
     });
 
     function showLoading(text) {

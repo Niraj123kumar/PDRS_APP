@@ -46,6 +46,87 @@
     to { stroke-dashoffset: var(--offset); }
 }
 
+/* Loading Spinner Spin */
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Modal Scale Entrance */
+@keyframes modalScale {
+    from { opacity: 0; transform: scale(0.95); }
+    to { opacity: 1; transform: scale(1); }
+}
+
+/* Confetti Fall */
+@keyframes confettiFall {
+    0% { transform: translateY(-100vh) rotate(0deg); opacity: 1; }
+    100% { transform: translateY(100vh) rotate(360deg); opacity: 0; }
+}
+
+/* Pulse for AI Status */
+@keyframes pulseStatus {
+    0% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.5); opacity: 0.5; }
+    100% { transform: scale(1); opacity: 1; }
+}
+
+.status-pulse {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 6px;
+}
+.status-online { background: #22c55e; box-shadow: 0 0 8px #22c55e; animation: pulseStatus 2s infinite; }
+.status-offline { background: #ef4444; }
+
+/* Pulse for High Priority/Warning */
+@keyframes pulseWarning {
+    0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+    70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}
+
+.pulse-warning { animation: pulseWarning 2s infinite; }
+
+/* Text Pulse for Countdown */
+@keyframes textPulseRed {
+    0% { transform: scale(1); text-shadow: 0 0 0 rgba(239, 68, 68, 0); }
+    50% { transform: scale(1.05); text-shadow: 0 0 10px rgba(239, 68, 68, 0.5); }
+    100% { transform: scale(1); text-shadow: 0 0 0 rgba(239, 68, 68, 0); }
+}
+
+.timer-pulse { animation: textPulseRed 1s infinite ease-in-out; }
+
+/* Voice Recording Pulse */
+@keyframes voicePulse {
+    0% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.5); opacity: 0.5; }
+    100% { transform: scale(1); opacity: 1; }
+}
+.voice-indicator {
+    width: 10px;
+    height: 10px;
+    background: #ef4444;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 8px;
+    animation: voicePulse 1s infinite;
+}
+
+/* Shake for Invalid Form */
+@keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-8px); }
+    50% { transform: translateX(8px); }
+    75% { transform: translateX(-8px); }
+}
+.shake { animation: shake 0.4s cubic-bezier(.36,.07,.19,.97) both; }
+
+/* Count-up Animation placeholder */
+.count-up { font-variant-numeric: tabular-nums; }
+
+
 /* Toast Slide In/Out */
 @keyframes toastSlideIn {
     from { transform: translateX(100%); opacity: 0; }

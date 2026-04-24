@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Student Dashboard - PDRS</title>
+    <link rel="icon" href="/favicon.ico" type="image/x-icon">
     <link rel="stylesheet" href="/css/style.css">
     <link rel="stylesheet" href="/css/animations.css">
     <style>
@@ -19,7 +20,25 @@
         .timer-green { color: var(--accent-emerald); }
         .timer-amber { color: var(--accent-amber); }
         .timer-red { color: var(--accent-red); }
-        .timer-pulse { animation: pulseRed 1s infinite; }
+
+        /* Progress Rings */
+        .progress-ring-container { display: flex; flex-wrap: wrap; gap: 1rem; justify-content: center; }
+        .progress-ring { position: relative; width: 80px; height: 80px; }
+        .progress-ring svg { transform: rotate(-90deg); width: 80px; height: 80px; }
+        .progress-ring circle { fill: none; stroke-width: 6; stroke-linecap: round; transition: stroke-dashoffset 0.5s ease; }
+        .progress-ring .bg { stroke: var(--border-color); }
+        .progress-ring .progress { stroke: var(--primary-color); stroke-dasharray: 232.47; stroke-dashoffset: 232.47; }
+        .progress-ring .text { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-weight: 700; font-size: 0.9rem; }
+        .dimension-label { font-size: 0.75rem; color: var(--text-muted); text-align: center; margin-top: 0.5rem; max-width: 80px; }
+
+        /* Streak Flame */
+        .flame-icon { font-size: 1.5rem; display: inline-block; animation: flamePulse 1.5s infinite alternate; }
+        @keyframes flamePulse {
+            0% { transform: scale(1) translateY(0); filter: drop-shadow(0 0 2px orange); }
+            100% { transform: scale(1.1) translateY(-2px); filter: drop-shadow(0 0 8px red); }
+        }
+
+        .avatar-initials { width: 35px; height: 35px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 0.9rem; }
 
         .session-item { padding: 1rem; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; }
         .session-item:last-child { border-bottom: none; }
@@ -47,11 +66,12 @@
             </div>
         </div>
         <div style="display: flex; align-items: center; gap: 1.5rem;">
-            <button onclick="toggleTheme()" class="theme-toggle">🌙</button>
-            <div class="bell-icon" onclick="window.location.href='/notifications.html'">
+            <button onclick="toggleTheme()" class="theme-toggle" title="Toggle Theme">🌙</button>
+            <div class="bell-icon" onclick="window.location.href='/notifications.html'" title="Notifications">
                 🔔 <span id="unread-count" class="bell-badge" style="display: none;">0</span>
             </div>
-            <span id="user-name" style="font-weight: 600;"></span>
+            <div id="user-avatar" class="avatar-initials" style="background: var(--primary-color);"></div>
+            <span id="user-name" style="font-weight: 600; display: none;"></span>
             <button onclick="auth.logout()" class="btn btn-secondary" style="width: auto; padding: 0.5rem 1rem;">Logout</button>
         </div>
     </nav>
@@ -71,15 +91,7 @@
             <div class="left-col">
                 <div class="card">
                     <h3 style="margin-bottom: 1.5rem;">Recent Sessions</h3>
-                    <div id="loading-sessions">
-                        <div class="skeleton" style="height: 60px; width: 100%; margin-bottom: 0.5rem;"></div>
-                        <div class="skeleton" style="height: 60px; width: 100%; margin-bottom: 0.5rem;"></div>
-                    </div>
                     <div id="session-list"></div>
-                    <div id="empty-sessions" class="empty-state" style="display: none;">
-                        <p>No sessions found. Start practicing to see your progress!</p>
-                        <button onclick="window.location.href='/session.html'" class="btn" style="width: auto; margin-top: 1rem;">Start Rehearsal</button>
-                    </div>
                 </div>
             </div>
 
@@ -90,7 +102,7 @@
                     <div id="timer-container" style="display:none;">
                         <div id="countdown-display" class="timer-display">--:--:--</div>
                         <p id="countdown-label" style="font-weight: 600;">Until Your Defense</p>
-                        <a id="google-event-link" href="#" target="_blank" style="display:none;">Open Google Calendar Event</a>
+                        <a id="google-event-link" href="#" target="_blank" style="display:none; font-size: 0.85rem; color: var(--primary-color);">Open Google Calendar Event</a>
                         <div style="display:flex; gap:0.5rem; justify-content:center; margin-top:0.8rem;">
                             <button id="edit-date-btn" class="btn btn-secondary" style="width:auto; padding:0.45rem 0.7rem;">Edit Date</button>
                             <button id="remove-calendar-btn" class="btn btn-secondary" style="width:auto; padding:0.45rem 0.7rem;">Remove from Calendar</button>
@@ -98,14 +110,16 @@
                     </div>
                     <div id="set-date-container">
                         <p class="text-muted" style="font-size: 0.9rem; margin-bottom: 1rem;">Set your defense schedule and optionally create a Google Calendar event.</p>
-                        <input type="datetime-local" id="defense-date-input" class="small-input">
-                        <input type="text" id="defense-title-input" class="small-input" placeholder="Defense title (e.g. PDRS Final Defense)">
-                        <input type="text" id="faculty-emails-input" class="small-input" placeholder="Faculty emails (comma separated)">
-                        <label style="display:flex; gap:0.5rem; align-items:center; justify-content:center; margin-bottom:0.75rem;">
-                            <input type="checkbox" id="connect-calendar-toggle" checked>
-                            Connect Google Calendar
-                        </label>
-                        <button id="schedule-defense-btn" class="btn" style="padding: 0.5rem;">Schedule Defense</button>
+                        <form id="defense-form">
+                            <input type="datetime-local" id="defense-date-input" class="small-input" required>
+                            <input type="text" id="defense-title-input" class="small-input" placeholder="Defense title (e.g. PDRS Final Defense)" required>
+                            <input type="text" id="faculty-emails-input" class="small-input" placeholder="Faculty emails (comma separated)">
+                            <label style="display:flex; gap:0.5rem; align-items:center; justify-content:center; margin-bottom:0.75rem; cursor: pointer;">
+                                <input type="checkbox" id="connect-calendar-toggle" checked>
+                                <span style="font-size: 0.9rem;">Connect Google Calendar</span>
+                            </label>
+                            <button id="schedule-defense-btn" type="submit" class="btn" style="padding: 0.5rem;">Schedule Defense</button>
+                        </form>
                     </div>
                 </div>
 
@@ -125,7 +139,8 @@
 
                 <div class="card">
                     <h3 style="margin-bottom: 1rem;">Dimension Progress</h3>
-                    <div id="dimension-bars"></div>
+                    <div id="dimension-rings" class="progress-ring-container"></div>
+                    <div id="dimension-bars" style="display: none;"></div>
                 </div>
 
                 <div class="card">
@@ -141,14 +156,18 @@
         </div>
         <div class="card">
             <h3 style="margin-bottom: 1rem;">Badges</h3>
-            <div id="badges-section" style="display:grid; grid-template-columns: repeat(4, 1fr); gap:0.6rem;"></div>
+            <div id="badges-section" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap:1rem;"></div>
         </div>
         <div class="card">
             <h3 style="margin-bottom: 1rem;">Bookmarks</h3>
             <div id="bookmarks-section"></div>
         </div>
-        <div class="card">
-            <h3>Coaching Streak <span id="streak-count">0</span> 🔥</h3>
+        <div class="card" style="display: flex; align-items: center; justify-content: space-between;">
+            <h3 style="margin: 0;">Coaching Streak</h3>
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <span id="streak-count" style="font-size: 2rem; font-weight: 800;">0</span>
+                <span class="flame-icon">🔥</span>
+            </div>
         </div>
     </div>
 
@@ -159,59 +178,188 @@
         auth.requireRole('student');
 
         const user = auth.getUser();
-        document.getElementById('user-name').textContent = user.name;
-        document.getElementById('welcome-name').textContent = user.name.split(' ')[0];
+        
+        // Initials Avatar
+        const avatar = document.getElementById('user-avatar');
+        const initials = user.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+        avatar.textContent = initials;
+        avatar.style.background = `hsl(${user.name.length * 137.5 % 360}, 70%, 50%)`;
+
+        // Initialize form validation
+        ui.initFormValidation('defense-form');
 
         let countdownInterval;
 
         async function loadDashboard() {
+            // Show Skeletons
+            ui.showSkeleton('session-list', 3);
+            ui.showSkeleton('dimension-rings', 4, 'card');
+            ui.showSkeleton('goals-section', 2, 'list');
+            ui.showSkeleton('badges-section', 4, 'list');
+            ui.showSkeleton('bookmarks-section', 3, 'list');
+
             try {
                 const token = auth.getToken();
-                const [sessionsRes, notifsRes, defenseRes] = await Promise.all([
+                const [sessionsRes, notifsRes, defenseRes, goalsRes, badgesRes, bookmarksRes, insightsRes, predictRes] = await Promise.all([
                     fetch('/api/sessions', { headers: { 'Authorization': `Bearer ${token}` } }),
                     fetch('/api/notifications', { headers: { 'Authorization': `Bearer ${token}` } }),
-                    fetch('/api/student/defense-date', { headers: { 'Authorization': `Bearer ${token}` } })
+                    fetch('/api/student/defense-date', { headers: { 'Authorization': `Bearer ${token}` } }),
+                    fetch('/api/student/goals', { headers: { 'Authorization': `Bearer ${token}` } }),
+                    fetch('/api/student/badges', { headers: { 'Authorization': `Bearer ${token}` } }),
+                    fetch('/api/student/bookmarks', { headers: { 'Authorization': `Bearer ${token}` } }),
+                    fetch('/api/student/dashboard-insights', { headers: { 'Authorization': `Bearer ${token}` } }),
+                    fetch('/api/ai/predict-score', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                        body: JSON.stringify({ userId: auth.getUser().id })
+                    })
                 ]);
 
                 const sessions = await sessionsRes.json();
                 const notifs = await notifsRes.json();
                 const defenseData = await defenseRes.json();
+                const goals = await goalsRes.json();
+                const badges = await badgesRes.json();
+                const bookmarks = await bookmarksRes.json();
+                const insights = await insightsRes.json();
+                const prediction = await predictRes.json();
 
                 renderSessions(sessions);
                 renderStats(sessions);
                 renderNotifications(notifs);
                 initCountdown(defenseData.defenseDate);
-                renderAdvancedInsights();
+                renderGoals(goals);
+                renderBadges(badges.allBadges || badges);
+                renderBookmarks(bookmarks.bookmarks || bookmarks);
+                renderDimensions(sessions);
+                renderPrediction(prediction);
+                
+                document.getElementById('streak-count').textContent = insights.streakDays || 0;
+
                 if (defenseData.googleEventUrl) {
                     const googleLink = document.getElementById('google-event-link');
                     googleLink.href = defenseData.googleEventUrl;
                     googleLink.style.display = 'inline-block';
                 }
 
-                document.getElementById('loading-sessions').style.display = 'none';
             } catch (err) {
-                showToast('Failed to load dashboard data', 'error');
+                console.error(err);
+                showToast('Failed to load dashboard data', 'error', loadDashboard);
             }
         }
 
         function renderSessions(sessions) {
-            const list = document.getElementById('session-list');
-            const empty = document.getElementById('empty-sessions');
-
             if (sessions.length === 0) {
-                empty.style.display = 'block';
+                ui.showEmptyState('session-list', '📅', 'No sessions yet', 'Start your first rehearsal to track your progress.', 'Start Rehearsal', '/session.html');
                 return;
             }
 
+            const list = document.getElementById('session-list');
             list.innerHTML = sessions.slice(0, 5).map(s => `
                 <div class="session-item">
-                    <div>
+                    <div style="flex-grow: 1;">
                         <strong>${s.project_title}</strong>
                         <div style="font-size: 0.8rem; color: var(--text-muted);">${new Date(s.created_at).toLocaleDateString()}</div>
                     </div>
                     <div style="display: flex; align-items: center; gap: 1rem;">
                         <span class="status-badge status-${s.status}">${s.status}</span>
                         <span style="font-weight: 700;">${s.overall_score ? Math.round(s.overall_score) : '--'}</span>
+                        <button class="btn-icon" onclick="deleteSession('${s.id}')" title="Delete Session">🗑️</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function renderDimensions(sessions) {
+            const container = document.getElementById('dimension-rings');
+            if (sessions.length === 0) {
+                container.innerHTML = '<p class="text-muted">Complete a session to see dimension progress.</p>';
+                return;
+            }
+
+            // Calculate latest dimension scores
+            const latest = sessions.filter(s => s.status === 'completed')[0];
+            if (!latest || !latest.dimensions) {
+                container.innerHTML = '<p class="text-muted">Complete a session to see dimension progress.</p>';
+                return;
+            }
+
+            const dims = latest.dimensions;
+            container.innerHTML = Object.entries(dims).map(([name, score]) => {
+                const offset = 232.47 - (232.47 * (score / 100));
+                return `
+                    <div style="display: flex; flex-direction: column; align-items: center;">
+                        <div class="progress-ring">
+                            <svg>
+                                <circle class="bg" cx="40" cy="40" r="37"></circle>
+                                <circle class="progress" cx="40" cy="40" r="37" style="stroke-dashoffset: ${offset}"></circle>
+                            </svg>
+                            <div class="text">${Math.round(score)}%</div>
+                        </div>
+                        <div class="dimension-label">${name.replace('_', ' ')}</div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function renderGoals(goals) {
+            if (!goals || goals.length === 0) {
+                ui.showEmptyState('goals-section', '🎯', 'No goals yet', 'Set your first goal to stay motivated.', 'Set Goal', '#');
+                return;
+            }
+            const container = document.getElementById('goals-section');
+            container.innerHTML = goals.map(g => `
+                <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">
+                    <div style="flex-grow: 1;">
+                        <div style="font-weight: 600;">${g.title}</div>
+                        <div style="font-size: 0.8rem; color: var(--text-muted);">${g.description || ''}</div>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 1rem;">
+                        <div style="text-align: right;">
+                            <div style="font-size: 0.85rem; font-weight: 700;">${g.progress}%</div>
+                            <div style="width: 100px; height: 6px; background: var(--border-color); border-radius: 3px; overflow: hidden; margin-top: 4px;">
+                                <div style="width: ${g.progress}%; height: 100%; background: var(--primary-color);"></div>
+                            </div>
+                        </div>
+                        <div style="display: flex; gap: 0.25rem;">
+                            <button class="btn-icon" onclick="editGoal('${g.id}', ${g.targetScore})" title="Edit Goal">✏️</button>
+                            <button class="btn-icon" onclick="deleteGoal('${g.id}')" title="Delete Goal">🗑️</button>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function renderBadges(badges) {
+            if (!badges || badges.length === 0) {
+                ui.showEmptyState('badges-section', '🏆', 'No badges yet', 'Complete sessions to earn badges.', 'View Badges', '#');
+                return;
+            }
+            const container = document.getElementById('badges-section');
+            container.innerHTML = badges.map(b => `
+                <div style="text-align: center; padding: 1rem; background: var(--bg-color); border-radius: 12px; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+                    <div style="font-size: 2rem; margin-bottom: 0.5rem;">${b.icon || '🏅'}</div>
+                    <div style="font-size: 0.75rem; font-weight: 700;">${b.name}</div>
+                    <div style="font-size: 0.65rem; color: var(--text-muted);">${new Date(b.earned_at).toLocaleDateString()}</div>
+                </div>
+            `).join('');
+        }
+
+        function renderBookmarks(bookmarks) {
+            if (!bookmarks || bookmarks.length === 0) {
+                ui.showEmptyState('bookmarks-section', '🔖', 'No bookmarks', 'Complete a session to bookmark questions.', 'Start Rehearsal', '/session.html');
+                return;
+            }
+            const container = document.getElementById('bookmarks-section');
+            container.innerHTML = bookmarks.map(b => `
+                <div style="padding: 1rem; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
+                    <div style="flex: 1; padding-right: 1rem;">
+                        <div style="font-weight: 600; font-size: 0.9rem; margin-bottom: 0.25rem;">${b.question_text}</div>
+                        <div style="font-size: 0.75rem; color: var(--text-muted);">From: ${b.session_title || 'Previous Session'}</div>
+                    </div>
+                    <div style="display: flex; gap: 0.5rem; align-items: center;">
+                        <button class="btn btn-secondary" style="width: auto; padding: 0.4rem 0.75rem; font-size: 0.8rem;" onclick="window.location.href='/session.html?retry=${b.id}'">Practice Now</button>
+                        <button class="btn-icon" onclick="deleteBookmark('${b.id}')" title="Delete Bookmark">🗑️</button>
                     </div>
                 </div>
             `).join('');
@@ -249,17 +397,21 @@
                 return;
             }
 
+            document.getElementById('timer-container').style.display = 'block';
+            document.getElementById('set-date-container').style.display = 'none';
+
             const target = new Date(dateStr).getTime();
             
             if (countdownInterval) clearInterval(countdownInterval);
             
-            countdownInterval = setInterval(() => {
+            const update = () => {
                 const now = new Date().getTime();
                 const dist = target - now;
 
                 if (dist < 0) {
                     clearInterval(countdownInterval);
                     document.getElementById('countdown-display').textContent = 'DEFENSE DAY!';
+                    document.getElementById('countdown-display').className = 'timer-display timer-green';
                     return;
                 }
 
@@ -271,22 +423,29 @@
                 const display = document.getElementById('countdown-display');
                 display.textContent = `${days}d ${hours}h ${mins}m ${secs}s`;
                 
-                // Color coding
+                // Color coding and pulsing
                 display.className = 'timer-display';
-                if (days >= 14) display.classList.add('timer-green');
-                else if (days >= 7) display.classList.add('timer-amber');
-                else display.classList.add('timer-red');
-
-                if (days === 0 && hours < 24) display.classList.add('timer-pulse');
-
-            }, 1000);
+                if (days < 1) {
+                    display.classList.add('timer-red', 'timer-pulse');
+                } else if (days < 3) {
+                    display.classList.add('timer-amber');
+                } else {
+                    display.classList.add('timer-green');
+                }
+            };
+            
+            update();
+            countdownInterval = setInterval(update, 1000);
         }
 
-        document.getElementById('schedule-defense-btn').onclick = async () => {
+        document.getElementById('defense-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('schedule-defense-btn');
             const date = document.getElementById('defense-date-input').value;
             const title = document.getElementById('defense-title-input').value || 'PDRS Defense';
             const facultyEmails = document.getElementById('faculty-emails-input').value;
-            if (!date) return showToast('Please select a date', 'error');
+            
+            ui.setLoading(btn, true);
 
             try {
                 const connectCalendar = document.getElementById('connect-calendar-toggle').checked;
@@ -301,7 +460,7 @@
                 const data = await res.json();
                 if (!res.ok) throw new Error(data.error);
 
-                showToast('Defense date saved!', 'success');
+                showToast('Defense scheduled successfully ✅', 'success');
                 document.getElementById('timer-container').style.display = 'block';
                 document.getElementById('set-date-container').style.display = 'none';
                 initCountdown(date);
@@ -312,8 +471,58 @@
                 }
             } catch (err) {
                 showToast(err.message, 'error');
+            } finally {
+                ui.setLoading(btn, false);
             }
-        };
+        });
+
+        async function deleteSession(id) {
+            ui.showConfirm('Delete Session', 'Are you sure? This cannot be undone.', async () => {
+                try {
+                    const res = await fetch(`/api/sessions/${id}`, {
+                        method: 'DELETE',
+                        headers: { 'Authorization': `Bearer ${auth.getToken()}` }
+                    });
+                    if (!res.ok) throw new Error('Failed to delete session');
+                    showToast('Session deleted ✅', 'success');
+                    loadDashboard();
+                } catch (err) {
+                    showToast(err.message, 'error');
+                }
+            });
+        }
+
+        async function deleteGoal(id) {
+            ui.showConfirm('Delete Goal', 'Are you sure? This cannot be undone.', async () => {
+                try {
+                    const res = await fetch(`/api/student/goals/${id}`, {
+                        method: 'DELETE',
+                        headers: { 'Authorization': `Bearer ${auth.getToken()}` }
+                    });
+                    if (!res.ok) throw new Error('Failed to delete goal');
+                    showToast('Goal deleted ✅', 'success');
+                    loadDashboard();
+                } catch (err) {
+                    showToast(err.message, 'error');
+                }
+            });
+        }
+
+        async function deleteBookmark(id) {
+            ui.showConfirm('Delete Bookmark', 'Are you sure? This cannot be undone.', async () => {
+                try {
+                    const res = await fetch(`/api/student/bookmarks/${id}`, {
+                        method: 'DELETE',
+                        headers: { 'Authorization': `Bearer ${auth.getToken()}` }
+                    });
+                    if (!res.ok) throw new Error('Failed to delete bookmark');
+                    showToast('Bookmark deleted ✅', 'success');
+                    loadDashboard();
+                } catch (err) {
+                    showToast(err.message, 'error');
+                }
+            });
+        }
 
         document.getElementById('edit-date-btn').onclick = () => {
             document.getElementById('timer-container').style.display = 'none';
@@ -321,15 +530,17 @@
         };
 
         document.getElementById('remove-calendar-btn').onclick = () => {
-            fetch('/api/student/calendar-event', {
-                method: 'DELETE',
-                headers: { 'Authorization': `Bearer ${auth.getToken()}` }
-            }).then(() => {
-                const googleLink = document.getElementById('google-event-link');
-                googleLink.style.display = 'none';
-                googleLink.href = '#';
-                showToast('Removed from Google Calendar', 'success');
-            }).catch(() => showToast('Failed to remove calendar event', 'error'));
+            ui.showConfirm('Remove Calendar Event', 'Are you sure? This cannot be undone.', () => {
+                fetch('/api/student/calendar-event', {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${auth.getToken()}` }
+                }).then(() => {
+                    const googleLink = document.getElementById('google-event-link');
+                    googleLink.style.display = 'none';
+                    googleLink.href = '#';
+                    showToast('Removed from Google Calendar ✅', 'success');
+                }).catch(() => showToast('Failed to remove calendar event', 'error'));
+            });
         };
 
         function toggleTheme() {
@@ -342,102 +553,6 @@
         
         if (localStorage.getItem('pdrs_theme') === 'dark') {
             document.querySelectorAll('.theme-toggle').forEach(btn => btn.textContent = '☀️');
-        }
-
-        loadDashboard();
-
-        async function renderAdvancedInsights() {
-            const token = auth.getToken();
-            const [insightsRes, goalsRes, badgesRes, predictRes] = await Promise.all([
-                fetch('/api/student/dashboard-insights', { headers: { 'Authorization': `Bearer ${token}` } }),
-                fetch('/api/goals', { headers: { 'Authorization': `Bearer ${token}` } }),
-                fetch('/api/student/badges', { headers: { 'Authorization': `Bearer ${token}` } }),
-                fetch('/api/ai/predict-score', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                    body: JSON.stringify({ userId: auth.getUser().id })
-                })
-            ]);
-            const insights = await insightsRes.json();
-            const goals = await goalsRes.json();
-            const badges = await badgesRes.json();
-            const prediction = await predictRes.json();
-
-            document.getElementById('streak-count').textContent = insights.streakDays || 0;
-            renderDimensionBars(insights.latestDimensions, goals);
-            renderGoals(goals);
-            renderBadges(badges.allBadges || []);
-            renderBookmarks(insights.bookmarks || []);
-            renderPrediction(prediction);
-        }
-
-        function renderDimensionBars(latest, goals) {
-            const dims = ['clarity', 'reasoning', 'depth', 'confidence'];
-            const container = document.getElementById('dimension-bars');
-            if (!latest) {
-                container.innerHTML = '<div class="text-muted">No session history yet.</div>';
-                return;
-            }
-            container.innerHTML = dims.map((d) => {
-                const val = Math.round(Number(latest[`${d}_avg`] || 0));
-                const goal = goals.find((g) => g.dimension === d);
-                const color = val >= 80 ? '#16a34a' : (val >= 60 ? '#f59e0b' : '#ef4444');
-                return `<div style="margin-bottom:0.6rem;">
-                    <div style="display:flex; justify-content:space-between;"><span>${d}</span><span>${val} / target ${goal ? Math.round(goal.target_score) : '--'}</span></div>
-                    <div style="height:10px;background:#e2e8f0;border-radius:6px;"><div style="height:100%; width:${val}%; background:${color}; border-radius:6px;"></div></div>
-                </div>`;
-            }).join('');
-        }
-
-        function renderGoals(goals) {
-            const c = document.getElementById('goals-section');
-            if (!goals.length) {
-                c.innerHTML = '<p class="text-muted">No goals yet. Create goals from coaching workflow.</p>';
-                return;
-            }
-            c.innerHTML = goals.map((g) => `
-                <div style="border:1px solid var(--border-color); border-radius:10px; padding:0.7rem; margin-bottom:0.5rem;">
-                    <strong>${g.dimension}</strong> target ${Math.round(g.target_score)} | current ${Math.round(g.current_score || 0)}
-                    ${g.achieved ? '<span style="color:#16a34a; margin-left:0.5rem;">Achieved ✅</span>' : ''}
-                    <button onclick="editGoal(${g.id}, ${g.target_score})" class="btn btn-secondary" style="width:auto; padding:0.2rem 0.5rem; margin-left:0.5rem;">Edit</button>
-                </div>
-            `).join('');
-        }
-
-        window.editGoal = async (id, currentTarget) => {
-            const newTarget = prompt('New target score', currentTarget);
-            if (!newTarget) return;
-            await fetch(`/api/goals/${id}`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${auth.getToken()}` },
-                body: JSON.stringify({ targetScore: Number(newTarget) })
-            });
-            renderAdvancedInsights();
-        };
-
-        function renderBadges(allBadges) {
-            const c = document.getElementById('badges-section');
-            c.innerHTML = allBadges.map((b) => `
-                <div title="${b.description}" style="border:1px solid var(--border-color); border-radius:8px; padding:0.6rem; text-align:center; opacity:${b.earned ? 1 : 0.45};">
-                    <div style="font-size:1.3rem;">${b.earned ? '🏅' : '🔒'}</div>
-                    <div style="font-size:0.8rem;">${b.badge_name}</div>
-                </div>
-            `).join('');
-        }
-
-        function renderBookmarks(bookmarks) {
-            const c = document.getElementById('bookmarks-section');
-            if (!bookmarks.length) {
-                c.innerHTML = '<div class="text-muted">No bookmarks yet.</div>';
-                return;
-            }
-            c.innerHTML = bookmarks.map((b) => `
-                <details style="margin-bottom:0.5rem;">
-                    <summary>Q${Number(b.question_index) + 1}: ${b.question_text}</summary>
-                    <p style="margin-top:0.4rem;">${b.note || 'No note'}</p>
-                    <button onclick="window.location.href='/session.html'" class="btn btn-secondary" style="width:auto; padding:0.3rem 0.6rem;">Practice Again</button>
-                </details>
-            `).join('');
         }
 
         function renderPrediction(pred) {
@@ -457,18 +572,70 @@
             `;
         }
 
-        document.getElementById('export-progress-btn').onclick = async () => {
-            const res = await fetch('/api/student/export-report', {
-                headers: { Authorization: `Bearer ${auth.getToken()}` }
-            });
-            if (!res.ok) return showToast('Failed to export PDF', 'error');
-            const blob = await res.blob();
-            const link = document.createElement('a');
-            link.href = URL.createObjectURL(blob);
-            link.download = 'progress-report.pdf';
-            link.click();
-            URL.revokeObjectURL(link.href);
+        window.editGoal = async (id, currentTarget) => {
+            const newTarget = prompt('New target score', currentTarget);
+            if (!newTarget) return;
+            try {
+                const res = await fetch(`/api/goals/${id}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${auth.getToken()}` },
+                    body: JSON.stringify({ targetScore: Number(newTarget) })
+                });
+                if (!res.ok) throw new Error('Failed to update goal');
+                showToast('Goal updated ✅', 'success');
+                loadDashboard();
+            } catch (err) {
+                showToast(err.message, 'error');
+            }
         };
+
+        // Character counter helper
+        function initCharCounter(id, max) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            const counter = document.createElement('div');
+            counter.className = 'char-counter';
+            el.parentNode.insertBefore(counter, el.nextSibling);
+            const update = () => {
+                const len = el.value.length;
+                counter.textContent = `${len} / ${max} characters`;
+                counter.className = 'char-counter';
+                if (len >= max * 0.95) counter.classList.add('char-red');
+                else if (len >= max * 0.8) counter.classList.add('char-amber');
+            };
+            el.addEventListener('input', update);
+            update();
+        }
+
+        // Initialize UI details
+        window.addEventListener('load', () => {
+            initCharCounter('defense-title-input', 100);
+            initCharCounter('faculty-emails-input', 200);
+        });
+
+        document.getElementById('export-progress-btn').onclick = async () => {
+            const btn = document.getElementById('export-progress-btn');
+            ui.setLoading(btn, true);
+            try {
+                const res = await fetch('/api/student/export-report', {
+                    headers: { Authorization: `Bearer ${auth.getToken()}` }
+                });
+                if (!res.ok) throw new Error('Failed to export PDF');
+                const blob = await res.blob();
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = `PDRS_Report_${new Date().toISOString().split('T')[0]}.pdf`;
+                link.click();
+                URL.revokeObjectURL(link.href);
+                showToast('Report downloaded ✅', 'success');
+            } catch (err) {
+                showToast(err.message, 'error');
+            } finally {
+                ui.setLoading(btn, false);
+            }
+        };
+
+        loadDashboard();
     </script>
 </body>
 </html>

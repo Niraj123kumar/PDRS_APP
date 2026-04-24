@@ -10,14 +10,14 @@ function logWarn(message, context = {}) {
 
 function logError(error, context = {}) {
     console.error(`[ERROR] ${error.message || error}`, context);
-    if (process.env.SENTRY_DSN) {
+    if (process.env.SENTRY_DSN && process.env.SENTRY_DSN !== 'from_sentry_dashboard') {
         Sentry.captureException(error, { extra: context });
     }
 }
 
 function logCritical(message, context = {}) {
     console.error(`[CRITICAL] ${message}`, context);
-    if (process.env.SENTRY_DSN) {
+    if (process.env.SENTRY_DSN && process.env.SENTRY_DSN !== 'from_sentry_dashboard') {
         Sentry.captureMessage(message, {
             level: 'fatal',
             extra: context

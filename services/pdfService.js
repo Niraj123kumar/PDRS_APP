@@ -129,10 +129,31 @@ async function writeSessionSummaryPdf(sessionId, buffer) {
     return `/uploads/summaries/${filename}`;
 }
 
+async function cleanupOldPdfs() {
+    const summaryDir = path.join(__dirname, '..', 'public', 'uploads', 'summaries');
+    if (!fs.existsSync(summaryDir)) return;
+
+    const files = fs.readdirSync(summaryDir);
+    const now = Date.now();
+    const expiry = 24 * 60 * 60 * 1000;
+
+    files.forEach(file => {
+        const filePath = path.join(summaryDir, file);
+        if (file.endsWith('.pdf')) {
+            const stats = fs.statSync(filePath);
+            if (now - stats.mtimeMs > expiry) {
+                fs.unlinkSync(filePath);
+                console.log(`Deleted expired PDF: ${file}`);
+            }
+        }
+    });
+}
+
 module.exports = {
     generateStudentReport,
     generateSessionReport,
     generateQuestionPaper,
     generateSessionSummaryPdf,
-    writeSessionSummaryPdf
+    writeSessionSummaryPdf,
+    cleanupOldPdfs
 };

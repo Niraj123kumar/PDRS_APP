@@ -3,14 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Faculty Dashboard - PDRS</title>
+    <title>Faculty Dashboard | PDRS</title>
+    <link rel="icon" type="image/png" href="/img/favicon.png">
     <link rel="stylesheet" href="/css/style.css">
     <link rel="stylesheet" href="/css/animations.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
     <style>
-        body.dark-mode { --bg-color: #0f172a; --card-bg: #1e293b; --text-color: #f1f5f9; --text-muted: #94a3b8; --border-color: rgba(255,255,255,0.1); }
         .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.5rem; margin-bottom: 2rem; }
-        .stat-card { background: white; padding: 1.5rem; border-radius: var(--radius); box-shadow: var(--shadow); text-align: center; }
+        .stat-card { background: white; padding: 1.5rem; border-radius: var(--radius); box-shadow: var(--shadow); text-align: center; transition: transform 0.2s, box-shadow 0.2s; cursor: default; }
+        .stat-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-lg); }
         body.dark-mode .stat-card { background: var(--card-bg); border: 1px solid var(--border-color); color: var(--text-color); }
         .stat-val { font-size: 2rem; font-weight: 800; color: var(--primary-color); display: block; }
         
@@ -20,18 +21,24 @@
 
         .table-section { background: white; padding: 1.5rem; border-radius: var(--radius); box-shadow: var(--shadow); }
         body.dark-mode .table-section { background: var(--card-bg); border: 1px solid var(--border-color); color: var(--text-color); }
-        table { width: 100%; border-collapse: collapse; }
-        th { text-align: left; padding: 1rem; border-bottom: 2px solid var(--border-color); color: var(--text-muted); font-size: 0.875rem; }
-        td { padding: 1rem; border-bottom: 1px solid var(--border-color); }
-        tr:hover { background: #f8fafc; cursor: pointer; }
-        body.dark-mode tr:hover { background: rgba(255,255,255,0.05); }
-
-        .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: none; align-items: center; justify-content: center; z-index: 1000; }
-        .modal-content { background: white; padding: 2rem; border-radius: var(--radius); max-width: 800px; width: 90%; max-height: 90vh; overflow-y: auto; position: relative; }
-        body.dark-mode .modal-content { background: var(--card-bg); color: var(--text-color); border: 1px solid var(--border-color); }
         
-        .at-risk-row { border-left: 4px solid var(--error-color); animation: pulseRed 2s infinite; }
-        .theme-toggle { cursor: pointer; font-size: 1.25rem; background: none; border: none; padding: 0.5rem; }
+        .at-risk-row { border-left: 4px solid var(--error-color) !important; }
+        .risk-pulse { display: inline-block; width: 10px; height: 10px; background: var(--error-color); border-radius: 50%; margin-right: 0.5rem; animation: pulseRed 2s infinite; }
+        
+        .search-container { position: relative; width: 300px; }
+        .search-container input { width: 100%; padding-right: 2.5rem; }
+        .search-clear { position: absolute; right: 0.75rem; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--text-muted); cursor: pointer; display: none; font-size: 1.2rem; }
+        .search-container input:not(:placeholder-shown) + .search-clear { display: block; }
+
+        .tab-btn.active { position: relative; }
+        .tab-btn.active::after { content: ''; position: absolute; bottom: -8px; left: 50%; transform: translateX(-50%); width: 20px; height: 3px; background: var(--primary-color); border-radius: 2px; }
+
+        .initials-avatar { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 0.9rem; }
+        
+        .char-counter { font-size: 0.75rem; color: var(--text-muted); text-align: right; margin-top: 0.25rem; }
+        .char-amber { color: var(--warning-color); font-weight: 600; }
+        .char-red { color: var(--error-color); font-weight: 700; }
+    </style>
 
         .analytics-wrap { margin-bottom: 2rem; }
         .tab-row { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1.25rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem; }
@@ -99,6 +106,7 @@
                 <button type="button" class="tab-btn" data-tab="department">Department Comparison</button>
                 <button type="button" class="tab-btn" data-tab="yoy">Year over Year</button>
                 <button type="button" class="tab-btn" data-tab="plagiarism">Plagiarism Check</button>
+                <button type="button" class="tab-btn" data-tab="question-bank">Question Bank</button>
             </div>
         </div>
 
@@ -133,7 +141,10 @@
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
                 <h3>Student Roster</h3>
                 <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
-                    <input type="text" id="student-search" placeholder="Search by name or email..." style="width: 300px;">
+                    <div class="search-container" id="student-search-container">
+                        <input type="text" id="student-search" placeholder="Search by name or email...">
+                        <button class="search-clear">&times;</button>
+                    </div>
                     <button type="button" class="btn" id="btn-compare-sel" style="width: auto; font-size: 0.85rem;">Compare selected (max 2)</button>
                 </div>
             </div>
@@ -303,6 +314,36 @@
                 <div id="plag-result" style="margin-top:1.5rem;"></div>
             </div>
         </div>
+
+        <div id="tab-question-bank" class="tab-panel">
+            <div class="table-section" style="margin-bottom: 1.5rem;">
+                <h3>Add New Question</h3>
+                <div style="display: grid; gap: 1rem; max-width: 600px;">
+                    <textarea id="qb-new-text" rows="3" placeholder="Enter question text..." style="width: 100%; padding: 0.5rem;"></textarea>
+                    <div style="display: flex; gap: 1rem; align-items: center;">
+                        <input type="text" id="qb-new-category" placeholder="Category (e.g. React, Java)" style="flex: 1;">
+                        <select id="qb-new-difficulty" style="width: 120px;">
+                            <option value="easy">Easy</option>
+                            <option value="medium" selected>Medium</option>
+                            <option value="hard">Hard</option>
+                        </select>
+                        <button type="button" class="btn" id="qb-btn-save" style="width: auto;">Save to Bank</button>
+                    </div>
+                </div>
+            </div>
+            <div class="table-section">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                    <h3>Saved Questions</h3>
+                    <div class="search-container" id="qb-search-container">
+                        <input type="text" id="qb-search" placeholder="Search questions...">
+                        <button class="search-clear">&times;</button>
+                    </div>
+                </div>
+                <div id="qb-list" style="display: grid; gap: 1rem;">
+                    <p class="text-muted">Loading questions...</p>
+                </div>
+            </div>
+        </div>
     </div>
 
     <div id="profile-modal" class="modal">
@@ -356,45 +397,211 @@
             if (t === 'time' && !window._loadedTime) { window._loadedTime = true; loadTimeAnalytics(); }
             if (t === 'department' && !window._loadedDept) { window._loadedDept = true; loadDepartment(); }
             if (t === 'yoy' && !window._loadedYoy) { window._loadedYoy = true; loadYoy(); }
+            if (t === 'question-bank' && !window._loadedQB) { window._loadedQB = true; loadQuestionBank(); }
         }
 
         let calCursor = new Date();
         let defenseRows = [];
+        let qbCache = [];
         const tok = () => auth.getToken();
+
+        // Character counter helper
+        function initCharCounter(textareaId, maxChars) {
+            const textarea = document.getElementById(textareaId);
+            if (!textarea) return;
+            
+            const counter = document.createElement('div');
+            counter.className = 'char-counter';
+            textarea.parentNode.insertBefore(counter, textarea.nextSibling);
+
+            const update = () => {
+                const len = textarea.value.length;
+                counter.textContent = `${len} / ${maxChars} characters`;
+                counter.className = 'char-counter';
+                if (len >= maxChars * 0.95) counter.classList.add('char-red');
+                else if (len >= maxChars * 0.8) counter.classList.add('char-amber');
+            };
+
+            textarea.addEventListener('input', update);
+            update();
+        }
+
+        // Search clear helper
+        function initSearchClear(containerId) {
+            const container = document.getElementById(containerId);
+            if (!container) return;
+            const input = container.querySelector('input');
+            const clearBtn = container.querySelector('.search-clear');
+            if (!input || !clearBtn) return;
+
+            clearBtn.onclick = () => {
+                input.value = '';
+                input.dispatchEvent(new Event('input'));
+                input.focus();
+            };
+        }
+
+        async function loadQuestionBank() {
+            const list = document.getElementById('qb-list');
+            ui.showSkeleton('qb-list', 3, 'card');
+            try {
+                const res = await fetch('/api/faculty/question-bank', { headers: { 'Authorization': `Bearer ${tok()}` } });
+                qbCache = await res.json();
+                renderQB();
+            } catch (e) { 
+                showToast('Failed to load question bank', 'error');
+                ui.showEmptyState('qb-list', '❌', 'Failed to load', 'Please try again later', 'Retry', 'javascript:loadQuestionBank()');
+            }
+        }
+
+        function renderQB() {
+            const term = (document.getElementById('qb-search')?.value || '').toLowerCase();
+            const filtered = qbCache.filter(q => 
+                q.question.toLowerCase().includes(term) || 
+                (q.category && q.category.toLowerCase().includes(term))
+            );
+            const list = document.getElementById('qb-list');
+            if (!filtered.length) {
+                ui.showEmptyState('qb-list', '❓', 'No questions found', 'Try a different search term or add a new question.', 'Add Question', '#');
+                return;
+            }
+            list.innerHTML = filtered.map(q => `
+                <div style="padding: 1rem; border: 1px solid var(--border-color); border-radius: 8px; background: white; display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem;" class="animate-up">
+                    <div style="flex: 1;">
+                        <div style="margin-bottom: 0.5rem;">
+                            <span style="padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 700; background: #f1f5f9; color: #475569; margin-right: 0.5rem;">${(q.category || 'General').toUpperCase()}</span>
+                            <span style="padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 700; ${q.difficulty === 'hard' ? 'background: #fee2e2; color: #b91c1c;' : q.difficulty === 'medium' ? 'background: #fef3c7; color: #92400e;' : 'background: #dcfce7; color: #166534;'}">${q.difficulty.toUpperCase()}</span>
+                        </div>
+                        <div style="font-weight: 600; line-height: 1.5;">${q.question}</div>
+                        <div style="margin-top: 0.5rem; font-size: 0.8rem; color: var(--text-muted);">Used ${q.times_used} times • Added ${new Date(q.created_at).toLocaleDateString()}</div>
+                    </div>
+                    <div style="display: flex; gap: 0.5rem;">
+                        <button onclick="useQB(${q.id}, this)" class="btn" style="width: auto; padding: 0.4rem 0.75rem; font-size: 0.8rem;">Use</button>
+                        <button onclick="deleteQB(${q.id}, this)" class="btn btn-secondary" style="width: auto; padding: 0.4rem 0.75rem; font-size: 0.8rem;">Delete</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        window.useQB = async function(id, btn) {
+            ui.setLoading(btn, true);
+            try {
+                const res = await fetch(`/api/faculty/question-bank/${id}/use`, { method: 'PATCH', headers: { 'Authorization': `Bearer ${tok()}` } });
+                if (res.ok) {
+                    showToast('Question marked as used ✅', 'success');
+                    loadQuestionBank();
+                }
+            } catch (e) { showToast('Action failed', 'error'); }
+            finally { ui.setLoading(btn, false); }
+        };
+
+        window.deleteQB = async function(id, btn) {
+            ui.showConfirm('Delete Question', 'Are you sure? This cannot be undone.', async () => {
+                ui.setLoading(btn, true);
+                try {
+                    const res = await fetch(`/api/faculty/question-bank/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${tok()}` } });
+                    if (res.ok) {
+                        showToast('Question deleted ✅', 'success');
+                        loadQuestionBank();
+                    }
+                } catch (e) { showToast('Delete failed', 'error'); }
+                finally { ui.setLoading(btn, false); }
+            });
+        };
+
+        document.getElementById('qb-btn-save')?.addEventListener('click', async (e) => {
+            const btn = e.target;
+            const question = document.getElementById('qb-new-text').value.trim();
+            const category = document.getElementById('qb-new-category').value.trim();
+            const difficulty = document.getElementById('qb-new-difficulty').value;
+            if (!question) return showToast('Question text is required', 'error');
+            
+            ui.setLoading(btn, true);
+            try {
+                const res = await fetch('/api/faculty/question-bank', {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${tok()}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ question, category, difficulty })
+                });
+                if (res.ok) {
+                    showToast('Question saved! ✅', 'success');
+                    document.getElementById('qb-new-text').value = '';
+                    document.getElementById('qb-new-category').value = '';
+                    loadQuestionBank();
+                } else {
+                    const err = await res.json();
+                    showToast(err.error || 'Failed to save', 'error');
+                }
+            } catch (e) { showToast('Save failed', 'error'); }
+            finally { ui.setLoading(btn, false); }
+        });
+
+        document.getElementById('qb-search')?.addEventListener('input', () => renderQB());
 
         async function loadClassroom() {
             const t = tok();
-            const [ann, flags, def] = await Promise.all([
-                fetch('/api/faculty/announcements', { headers: { 'Authorization': `Bearer ${t}` } }).then(r => r.json()),
-                fetch('/api/faculty/flagged', { headers: { 'Authorization': `Bearer ${t}` } }).then(r => r.json()),
-                fetch('/api/faculty/defense-schedule?all=true', { headers: { 'Authorization': `Bearer ${t}` } }).then(r => r.json())
-            ]);
-            defenseRows = def;
-            document.getElementById('ann-list').innerHTML = (ann || []).map(a => `
-                <div style="border:1px solid var(--border-color); border-radius:8px; padding:0.75rem; margin-bottom:0.5rem;">
-                    <strong>${(a.title || '').replace(/</g, '&lt;')}</strong> <span class="text-muted" style="font-size:0.8rem">→ ${a.target_role}</span>
-                    <p style="margin:0.25rem 0; font-size:0.9rem;">${(a.message || '').replace(/</g, '&lt;')}</p>
-                    <button type="button" class="btn btn-secondary" style="width:auto; font-size:0.8rem" onclick="deleteAnn(${a.id})">Delete</button>
-                </div>
-            `).join('') || '<p class="text-muted">No announcements</p>';
-            document.getElementById('flag-list').innerHTML = (flags && flags.length) ? flags.map(f => `
-                <div class="flag-card">
-                    <strong>${(f.student_name || '').replace(/</g, '&lt;')}</strong> <span class="text-muted">${(f.reason || '').replace(/</g, '&lt;')}</span>
-                    <button type="button" class="btn" style="width:auto; margin-top:0.5rem" onclick="resolveFlag(${f.id})">Resolve</button>
-                </div>
-            `).join('') : '<p class="text-muted">No active flags</p>';
-            renderCal();
+            ui.showSkeleton('ann-list', 2, 'list');
+            ui.showSkeleton('flag-list', 2, 'list');
+            
+            try {
+                const [ann, flags, def] = await Promise.all([
+                    fetch('/api/faculty/announcements', { headers: { 'Authorization': `Bearer ${t}` } }).then(r => r.json()),
+                    fetch('/api/faculty/flagged', { headers: { 'Authorization': `Bearer ${t}` } }).then(r => r.json()),
+                    fetch('/api/faculty/defense-schedule?all=true', { headers: { 'Authorization': `Bearer ${t}` } }).then(r => r.json())
+                ]);
+                defenseRows = def;
+                
+                const annList = document.getElementById('ann-list');
+                if (!ann || ann.length === 0) {
+                    ui.showEmptyState('ann-list', '📢', 'No announcements', 'Stay tuned for updates.', 'Post One', '#ann-title');
+                } else {
+                    annList.innerHTML = ann.map(a => `
+                        <div style="border:1px solid var(--border-color); border-radius:8px; padding:0.75rem; margin-bottom:0.5rem;" class="animate-up">
+                            <strong>${(a.title || '').replace(/</g, '&lt;')}</strong> <span class="text-muted" style="font-size:0.8rem">→ ${a.target_role}</span>
+                            <p style="margin:0.25rem 0; font-size:0.9rem;">${(a.message || '').replace(/</g, '&lt;')}</p>
+                            <button type="button" class="btn btn-secondary" style="width:auto; font-size:0.8rem" onclick="deleteAnn(${a.id}, this)">Delete</button>
+                        </div>
+                    `).join('');
+                }
+
+                const flagList = document.getElementById('flag-list');
+                if (!flags || flags.length === 0) {
+                    ui.showEmptyState('flag-list', '✅', 'All clear!', 'No students currently flagged.');
+                } else {
+                    flagList.innerHTML = flags.map(f => `
+                        <div class="flag-card animate-up">
+                            <strong><span class="risk-pulse"></span> ${(f.student_name || '').replace(/</g, '&lt;')}</strong> 
+                            <span class="text-muted">${(f.reason || '').replace(/</g, '&lt;')}</span>
+                            <button type="button" class="btn" style="width:auto; margin-top:0.5rem" onclick="resolveFlag(${f.id}, this)">Resolve</button>
+                        </div>
+                    `).join('');
+                }
+                renderCal();
+            } catch (err) {
+                showToast('Failed to load classroom data', 'error');
+            }
         }
-        window.deleteAnn = async function(id) {
-            if (!confirm('Delete this announcement?')) return;
-            const t = tok();
-            const r = await fetch('/api/faculty/announcements/' + id, { method: 'DELETE', headers: { 'Authorization': `Bearer ${t}` } });
-            if (r.ok) { showToast('Deleted', 'success'); loadClassroom(); }
+
+        window.deleteAnn = async function(id, btn) {
+            ui.showConfirm('Delete Announcement', 'Are you sure? This cannot be undone.', async () => {
+                ui.setLoading(btn, true);
+                const t = tok();
+                try {
+                    const r = await fetch('/api/faculty/announcements/' + id, { method: 'DELETE', headers: { 'Authorization': `Bearer ${t}` } });
+                    if (r.ok) { showToast('Deleted ✅', 'success'); loadClassroom(); }
+                } catch (e) { showToast('Delete failed', 'error'); }
+                finally { ui.setLoading(btn, false); }
+            });
         };
-        window.resolveFlag = async function(id) {
+
+        window.resolveFlag = async function(id, btn) {
+            ui.setLoading(btn, true);
             const t = tok();
-            const r = await fetch('/api/faculty/flag-student/' + id + '/resolve', { method: 'PATCH', headers: { 'Authorization': `Bearer ${t}` } });
-            if (r.ok) { showToast('Resolved', 'success'); loadClassroom(); }
+            try {
+                const r = await fetch('/api/faculty/flag-student/' + id + '/resolve', { method: 'PATCH', headers: { 'Authorization': `Bearer ${t}` } });
+                if (r.ok) { showToast('Resolved ✅', 'success'); loadClassroom(); }
+            } catch (e) { showToast('Failed to resolve', 'error'); }
+            finally { ui.setLoading(btn, false); }
         };
         function renderCal() {
             const y = calCursor.getFullYear();
@@ -448,7 +655,8 @@
             document.getElementById('def-notes').value = r.notes || '';
             document.getElementById('def-modal').style.display = 'flex';
         };
-        document.getElementById('def-save').addEventListener('click', async () => {
+        document.getElementById('def-save').addEventListener('click', async (e) => {
+            const btn = e.target;
             const t = tok();
             const eid = document.getElementById('def-edit-id').value;
             const body = {
@@ -457,18 +665,118 @@
                 panelMembers: document.getElementById('def-panel').value,
                 notes: document.getElementById('def-notes').value
             };
-            if (eid) {
-                const r = await fetch('/api/faculty/defense-schedule/' + eid, { method: 'PATCH', headers: { 'Authorization': `Bearer ${t}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-                if (r.ok) { showToast('Updated', 'success'); document.getElementById('def-modal').style.display = 'none'; loadClassroom(); }
-            } else {
-                const r = await fetch('/api/faculty/schedule-defense', {
-                    method: 'POST',
-                    headers: { 'Authorization': `Bearer ${t}`, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ studentId: document.getElementById('def-student').value, date: body.date, location: body.location, panelMembers: body.panelMembers, notes: body.notes })
-                });
-                if (r.ok) { showToast('Scheduled', 'success'); document.getElementById('def-modal').style.display = 'none'; loadClassroom(); }
-                else { const e = await r.json().catch(()=>({})); showToast(e.error || 'Failed', 'error'); }
+            if (!body.date) return showToast('Please select a date', 'error');
+
+            ui.setLoading(btn, true);
+            try {
+                if (eid) {
+                    const r = await fetch('/api/faculty/defense-schedule/' + eid, { method: 'PATCH', headers: { 'Authorization': `Bearer ${t}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+                    if (r.ok) { showToast('Updated ✅', 'success'); document.getElementById('def-modal').style.display = 'none'; loadClassroom(); }
+                } else {
+                    const r = await fetch('/api/faculty/schedule-defense', {
+                        method: 'POST',
+                        headers: { 'Authorization': `Bearer ${t}`, 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ studentId: document.getElementById('def-student').value, date: body.date, location: body.location, panelMembers: body.panelMembers, notes: body.notes })
+                    });
+                    if (r.ok) { showToast('Scheduled ✅', 'success'); document.getElementById('def-modal').style.display = 'none'; loadClassroom(); }
+                }
+            } catch (err) {
+                showToast('Action failed', 'error');
+            } finally {
+                ui.setLoading(btn, false);
             }
+        });
+
+        document.getElementById('ann-post')?.addEventListener('click', async (e) => {
+            const btn = e.target;
+            const title = document.getElementById('ann-title').value.trim();
+            const message = document.getElementById('ann-body').value.trim();
+            const target_role = document.getElementById('ann-role').value;
+            if (!title || !message) return showToast('Title and message required', 'error');
+
+            ui.setLoading(btn, true);
+            try {
+                const res = await fetch('/api/faculty/announcements', {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${tok()}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title, message, target_role })
+                });
+                if (res.ok) {
+                    showToast('Announcement posted ✅', 'success');
+                    document.getElementById('ann-title').value = '';
+                    document.getElementById('ann-body').value = '';
+                    loadClassroom();
+                }
+            } catch (err) {
+                showToast('Failed to post', 'error');
+            } finally {
+                ui.setLoading(btn, false);
+            }
+        });
+
+        document.getElementById('btn-export-zip')?.addEventListener('click', async (e) => {
+            const btn = e.target;
+            ui.setLoading(btn, true);
+            try {
+                const res = await fetch('/api/faculty/export-zip', { headers: { 'Authorization': `Bearer ${tok()}` } });
+                if (!res.ok) throw new Error('Export failed');
+                const blob = await res.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `PDRS_Export_${new Date().toISOString().slice(0,10)}.zip`;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                showToast('Export ready ✅', 'success');
+            } catch (err) {
+                showToast(err.message, 'error');
+            } finally {
+                ui.setLoading(btn, false);
+            }
+        });
+
+        document.getElementById('btn-qp')?.addEventListener('click', async (e) => {
+            const btn = e.target;
+            const ids = document.getElementById('qp-ids').value;
+            const n = document.getElementById('qp-n').value;
+            const diff = document.getElementById('qp-diff').value;
+            if (!ids) return showToast('Please enter student IDs', 'error');
+
+            ui.setLoading(btn, true);
+            try {
+                const res = await fetch('/api/faculty/generate-pdf', {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${tok()}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ studentIds: ids.split(',').map(x => x.trim()), count: n, difficulty: diff })
+                });
+                if (!res.ok) throw new Error('PDF generation failed');
+                const blob = await res.blob();
+                const url = window.URL.createObjectURL(blob);
+                window.open(url, '_blank');
+                showToast('PDF generated ✅', 'success');
+            } catch (err) {
+                showToast(err.message, 'error');
+            } finally {
+                ui.setLoading(btn, false);
+            }
+        });
+
+        // Initialize UI details on load
+        window.addEventListener('load', () => {
+            initCharCounter('ann-body', 500);
+            initCharCounter('qb-new-text', 1000);
+            initCharCounter('def-notes', 500);
+            
+            initSearchClear('student-search-container');
+            initSearchClear('qb-search-container');
+            
+            ui.initFormValidation('def-modal'); // Not a form but contains inputs
+            
+            // Add table hover/zebra classes
+            document.querySelectorAll('table').forEach(t => {
+                t.classList.add('table-hover', 'table-zebra', 'responsive-table');
+            });
         });
         document.getElementById('ann-post').addEventListener('click', async () => {
             const t = tok();

@@ -28,6 +28,7 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
+    if (event.request.url.startsWith('chrome-extension://')) return;
     const req = event.request;
     if (req.method !== 'GET') return;
     const url = new URL(req.url);

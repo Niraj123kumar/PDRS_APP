@@ -52,9 +52,15 @@
         .banner-denied { background: #fee2e2; color: var(--accent-red); border: 2px solid var(--accent-red); }
         .banner-welcome { background: #ecfdf5; color: var(--accent-emerald); border: 2px solid var(--accent-emerald); }
 
-        .status-badge-ai { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1.25rem; border-radius: 30px; font-weight: 700; font-size: 0.85rem; margin: 2rem auto; }
+        .status-badge-ai { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1.25rem; border-radius: 30px; font-weight: 700; font-size: 0.85rem; margin: 2rem auto; position: relative; }
         .badge-claude { background: #d1fae5; color: #065f46; border: 1px solid #34d399; }
         .badge-other { background: #ffedd5; color: #9a3412; border: 1px solid #fb923c; }
+        .badge-offline { background: #fee2e2; color: #991b1b; border: 1px solid #f87171; }
+        
+        .ai-pulse-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+        .badge-claude .ai-pulse-dot { background: #10b981; box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); animation: pulseStatus 2s infinite; }
+        .badge-other .ai-pulse-dot { background: #f59e0b; }
+        .badge-offline .ai-pulse-dot { background: #ef4444; }
 
         .role-badge { background: var(--primary-color); color: white; padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.75rem; font-weight: 800; text-transform: uppercase; }
 
@@ -99,8 +105,8 @@
             <h1>Master Your Project Defense</h1>
             <p>The ultimate AI-powered rehearsal system for students to practice, improve, and excel in technical project defenses.</p>
             
-            <div id="ai-status" class="status-badge-ai">
-                <span id="ai-provider-icon">●</span> AI Engine: <span id="ai-provider-name">Checking...</span>
+            <div id="ai-status" class="status-badge-ai badge-other">
+                <span class="ai-pulse-dot"></span> AI Engine: <span id="ai-provider-name">Checking...</span>
             </div>
 
             <!-- Role Chooser -->
@@ -191,21 +197,28 @@
             document.getElementById('nav-role-badge').textContent = user.role;
             document.getElementById('auth-buttons').style.display = 'none';
             
-            document.getElementById('continue-btn').onclick = () => {
+            document.getElementById('continue-btn').onclick = function() {
+                ui.setLoading(this, true, 'Redirecting...');
                 window.location.href = user.role === 'faculty' ? '/faculty.html' : '/student.html';
             };
         }
 
-        function selectRole(role) {
+        async function selectRole(role) {
+            const btn = event.currentTarget.querySelector('.btn');
+            ui.setLoading(btn, true, 'Loading...');
             localStorage.setItem('pdrs_role', role);
-            window.location.href = role === 'faculty' ? '/login.html' : '/register.html';
+            setTimeout(() => {
+                window.location.href = role === 'faculty' ? '/login.html' : '/register.html';
+            }, 300);
         }
 
         function switchRole() {
-            localStorage.removeItem('pdrs_token');
-            localStorage.removeItem('pdrs_user');
-            localStorage.removeItem('pdrs_role');
-            window.location.reload();
+            ui.showConfirm('Switch Role?', 'You will be logged out to switch your account role.', () => {
+                localStorage.removeItem('pdrs_token');
+                localStorage.removeItem('pdrs_user');
+                localStorage.removeItem('pdrs_role');
+                window.location.reload();
+            });
         }
 
         async function checkAIStatus() {
@@ -218,9 +231,12 @@
                 name.textContent = data.provider === 'claude' ? 'Claude 3.5 Sonnet' : 'Generic Engine';
                 badge.className = `status-badge-ai ${data.provider === 'claude' ? 'badge-claude' : 'badge-other'}`;
             } catch (err) {
+                const badge = document.getElementById('ai-status');
+                badge.className = 'status-badge-ai badge-offline';
                 document.getElementById('ai-provider-name').textContent = 'Offline';
             }
         }
+        checkAIStatus();
 
         function toggleTheme() {
             const isDark = document.documentElement.classList.toggle('dark-mode');
@@ -236,15 +252,17 @@
         }
 
         // Demo button
-        document.getElementById('demo-btn').onclick = async () => {
-            showToast('Loading demo session...', 'info');
+        document.getElementById('demo-btn').onclick = async function() {
+            ui.setLoading(this, true, '⚡ Loading Demo...');
             try {
                 const res = await fetch('/api/demo/student');
                 const data = await res.json();
                 auth.saveToken(data.token, data.user);
-                window.location.href = '/student.html';
+                showToast('Demo session ready! ✅', 'success');
+                setTimeout(() => window.location.href = '/student.html', 1000);
             } catch (err) {
-                showToast('Demo unavailable', 'error');
+                ui.setLoading(this, false);
+                showToast('Demo unavailable', 'error', () => window.location.reload());
             }
         };
 

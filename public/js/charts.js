@@ -1,11 +1,21 @@
+window._pdrsCharts = {};
+
 window.charts = {
+    _destroy(canvasId) {
+        if (window._pdrsCharts[canvasId]) {
+            window._pdrsCharts[canvasId].destroy();
+            delete window._pdrsCharts[canvasId];
+        }
+    },
+
     renderTrendLine(canvasId, labels, scores) {
+        this._destroy(canvasId);
         const ctx = document.getElementById(canvasId).getContext('2d');
         const gradient = ctx.createLinearGradient(0, 0, 0, 400);
         gradient.addColorStop(0, 'rgba(37, 99, 235, 0.2)');
         gradient.addColorStop(1, 'rgba(37, 99, 235, 0)');
 
-        return new Chart(ctx, {
+        window._pdrsCharts[canvasId] = new Chart(ctx, {
             type: 'line',
             data: {
                 labels: labels,
@@ -30,9 +40,11 @@ window.charts = {
                 plugins: { legend: { display: false } }
             }
         });
+        return window._pdrsCharts[canvasId];
     },
 
     renderCohortBarChart(canvasId, labels, values) {
+        this._destroy(canvasId);
         const ctx = document.getElementById(canvasId).getContext('2d');
         const colors = values.map(v => {
             if (v >= 80) return '#166534';
@@ -41,7 +53,7 @@ window.charts = {
             return '#ef4444';
         });
 
-        return new Chart(ctx, {
+        window._pdrsCharts[canvasId] = new Chart(ctx, {
             type: 'bar',
             data: {
                 labels: labels,
@@ -57,12 +69,14 @@ window.charts = {
                 scales: { y: { beginAtZero: true } }
             }
         });
+        return window._pdrsCharts[canvasId];
     },
 
     renderHeatmap(canvasId, data) {
+        this._destroy(canvasId);
         // Simple implementation using a bar chart with custom coloring for "heatmap" feel
         const ctx = document.getElementById(canvasId).getContext('2d');
-        return new Chart(ctx, {
+        window._pdrsCharts[canvasId] = new Chart(ctx, {
             type: 'bar',
             data: {
                 labels: data.map(d => d.label),
@@ -76,13 +90,15 @@ window.charts = {
                 plugins: { legend: { display: false } }
             }
         });
+        return window._pdrsCharts[canvasId];
     },
 
     renderScoreTimeline(canvasId, sessions) {
+        this._destroy(canvasId);
         const ctx = document.getElementById(canvasId).getContext('2d');
         const labels = sessions.map(s => new Date(s.created_at).toLocaleDateString()).reverse();
         
-        return new Chart(ctx, {
+        window._pdrsCharts[canvasId] = new Chart(ctx, {
             type: 'line',
             data: {
                 labels: labels,
@@ -98,15 +114,17 @@ window.charts = {
                 scales: { y: { min: 0, max: 100 } }
             }
         });
+        return window._pdrsCharts[canvasId];
     },
 
     /**
      * @param {string} axis - 'x' for horizontal bar
      */
     renderHorizontalBarChart(canvasId, labels, values, { axis = 'x', color = '#2563eb' } = {}) {
+        this._destroy(canvasId);
         const ctx = document.getElementById(canvasId).getContext('2d');
         const isY = axis === 'y';
-        return new Chart(ctx, {
+        window._pdrsCharts[canvasId] = new Chart(ctx, {
             type: 'bar',
             data: {
                 labels,
@@ -120,11 +138,13 @@ window.charts = {
                 scales: { x: { beginAtZero: true }, y: { beginAtZero: true } }
             }
         });
+        return window._pdrsCharts[canvasId];
     },
 
     renderHistogram(canvasId, bins, color = 'rgba(37, 99, 235, 0.6)') {
+        this._destroy(canvasId);
         const ctx = document.getElementById(canvasId).getContext('2d');
-        return new Chart(ctx, {
+        window._pdrsCharts[canvasId] = new Chart(ctx, {
             type: 'bar',
             data: {
                 labels: bins.map((b) => b.label),
@@ -137,11 +157,13 @@ window.charts = {
                     x: { title: { display: true, text: 'Duration (min)' } } }
             }
         });
+        return window._pdrsCharts[canvasId];
     },
 
     renderYoYLine(canvasId, labels, cur, prev) {
+        this._destroy(canvasId);
         const ctx = document.getElementById(canvasId).getContext('2d');
-        return new Chart(ctx, {
+        window._pdrsCharts[canvasId] = new Chart(ctx, {
             type: 'line',
             data: {
                 labels,
@@ -156,5 +178,6 @@ window.charts = {
                 scales: { y: { min: 0, max: 4, title: { display: true, text: 'Avg score (0-4)' } } }
             }
         });
+        return window._pdrsCharts[canvasId];
     }
 };

@@ -36,6 +36,9 @@ router.post('/', verifyToken, (req, res) => {
     }
 
     try {
+        const project = db.prepare('SELECT id FROM projects WHERE id = ? AND user_id = ?').get(project_id, user_id);
+        if (!project) return res.status(403).json({ error: "Project not yours" });
+
         const info = db.prepare("INSERT INTO sessions (user_id, project_id, status) VALUES (?, ?, 'active')").run(user_id, project_id);
         auditService.logAction(req.user.id, req.user.email, 'CREATE_SESSION', 'session', info.lastInsertRowid, req, { project_id });
         

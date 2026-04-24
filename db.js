@@ -5,7 +5,8 @@ const crypto = require('crypto');
 
 const db = new Database(path.join(__dirname, 'pdrs.db'));
 
-// Enable foreign keys
+// Performance and Integrity pragmas
+db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 
 // Initialize schema
@@ -386,6 +387,17 @@ CREATE TABLE IF NOT EXISTS scheduled_reminders (
 `;
 
 db.exec(schema);
+
+// Performance Indexes
+db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
+    CREATE INDEX IF NOT EXISTS idx_answers_session_id ON answers(session_id);
+    CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);
+    CREATE INDEX IF NOT EXISTS idx_audit_log_user_id ON audit_log(user_id);
+    CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_id ON refresh_tokens(user_id);
+    CREATE INDEX IF NOT EXISTS idx_flashcards_user_id ON flashcards(user_id);
+    CREATE INDEX IF NOT EXISTS idx_badges_user_id ON badges(user_id);
+`);
 
 db.exec(`
 CREATE TABLE IF NOT EXISTS departments (

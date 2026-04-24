@@ -2,6 +2,9 @@ const db = require('../db');
 
 function logAction(userId, email, action, resource, resourceId, req, details = {}) {
     try {
+        const sanitizedDetails = JSON.parse(
+            JSON.stringify(details || {}).replace(/<script\b[^>]*>([\s\S]*?)<\/script>/gim, "")
+        );
         db.prepare(`
             INSERT INTO audit_log (user_id, user_email, action, resource, resource_id, ip_address, user_agent, details_json)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -13,7 +16,7 @@ function logAction(userId, email, action, resource, resourceId, req, details = {
             resourceId ? String(resourceId) : null,
             req?.ip || null,
             req?.headers?.['user-agent'] || null,
-            JSON.stringify(details || {})
+            JSON.stringify(sanitizedDetails)
         );
     } catch (_) {
         // best effort logging

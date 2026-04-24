@@ -73,12 +73,25 @@ router.delete('/users/:id', (req, res) => {
     const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
     if (!user) return res.status(404).json({ error: 'User not found' });
     const tx = db.transaction(() => {
+        db.prepare('DELETE FROM goals WHERE user_id = ?').run(user.id);
+        db.prepare('DELETE FROM badges WHERE user_id = ?').run(user.id);
+        db.prepare('DELETE FROM flashcards WHERE user_id = ?').run(user.id);
+        db.prepare('DELETE FROM bookmarks WHERE user_id = ?').run(user.id);
+        db.prepare('DELETE FROM question_notes WHERE user_id = ?').run(user.id);
+        db.prepare('DELETE FROM user_goals WHERE user_id = ?').run(user.id);
+        db.prepare('DELETE FROM dimension_history WHERE user_id = ?').run(user.id);
+        db.prepare('DELETE FROM coaching_sessions WHERE user_id = ?').run(user.id);
+        db.prepare('DELETE FROM push_subscriptions WHERE user_id = ?').run(user.id);
+        db.prepare('DELETE FROM refresh_tokens WHERE user_id = ?').run(user.id);
+        db.prepare('DELETE FROM totp_secrets WHERE user_id = ?').run(user.id);
+        db.prepare('DELETE FROM user_devices WHERE user_id = ?').run(user.id);
+        db.prepare('DELETE FROM notifications WHERE user_id = ?').run(user.id);
         db.prepare('DELETE FROM answers WHERE session_id IN (SELECT id FROM sessions WHERE user_id = ?)').run(user.id);
         db.prepare('DELETE FROM sessions WHERE user_id = ?').run(user.id);
         db.prepare('DELETE FROM projects WHERE user_id = ?').run(user.id);
-        db.prepare('DELETE FROM notifications WHERE user_id = ?').run(user.id);
-        db.prepare('DELETE FROM user_devices WHERE user_id = ?').run(user.id);
-        db.prepare('DELETE FROM refresh_tokens WHERE user_id = ?').run(user.id);
+        db.prepare('DELETE FROM panel_attendance WHERE user_id = ?').run(user.id);
+        db.prepare('DELETE FROM peer_sessions WHERE student_a_id = ? OR student_b_id = ?').run(user.id, user.id);
+        db.prepare('DELETE FROM flagged_students WHERE student_id = ?').run(user.id);
         db.prepare('DELETE FROM otp_codes WHERE email = ?').run(user.email);
         db.prepare('DELETE FROM login_attempts WHERE user_id = ? OR email = ?').run(user.id, user.email);
         db.prepare('DELETE FROM suspicious_logins WHERE user_id = ? OR email = ?').run(user.id, user.email);

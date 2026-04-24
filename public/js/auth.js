@@ -21,7 +21,8 @@ const auth = {
             credentials: 'include'
         }).finally(() => {
             window.__pdrsAccessToken = null;
-            localStorage.removeItem('pdrs_user');
+            Object.keys(localStorage).filter(k => k.startsWith('pdrs_')) 
+                .forEach(k => localStorage.removeItem(k));
             window.location.href = '/login.html';
         });
     },

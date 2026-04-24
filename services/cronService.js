@@ -4,6 +4,7 @@ const emailService = require('./email');
 const pushService = require('./pushService');
 const smsService = require('./smsService');
 const backupService = require('./backupService');
+const pdfService = require('./pdfService');
 
 let started = false;
 
@@ -126,6 +127,16 @@ function startCronJobs() {
             console.log('Weekly JSON export completed');
         } catch (err) {
             console.error('Scheduled JSON export failed:', err);
+        }
+    });
+
+    // Cleanup old PDFs at 4am daily
+    cron.schedule('0 4 * * *', async () => {
+        try {
+            await pdfService.cleanupOldPdfs();
+            console.log('Daily PDF cleanup completed');
+        } catch (err) {
+            console.error('Scheduled PDF cleanup failed:', err);
         }
     });
 }

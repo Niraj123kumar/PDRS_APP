@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Defense Session - PDRS</title>
+    <link rel="icon" href="/favicon.ico" type="image/x-icon">
     <link rel="stylesheet" href="/css/style.css">
     <link rel="stylesheet" href="/css/animations.css">
     <style>
@@ -129,10 +130,22 @@
             <div class="progress-bar">
                 <div id="progress-fill" class="progress-fill" style="width: 0%"></div>
             </div>
+            <div id="timer-wrapper" style="text-align: center; margin-bottom: 1rem;">
+                <div class="timer-circle" style="position: relative; width: 60px; height: 60px; margin: 0 auto;">
+                    <svg width="60" height="60" viewBox="0 0 60 60">
+                        <circle cx="30" cy="30" r="28" fill="none" stroke="var(--border-color)" stroke-width="4"></circle>
+                        <circle id="timer-ring" cx="30" cy="30" r="28" fill="none" stroke="var(--primary-color)" stroke-width="4" stroke-dasharray="175.93" stroke-dashoffset="0" transform="rotate(-90 30 30)" style="transition: stroke-dashoffset 1s linear;"></circle>
+                    </svg>
+                    <div id="timer-text" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 0.8rem; font-weight: 800;">0:00</div>
+                </div>
+            </div>
             <div id="split-root" class="split-wrap">
                 <div class="split-left">
             <div id="question-card" class="card">
-                <div id="tier-badge" class="tier-badge">Fundamentals</div>
+                <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                    <div id="tier-badge" class="tier-badge">Fundamentals</div>
+                    <div id="hint-indicator" class="status-badge" style="display: none; background: #fffbeb; color: #b45309; border-color: #fcd34d;">💡 Hint Used</div>
+                </div>
                 <div id="question-text" class="question-text">Question will appear here...</div>
                 <details style="margin-bottom:0.75rem;">
                     <summary><strong>Model answer + key points</strong></summary>
@@ -153,11 +166,35 @@
                 <textarea id="question-note" style="min-height:70px;" placeholder="Add personal note for this question"></textarea>
                 
                 <div class="controls">
-                    <button id="voice-btn" class="btn voice-btn">🎤 Voice Answer</button>
+                    <button id="voice-btn" class="btn voice-btn"><span id="voice-indicator" class="voice-indicator" style="display:none;"></span>🎤 Voice Answer</button>
                     <button id="bookmark-btn" class="btn btn-secondary" style="width:auto;">Bookmark</button>
                     <button id="submit-answer" class="btn" style="flex-grow: 1;">Submit & Continue</button>
                 </div>
                 <div id="voice-analysis" class="text-muted" style="margin-top:0.75rem;"></div>
+            </div>
+            <!-- Score Reveal Overlay -->
+            <div id="score-reveal" class="card animate-up" style="display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 100; width: 90%; background: var(--card-bg); text-align: center; border: 2px solid var(--primary-color);">
+                <h3 style="margin-bottom: 1.5rem;">Question Scored!</h3>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem;">
+                    <div>
+                        <small class="text-muted">Clarity</small>
+                        <div id="score-clarity" style="font-size: 1.5rem; font-weight: 800; color: var(--primary-color);">0</div>
+                    </div>
+                    <div>
+                        <small class="text-muted">Reasoning</small>
+                        <div id="score-reasoning" style="font-size: 1.5rem; font-weight: 800; color: var(--primary-color);">0</div>
+                    </div>
+                    <div>
+                        <small class="text-muted">Depth</small>
+                        <div id="score-depth" style="font-size: 1.5rem; font-weight: 800; color: var(--primary-color);">0</div>
+                    </div>
+                    <div>
+                        <small class="text-muted">Confidence</small>
+                        <div id="score-confidence" style="font-size: 1.5rem; font-weight: 800; color: var(--primary-color);">0</div>
+                    </div>
+                </div>
+                <p id="score-feedback" class="text-muted" style="font-size: 0.9rem; margin-bottom: 1.5rem;"></p>
+                <button id="btn-next-question" class="btn">Next Question</button>
             </div>
                 </div>
             </div>

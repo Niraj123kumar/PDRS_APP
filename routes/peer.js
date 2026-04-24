@@ -117,11 +117,13 @@ router.post('/join/:roomCode', verifyToken, requireRole('student'), (req, res) =
         const ps = db.prepare('SELECT * FROM peer_sessions WHERE room_code = ?').get(roomCode);
         if (!ps) return res.status(404).json({ error: 'Room not found' });
         const uid = req.user.id;
-        if (ps.student_b_id && ps.student_b_id !== uid && ps.student_a_id !== uid) {
-            return res.status(400).json({ error: 'Room is full' });
-        }
+
         if (ps.student_a_id === uid) {
-            return res.json(serializeSession(ps, uid));
+            return res.status(400).json({ error: "Cannot join your own room" });
+        }
+
+        if (ps.student_b_id && ps.student_b_id !== uid) {
+            return res.status(400).json({ error: 'Room is full' });
         }
         if (!ps.student_b_id) {
             db.prepare("UPDATE peer_sessions SET student_b_id = ?, status = 'active' WHERE id = ?").run(uid, ps.id);

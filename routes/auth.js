@@ -73,6 +73,16 @@ router.post('/register', (req, res) => {
         return res.status(400).json({ error: 'All fields are required' });
     }
 
+    // Email validation
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return res.status(400).json({ error: 'Invalid email format' });
+    }
+
+    // Password validation: minimum 8 chars, 1 number, 1 uppercase
+    if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[a-zA-Z\d\W]{8,}$/.test(password)) {
+        return res.status(400).json({ error: 'Password must be at least 8 characters long and contain at least one uppercase letter and one number' });
+    }
+
     try {
         const password_hash = bcrypt.hashSync(password, 12);
         const info = db.prepare(`
@@ -334,15 +344,26 @@ router.delete('/account', verifyToken, (req, res) => {
         }
 
         const deleteAll = db.transaction(() => {
+            db.prepare('DELETE FROM goals WHERE user_id = ?').run(user.id);
+            db.prepare('DELETE FROM badges WHERE user_id = ?').run(user.id);
+            db.prepare('DELETE FROM flashcards WHERE user_id = ?').run(user.id);
+            db.prepare('DELETE FROM bookmarks WHERE user_id = ?').run(user.id);
+            db.prepare('DELETE FROM question_notes WHERE user_id = ?').run(user.id);
+            db.prepare('DELETE FROM user_goals WHERE user_id = ?').run(user.id);
+            db.prepare('DELETE FROM dimension_history WHERE user_id = ?').run(user.id);
+            db.prepare('DELETE FROM coaching_sessions WHERE user_id = ?').run(user.id);
+            db.prepare('DELETE FROM push_subscriptions WHERE user_id = ?').run(user.id);
+            db.prepare('DELETE FROM refresh_tokens WHERE user_id = ?').run(user.id);
+            db.prepare('DELETE FROM totp_secrets WHERE user_id = ?').run(user.id);
+            db.prepare('DELETE FROM user_devices WHERE user_id = ?').run(user.id);
+            db.prepare('DELETE FROM notifications WHERE user_id = ?').run(user.id);
             db.prepare('DELETE FROM answers WHERE session_id IN (SELECT id FROM sessions WHERE user_id = ?)').run(user.id);
-            db.prepare('DELETE FROM panel_sessions WHERE faculty_id = ? OR student_id = ?').run(user.id, user.id);
             db.prepare('DELETE FROM sessions WHERE user_id = ?').run(user.id);
             db.prepare('DELETE FROM projects WHERE user_id = ?').run(user.id);
-            db.prepare('DELETE FROM notifications WHERE user_id = ?').run(user.id);
-            db.prepare('DELETE FROM user_devices WHERE user_id = ?').run(user.id);
-            db.prepare('DELETE FROM refresh_tokens WHERE user_id = ?').run(user.id);
+            db.prepare('DELETE FROM panel_attendance WHERE user_id = ?').run(user.id);
+            db.prepare('DELETE FROM peer_sessions WHERE student_a_id = ? OR student_b_id = ?').run(user.id, user.id);
+            db.prepare('DELETE FROM flagged_students WHERE student_id = ?').run(user.id);
             db.prepare('DELETE FROM otp_codes WHERE email = ?').run(user.email);
-            db.prepare('DELETE FROM totp_secrets WHERE user_id = ?').run(user.id);
             db.prepare('DELETE FROM login_attempts WHERE email = ?').run(user.email);
             db.prepare('DELETE FROM users WHERE id = ?').run(user.id);
         });
@@ -447,7 +468,8 @@ router.get('/google/callback', (req, res, next) => {
             });
 
             if (user.googleAccessToken) {
-                db.prepare('UPDATE users SET calendar_token = ? WHERE id = ?').run(user.googleAccessToken, user.id);
+                const encryptedToken = encryptField(user.googleAccessToken);
+                db.prepare('UPDATE users SET calendar_token = ? WHERE id = ?').run(encryptedToken, user.id);
             }
             auditService.logAction(user.id, user.email, 'LOGIN', 'auth', null, req, { method: 'google' });
             ipDetection.checkSuspiciousLogin(user.id, getRequestIp(req), req).catch(() => {});

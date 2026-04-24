@@ -24,6 +24,12 @@ router.post('/', (req, res) => {
     if (!['clarity', 'reasoning', 'depth', 'confidence'].includes(dimension)) {
         return res.status(400).json({ error: 'Invalid dimension' });
     }
+
+    const existing = db.prepare('SELECT id FROM user_goals WHERE user_id = ? AND dimension = ? AND achieved = 0').get(req.user.id, dimension);
+    if (existing) {
+        return res.status(409).json({ error: 'Active goal already exists for this dimension' });
+    }
+
     const current = latestDimensionAverage(req.user.id, dimension);
     const achieved = current >= Number(targetScore);
     const info = db.prepare(`

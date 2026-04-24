@@ -1,6 +1,13 @@
 require('dotenv').config();
 const express = require('express');
 const http = require('http');
+
+process.on('uncaughtException', (err) => { 
+  console.error('Uncaught Exception:', err); 
+}); 
+process.on('unhandledRejection', (err) => { 
+  console.error('Unhandled Rejection:', err); 
+});
 const path = require('path');
 const helmet = require('helmet');
 const cors = require('cors');
@@ -31,6 +38,7 @@ const Sentry = require('@sentry/node');
 const packageJson = require('./package.json');
 const cacheService = require('./services/cacheService');
 const session = require('express-session');
+const RedisStore = require('connect-redis').default;
 const tokenService = require('./services/tokenService');
 const passport = require('./services/googleAuth');
 const { runPIIMigrationOnce } = require('./services/migrationService');
@@ -39,19 +47,17 @@ const { startCronJobs } = require('./services/cronService');
 const app = express();
 const server = http.createServer(app);
 
+app.use(cors({ 
+    origin: process.env.ALLOWED_ORIGINS?.split(',') || 'http://localhost:3000' 
+}));
+
 // Sentry Initialization
-if (process.env.SENTRY_DSN) {
-    Sentry.init({
-        dsn: process.env.SENTRY_DSN,
-        integrations: [
-            new Sentry.Integrations.Http({ tracing: true }),
-            new Sentry.Integrations.Express({ app }),
-        ],
-        tracesSampleRate: 0.1,
-        environment: process.env.NODE_ENV || 'development'
+if (process.env.SENTRY_DSN && process.env.SENTRY_DSN !== 'from_sentry_dashboard') {
+    Sentry.init({ 
+        dsn: process.env.SENTRY_DSN, 
+        tracesSampleRate: 0.1, 
+        environment: process.env.NODE_ENV || 'development' 
     });
-    app.use(Sentry.Handlers.requestHandler());
-    app.use(Sentry.Handlers.tracingHandler());
 }
 
 const port = process.env.PORT || 3000;
@@ -67,7 +73,8 @@ app.use(helmet({
     contentSecurityPolicy: {
         directives: {
             defaultSrc: ["'self'"],
-            scriptSrc: ["'self'", 'https://cdnjs.cloudflare.com'],
+            scriptSrc: ["'self'", 'https://cdnjs.cloudflare.com', "'unsafe-inline'"],
+            scriptSrcAttr: ["'unsafe-inline'"],
             styleSrc: ["'self'", "'unsafe-inline'"],
             connectSrc: ["'self'", 'wss:', 'ws:']
         }
@@ -105,11 +112,26 @@ const adminLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 30, standardHead
 app.use(express.json());
 app.use(compression());
 app.use(cookieParser());
-app.use(session({
+
+const sessionConfig = {
     secret: process.env.SESSION_SECRET || 'pdrs_session_secret_dev',
     resave: false,
-    saveUninitialized: false
-}));
+    saveUninitialized: false,
+    cookie: {
+        secure: process.env.NODE_ENV === 'production',
+        httpOnly: true,
+        maxAge: 24 * 60 * 60 * 1000 // 24 hours
+    }
+};
+
+if (cacheService.isRedisConnected) {
+    sessionConfig.store = new RedisStore({
+        client: cacheService.redis,
+        prefix: "pdrs_sess:"
+    });
+}
+
+app.use(session(sessionConfig));
 app.use(passport.initialize());
 app.use(passport.session());
 app.use(express.static(path.join(__dirname, 'public')));
@@ -234,8 +256,8 @@ app.use('/api/templates', templatesRoutes);
 app.use('/api/integrations', integrationsRoutes);
 
 // Sentry Error Handler
-if (process.env.SENTRY_DSN) {
-    app.use(Sentry.Handlers.errorHandler());
+if (process.env.SENTRY_DSN && process.env.SENTRY_DSN !== 'from_sentry_dashboard') {
+    Sentry.setupExpressErrorHandler(app);
 }
 
 // Root redirect
