@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PDRS - Project Defense Rehearsal System</title>
+    <link rel="icon" type="image/png" href="/img/favicon.png">
     <link rel="stylesheet" href="/css/style.css">
     <link rel="stylesheet" href="/css/animations.css">
     <style>
@@ -46,7 +47,6 @@
         .step-num { font-size: 4rem; font-weight: 900; opacity: 0.1; position: absolute; top: -20px; left: 50%; transform: translateX(-50%); }
 
         .theme-toggle { cursor: pointer; font-size: 1.25rem; background: none; border: none; padding: 0.5rem; }
-        .theme-toggle-fixed { position: fixed; bottom: 2rem; right: 2rem; background: var(--card-bg); box-shadow: var(--shadow); border-radius: 50%; width: 50px; height: 50px; display: flex; align-items: center; justify-content: center; z-index: 1000; border: 1px solid var(--border-color); }
 
         .banner { padding: 1rem; border-radius: var(--radius); margin-bottom: 2rem; text-align: center; font-weight: 600; display: none; }
         .banner-denied { background: #fee2e2; color: var(--accent-red); border: 2px solid var(--accent-red); }
@@ -111,8 +111,9 @@
 
             <!-- Role Chooser -->
             <div id="role-chooser-section">
+                <div id="role-chooser-loading" style="display: none; margin: 4rem auto; max-width: 900px;"></div>
                 <div class="role-chooser">
-                    <div class="role-card role-student" onclick="selectRole('student')">
+                    <div class="role-card role-student" onclick="selectRole('student', event)">
                         <div class="role-icon">🎓</div>
                         <h3>I'm a Student</h3>
                         <ul class="role-features">
@@ -126,7 +127,7 @@
                         <button class="btn" style="background: var(--accent-emerald);">Enter Student Portal</button>
                     </div>
 
-                    <div class="role-card role-faculty" onclick="selectRole('faculty')">
+                    <div class="role-card role-faculty" onclick="selectRole('faculty', event)">
                         <div class="role-icon">🧑‍🏫</div>
                         <h3>I'm Faculty</h3>
                         <ul class="role-features">
@@ -146,7 +147,7 @@
                 </button>
             </div>
 
-            <div class="feature-grid">
+            <div class="feature-grid" id="feature-grid">
                 <div class="feature-card"><h3>📋 Submit Project</h3><p>Upload your project details and tech stack.</p></div>
                 <div class="feature-card"><h3>🤖 AI Interrogation</h3><p>Get grilled by our tiered AI panel.</p></div>
                 <div class="feature-card"><h3>📊 Scored & Tracked</h3><p>Instant feedback across 4 dimensions.</p></div>
@@ -154,6 +155,7 @@
                 <div class="feature-card"><h3>🎙 Live Panel Sessions</h3><p>Real-time mock defense with faculty.</p></div>
                 <div class="feature-card"><h3>📈 Faculty Analytics</h3><p>Comprehensive cohort tracking and insights.</p></div>
             </div>
+            <div id="feature-grid-loading" style="display: none; margin-top: 4rem;"></div>
         </div>
     </header>
 
@@ -189,6 +191,31 @@
         // Check for returning user
         const token = auth.getToken();
         const user = auth.getUser();
+
+        // Initial loading state
+        document.querySelector('.role-chooser').style.display = 'none';
+        document.getElementById('feature-grid').style.display = 'none';
+        
+        ui.showSkeleton('role-chooser-loading', 2, 'card');
+        document.getElementById('role-chooser-loading').style.display = 'grid';
+        document.getElementById('role-chooser-loading').style.gridTemplateColumns = window.innerWidth > 768 ? 'repeat(2, 1fr)' : '1fr';
+        document.getElementById('role-chooser-loading').style.gap = '2rem';
+
+        ui.showSkeleton('feature-grid-loading', 6, 'card');
+        document.getElementById('feature-grid-loading').style.display = 'grid';
+        document.getElementById('feature-grid-loading').style.gridTemplateColumns = window.innerWidth > 768 ? 'repeat(3, 1fr)' : '1fr';
+        document.getElementById('feature-grid-loading').style.gap = '2rem';
+
+        setTimeout(() => {
+            document.getElementById('role-chooser-loading').style.display = 'none';
+            document.getElementById('feature-grid-loading').style.display = 'none';
+            
+            if (!(token && user)) {
+                document.querySelector('.role-chooser').style.display = 'grid';
+            }
+            document.getElementById('feature-grid').style.display = 'grid';
+        }, 800);
+
         if (token && user) {
             document.getElementById('role-chooser-section').style.display = 'none';
             document.getElementById('welcome-banner').style.display = 'block';
@@ -203,7 +230,7 @@
             };
         }
 
-        async function selectRole(role) {
+        async function selectRole(role, event) {
             const btn = event.currentTarget.querySelector('.btn');
             ui.setLoading(btn, true, 'Loading...');
             localStorage.setItem('pdrs_role', role);

@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Defense History - PDRS</title>
+    <link rel="icon" type="image/png" href="/img/favicon.png">
     <link rel="stylesheet" href="/css/style.css">
     <link rel="stylesheet" href="/css/animations.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
@@ -59,36 +60,43 @@
         </div>
 
         <div id="history-panel-sessions">
-        <div style="margin-bottom:1rem; text-align:right;">
-            <button id="export-progress-btn" class="btn" style="width:auto;">Export Full Progress Report</button>
+        <div style="margin-bottom:1.5rem; display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; justify-content: space-between;">
+            <div style="display: flex; gap: 0.5rem; flex: 1; min-width: 300px;">
+                <input type="text" id="session-search" placeholder="Search project title..." style="flex: 1; padding: 0.5rem; border-radius: var(--radius); border: 1px solid var(--border-color);">
+                <select id="status-filter" style="padding: 0.5rem; border-radius: var(--radius); border: 1px solid var(--border-color); background: var(--card-bg); color: var(--text-color);">
+                    <option value="all">All Status</option>
+                    <option value="completed">Completed</option>
+                    <option value="in_progress">In Progress</option>
+                </select>
+                <select id="sort-filter" style="padding: 0.5rem; border-radius: var(--radius); border: 1px solid var(--border-color); background: var(--card-bg); color: var(--text-color);">
+                    <option value="date-desc">Newest First</option>
+                    <option value="date-asc">Oldest First</option>
+                    <option value="score-desc">Highest Score</option>
+                    <option value="score-asc">Lowest Score</option>
+                </select>
+            </div>
+            <div style="display: flex; gap: 1rem; align-items: center;">
+                <button id="export-progress-btn" class="btn" style="width:auto; padding: 0.5rem 1rem;">Export Report</button>
+            </div>
         </div>
         <div class="chart-card">
             <canvas id="trendChart"></canvas>
         </div>
 
-        <div id="loading-history">
-            <div class="skeleton" style="height: 60px; width: 100%; margin-bottom: 0.5rem;"></div>
-            <div class="skeleton" style="height: 60px; width: 100%; margin-bottom: 0.5rem;"></div>
-            <div class="skeleton" style="height: 60px; width: 100%; margin-bottom: 0.5rem;"></div>
-        </div>
+        <div id="loading-history" style="display: none;"></div>
 
         <div id="session-list" style="display: none;"></div>
 
-        <div id="empty-history" class="empty-state" style="display: none;">
-            <h3>No history found</h3>
-            <p style="color: var(--text-muted); margin: 1rem 0 2rem;">Complete your first defense rehearsal to see your progress here.</p>
-            <button class="btn" style="width: auto;" onclick="window.location.href='/session.html'">Start Rehearsal</button>
-        </div>
+        <div id="pagination-container" style="display: flex; justify-content: center; gap: 0.5rem; margin-top: 2rem;"></div>
+
+        <div id="empty-history" style="display: none;"></div>
         </div>
 
         <div id="history-panel-templates" style="display: none;">
             <p class="text-muted" style="margin-bottom:1rem; font-size:0.95rem;">Saved question sets for quick rehearsals. Using a template skips AI question generation.</p>
-            <div id="loading-templates" style="display: none; margin-bottom: 1rem;" class="text-muted">Loading templates…</div>
+            <div id="loading-templates" style="display: none;"></div>
             <div id="templates-list"></div>
-            <div id="empty-templates" class="empty-state" style="display: none;">
-                <h3>No templates yet</h3>
-                <p style="color: var(--text-muted); margin: 1rem 0 2rem;">Create a template from a completed session in the Sessions tab.</p>
-            </div>
+            <div id="empty-templates" style="display: none;"></div>
         </div>
     </div>
 

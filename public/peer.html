@@ -4,68 +4,115 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Peer Practice - PDRS</title>
+    <link rel="icon" type="image/png" href="/img/favicon.png">
     <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/animations.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
     <style>
-        .room-setup { max-width: 480px; margin: 2rem auto; }
-        .session-view { max-width: 900px; margin: 0 auto; }
-        .peer-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
-        @media (max-width: 700px) { .peer-grid { grid-template-columns: 1fr; } }
-        textarea.ans { width: 100%; min-height: 120px; padding: 0.75rem; }
-        .compare-side { background: #f8fafc; border-radius: 8px; padding: 1rem; border: 1px solid #e2e8f0; }
-        .compare-side.mine { border-color: #2563eb; }
+        .room-setup { max-width: 500px; margin: 3rem auto; background: var(--card-bg); padding: 2.5rem; border-radius: var(--radius); border: 1px solid var(--border-color); box-shadow: var(--shadow); }
+        .session-view { max-width: 1000px; margin: 0 auto; padding-bottom: 3rem; }
+        .peer-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+        @media (max-width: 768px) { .peer-grid { grid-template-columns: 1fr; } }
+        textarea.ans { width: 100%; min-height: 150px; padding: 1rem; background: var(--bg-color); color: var(--text-color); border: 1px solid var(--border-color); border-radius: 8px; font-size: 1rem; resize: vertical; transition: border-color 0.2s, box-shadow 0.2s; }
+        textarea.ans:focus { border-color: var(--primary-color); box-shadow: 0 0 0 3px var(--primary-glow); outline: none; }
+        .compare-side { background: var(--card-bg); border-radius: 12px; padding: 1.5rem; border: 1px solid var(--border-color); box-shadow: var(--shadow); position: relative; transition: transform 0.2s; }
+        .compare-side.mine { border-color: var(--primary-color); border-width: 2px; }
+        .waiting-pulse { display: inline-block; width: 10px; height: 10px; background: var(--primary-color); border-radius: 50%; margin-right: 8px; animation: pulse-blue 1.5s infinite; }
+        @keyframes pulse-blue { 0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.7); } 70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(37, 99, 235, 0); } 100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(37, 99, 235, 0); } }
+        .score-row { display: flex; justify-content: space-between; margin-bottom: 0.5rem; font-size: 0.9rem; }
+        .score-val { font-weight: 700; color: var(--primary-color); }
     </style>
+    <script>
+        const savedTheme = localStorage.getItem('pdrs_theme');
+        if (savedTheme === 'dark') document.documentElement.classList.add('dark-mode');
+    </script>
 </head>
-<body>
+<body class="animate-up">
+    <button onclick="toggleTheme()" class="theme-toggle-fixed" id="theme-btn">🌙</button>
     <nav class="navbar">
-        <a href="/student.html" style="font-weight: 800; color: var(--primary-color);">← Back</a>
-        <span id="me-name" style="font-weight: 600;"></span>
+        <div style="display: flex; align-items: center; gap: 1rem;">
+            <a href="#" onclick="handleBack(event)" style="font-weight: 800; color: var(--primary-color); display: flex; align-items: center; gap: 0.5rem; text-decoration: none;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+                Back
+            </a>
+            <span id="me-name" style="font-weight: 600; color: var(--text-color);"></span>
+        </div>
     </nav>
     <div class="container">
         <div id="lobby" class="room-setup">
-            <h1>Peer practice</h1>
-            <p class="text-muted">Practice with a classmate. Create a room and share the link, or join with a code.</p>
-            <button type="button" class="btn" id="btn-create">Create practice room</button>
-            <hr style="margin: 1.5rem 0;">
-            <div>
-                <input type="text" id="join-code" placeholder="6-char room code" maxlength="6" style="text-transform:uppercase;padding:0.5rem;width: 160px;" />
-                <button type="button" class="btn" id="btn-join" style="width:auto">Join</button>
+            <h1 style="font-weight: 800; margin-bottom: 0.5rem;">Peer Practice</h1>
+            <p class="text-muted" style="margin-bottom: 2rem;">Practice with a classmate. Create a room and share the link, or join with a code.</p>
+            <button type="button" class="btn" id="btn-create">Create Practice Room</button>
+            <div style="margin: 2rem 0; display: flex; align-items: center; gap: 1rem;">
+                <hr style="flex: 1; border: 0; border-top: 1px solid var(--border-color);">
+                <span style="color: var(--text-muted); font-size: 0.8rem; font-weight: 700;">OR JOIN ROOM</span>
+                <hr style="flex: 1; border: 0; border-top: 1px solid var(--border-color);">
+            </div>
+            <div style="display: flex; gap: 0.75rem;">
+                <input type="text" id="join-code" placeholder="ROOM CODE" maxlength="6" style="text-transform:uppercase; font-weight: 700; text-align: center; letter-spacing: 2px;" />
+                <button type="button" class="btn" id="btn-join" style="width:auto; padding: 0 1.5rem;">Join</button>
             </div>
         </div>
 
+        <div id="peer-loading" style="display: none; margin-top: 3rem;"></div>
+
         <div id="session" class="session-view" style="display:none">
-            <p id="room-label" class="text-muted"></p>
-            <h2 id="names-row"></h2>
-            <p id="status-msg"></p>
-            <div id="ready-block" style="display:none">
-                <p>When both are ready, the session starts.</p>
-                <button type="button" class="btn" id="btn-ready">I’m ready</button>
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 2rem;">
+                <div>
+                    <h2 id="names-row" style="font-weight: 800; margin-bottom: 0.25rem;"></h2>
+                    <p id="room-label" class="badge" style="background: var(--primary-glow); color: var(--primary-color); border: 1px solid var(--primary-color);"></p>
+                </div>
+                <div id="status-container" style="text-align: right;">
+                    <p id="status-msg" style="font-weight: 600; color: var(--primary-color);"></p>
+                </div>
             </div>
-            <div id="q-block" style="display:none">
-                <div class="card" style="padding:1rem;margin-bottom:1rem">
-                    <span id="q-badge" class="badge">Q</span>
-                    <p id="q-text" style="font-size:1.1rem;margin-top:0.5rem"></p>
+
+            <div id="ready-block" class="card" style="display:none; text-align: center; padding: 2rem; border-color: var(--primary-color);">
+                <div class="waiting-pulse"></div>
+                <p style="font-weight: 600; margin-bottom: 1.5rem;">When both are ready, the session starts.</p>
+                <button type="button" class="btn" id="btn-ready" style="max-width: 200px; margin: 0 auto;">I’m Ready</button>
+            </div>
+
+            <div id="q-block" style="display:none" class="animate-up">
+                <div class="card" style="padding:1.5rem; margin-bottom:2rem; border-left: 5px solid var(--primary-color);">
+                    <span id="q-badge" class="badge" style="background: var(--primary-color); color: white; margin-bottom: 0.75rem;">Q1</span>
+                    <p id="q-text" style="font-size:1.25rem; font-weight: 700; color: var(--text-color);"></p>
                 </div>
                 <div class="peer-grid">
                     <div class="compare-side mine">
-                        <strong id="label-a">You</strong>
-                        <textarea class="ans" id="ans-me" placeholder="Your answer..."></textarea>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                            <strong id="label-a" style="font-size: 1.1rem;">You</strong>
+                            <span class="badge" style="background: var(--primary-glow); color: var(--primary-color);">OWN ANSWER</span>
+                        </div>
+                        <textarea class="ans" id="ans-me" placeholder="Type your answer here..."></textarea>
                     </div>
                     <div class="compare-side">
-                        <strong id="label-b">Peer</strong>
-                        <textarea class="ans" id="ans-peer" readonly placeholder="Peer answer appears after they submit..."></textarea>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                            <strong id="label-b" style="font-size: 1.1rem;">Peer</strong>
+                            <span id="peer-status-badge" class="badge" style="background: var(--bg-color); color: var(--text-muted);">WAITING...</span>
+                        </div>
+                        <textarea class="ans" id="ans-peer" readonly placeholder="Peer's answer will appear here once they submit..."></textarea>
                     </div>
                 </div>
-                <button type="button" class="btn" id="btn-submit" style="margin-top:1rem">Submit answer</button>
-            </div>
-            <div id="scores-block" style="display:none; margin-top:1rem">
-                <h3>AI scores (this question)</h3>
-                <div class="peer-grid" id="scores-compare"></div>
-                <div class="peer-grid" style="margin-top:1rem">
-                    <div><label>Comment for peer</label><textarea id="comment-me" class="ans" rows="2"></textarea></div>
+                <div style="display: flex; justify-content: center; margin-top: 2rem;">
+                    <button type="button" class="btn" id="btn-submit" style="max-width: 300px;">Submit Answer</button>
                 </div>
-                <button type="button" class="btn" id="btn-comment" style="width:auto">Send comment</button>
-                <button type="button" class="btn btn-secondary" id="btn-next" style="margin-top:0.5rem">Next question</button>
+            </div>
+
+            <div id="scores-block" style="display:none; margin-top:2rem" class="animate-up">
+                <h3 style="font-weight: 800; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.5rem;">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary-color);"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                    AI Evaluation
+                </h3>
+                <div class="peer-grid" id="scores-compare"></div>
+                <div class="card" style="margin-top:2rem; padding: 1.5rem;">
+                    <label style="font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 0.75rem; text-transform: uppercase; font-size: 0.8rem;">Leave feedback for your partner</label>
+                    <textarea id="comment-me" class="ans" style="min-height: 80px;" placeholder="What did they do well? What could be improved?"></textarea>
+                    <div style="display: flex; gap: 1rem; margin-top: 1.5rem;">
+                        <button type="button" class="btn" id="btn-comment" style="width:auto; padding: 0 2rem;">Send Feedback</button>
+                        <button type="button" class="btn btn-secondary" id="btn-next" style="width:auto; padding: 0 2rem;">Next Question</button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -78,13 +125,16 @@
         document.getElementById('me-name').textContent = u.name || u.email;
         const params = new URLSearchParams(window.location.search);
         let room = (params.get('room') || '').trim().toUpperCase();
-        let pollTimer;
         const token = () => auth.getToken();
         const headers = { 'Authorization': `Bearer ${token()}`, 'Content-Type': 'application/json' };
         let sessionData = null;
         let myIsA = true;
         let currentIdx = 0;
         let ws;
+
+        // Initialize Character Counters
+        ui.initCharCounter('ans-me', 'ans-me-counter', 1000);
+        ui.initCharCounter('comment-me', 'comment-me-counter', 500);
 
         function connectWs() {
             if (!room) return;
@@ -105,13 +155,48 @@
             };
         }
 
+        async function handleBack(event) {
+            event.preventDefault();
+            if (sessionData && !sessionData.completed) {
+                ui.showConfirm(
+                    'Leave Session?',
+                    'Are you sure you want to leave this peer practice session? Your progress will be saved but the session will be paused.',
+                    () => window.location.href = '/student.html'
+                );
+            } else {
+                window.location.href = '/student.html';
+            }
+        }
+
         async function loadSession() {
-            const r = await fetch('/api/peer/' + encodeURIComponent(room), { headers: { 'Authorization': `Bearer ${token()}` } });
-            if (!r.ok) { showToast('Session error', 'error'); return; }
-            sessionData = await r.json();
-            myIsA = sessionData.isViewerA;
-            currentIdx = sessionData.currentQuestionIndex || 0;
-            render();
+            const loading = document.getElementById('peer-loading');
+            const sessionView = document.getElementById('session');
+            const lobby = document.getElementById('lobby');
+
+            if (!sessionData) {
+                lobby.style.display = 'none';
+                loading.style.display = 'block';
+                ui.showSkeleton('peer-loading', 3, 'card');
+            }
+
+            try {
+                const r = await fetch('/api/peer/' + encodeURIComponent(room), { headers: { 'Authorization': `Bearer ${token()}` } });
+                if (!r.ok) {
+                    const error = await r.json();
+                    throw new Error(error.error || 'Failed to load session');
+                }
+                sessionData = await r.json();
+                myIsA = sessionData.isViewerA;
+                currentIdx = sessionData.currentQuestionIndex || 0;
+                render();
+            } catch (err) {
+                showToast(err.message, 'error');
+                lobby.style.display = 'block';
+                window.history.replaceState({}, '', '/peer.html');
+                room = null;
+            } finally {
+                loading.style.display = 'none';
+            }
         }
 
         function render() {
@@ -119,109 +204,242 @@
             const qs = sessionData.questions || [];
             document.getElementById('lobby').style.display = 'none';
             document.getElementById('session').style.display = 'block';
-            document.getElementById('room-label').textContent = 'Room: ' + room;
-            document.getElementById('names-row').textContent = sessionData.nameA + ' · vs · ' + (sessionData.nameB || 'Waiting for peer...');
+            document.getElementById('room-label').textContent = 'ROOM CODE: ' + room;
+            document.getElementById('names-row').textContent = sessionData.nameA + ' vs ' + (sessionData.nameB || 'Waiting...');
+            
             const bHere = sessionData.studentB;
             if (!bHere) {
                 document.getElementById('ready-block').style.display = 'none';
                 document.getElementById('q-block').style.display = 'none';
-                document.getElementById('status-msg').textContent = 'Share this URL with your partner: ' + location.href;
+                document.getElementById('status-msg').innerHTML = `<span class="waiting-pulse"></span> Waiting for partner to join...<br><small style="color:var(--text-muted)">Share code: ${room}</small>`;
                 return;
             }
-            document.getElementById('ready-block').style.display = (sessionData.readyA && sessionData.readyB) ? 'none' : 'block';
-            document.getElementById('q-block').style.display = (sessionData.readyA && sessionData.readyB) ? 'block' : 'none';
+
+            const bothReady = sessionData.readyA && sessionData.readyB;
+            document.getElementById('ready-block').style.display = bothReady ? 'none' : 'block';
+            document.getElementById('q-block').style.display = bothReady ? 'block' : 'none';
             document.getElementById('status-msg').textContent = '';
-            const q = qs[currentIdx];
-            if (!q) { document.getElementById('q-text').textContent = 'Session complete!'; return; }
-            document.getElementById('q-badge').textContent = 'Q' + (currentIdx + 1) + ' · Tier ' + q.tier;
-            document.getElementById('q-text').textContent = q.question;
-            document.getElementById('label-a').textContent = sessionData.nameA;
-            document.getElementById('label-b').textContent = sessionData.nameB;
-            const slot = (sessionData.answers && sessionData.answers[String(currentIdx)]) || {};
-            if (myIsA) {
-                document.getElementById('ans-me').value = slot.a || '';
-                document.getElementById('ans-peer').value = slot.b || '';
+
+            // Ready state button
+            const readyBtn = document.getElementById('btn-ready');
+            const amIReady = myIsA ? sessionData.readyA : sessionData.readyB;
+            if (amIReady) {
+                readyBtn.textContent = 'Ready! Waiting for peer...';
+                readyBtn.disabled = true;
+                readyBtn.classList.add('btn-secondary');
             } else {
-                document.getElementById('ans-me').value = slot.b || '';
-                document.getElementById('ans-peer').value = slot.a || '';
+                readyBtn.textContent = 'I’m Ready';
+                readyBtn.disabled = false;
+                readyBtn.classList.remove('btn-secondary');
             }
+
+            const q = qs[currentIdx];
+            if (!q) { 
+                ui.showEmptyState('session', '🎉', 'Session Complete!', "You've finished all questions in this peer practice session.", 'Return to Dashboard', '/student.html');
+                document.getElementById('scores-block').style.display = 'none';
+                return;
+            }
+
+            document.getElementById('q-badge').textContent = 'Question ' + (currentIdx + 1) + ' · Tier ' + q.tier;
+            document.getElementById('q-text').textContent = q.question;
+            document.getElementById('label-a').textContent = myIsA ? 'You' : sessionData.nameA;
+            document.getElementById('label-b').textContent = myIsA ? sessionData.nameB : 'You';
+            
+            const slot = (sessionData.answers && sessionData.answers[String(currentIdx)]) || {};
+            const myAnsField = document.getElementById('ans-me');
+            const peerAnsField = document.getElementById('ans-peer');
+            const submitBtn = document.getElementById('btn-submit');
+            const peerStatusBadge = document.getElementById('peer-status-badge');
+
+            if (myIsA) {
+                myAnsField.value = slot.a || '';
+                peerAnsField.value = slot.b || '';
+                if (slot.submittedA) {
+                    myAnsField.readOnly = true;
+                    submitBtn.disabled = true;
+                    submitBtn.textContent = 'Answer Submitted';
+                } else {
+                    myAnsField.readOnly = false;
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Submit Answer';
+                }
+                if (slot.submittedB) {
+                    peerStatusBadge.textContent = 'SUBMITTED';
+                    peerStatusBadge.style.background = 'var(--success-color)';
+                    peerStatusBadge.style.color = 'white';
+                } else {
+                    peerStatusBadge.textContent = 'THINKING...';
+                    peerStatusBadge.style.background = 'var(--bg-color)';
+                    peerStatusBadge.style.color = 'var(--text-muted)';
+                }
+            } else {
+                myAnsField.value = slot.b || '';
+                peerAnsField.value = slot.a || '';
+                if (slot.submittedB) {
+                    myAnsField.readOnly = true;
+                    submitBtn.disabled = true;
+                    submitBtn.textContent = 'Answer Submitted';
+                } else {
+                    myAnsField.readOnly = false;
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Submit Answer';
+                }
+                if (slot.submittedA) {
+                    peerStatusBadge.textContent = 'SUBMITTED';
+                    peerStatusBadge.style.background = 'var(--success-color)';
+                    peerStatusBadge.style.color = 'white';
+                } else {
+                    peerStatusBadge.textContent = 'THINKING...';
+                    peerStatusBadge.style.background = 'var(--bg-color)';
+                    peerStatusBadge.style.color = 'var(--text-muted)';
+                }
+            }
+
             const showScores = slot.scored && slot.scoreA && slot.scoreB;
             document.getElementById('scores-block').style.display = showScores ? 'block' : 'none';
             if (showScores) {
                 const a = slot.scoreA, b = slot.scoreB;
-                document.getElementById('scores-compare').innerHTML = `
-                    <div class="compare-side"><strong>${sessionData.nameA}</strong>
-                        <p>C ${Math.round(a.clarity)} R ${Math.round(a.reasoning)} D ${Math.round(a.depth)} F ${Math.round(a.confidence)}</p>
-                        <small>${(a.feedback || '').replace(/</g,'&lt;')}</small></div>
-                    <div class="compare-side"><strong>${sessionData.nameB}</strong>
-                        <p>C ${Math.round(b.clarity)} R ${Math.round(b.reasoning)} D ${Math.round(b.depth)} F ${Math.round(b.confidence)}</p>
-                        <small>${(b.feedback || '').replace(/</g,'&lt;')}</small></div>`;
+                const renderScoreCard = (name, s, isMe) => `
+                    <div class="compare-side ${isMe ? 'mine' : ''}">
+                        <strong style="display:block; margin-bottom:1rem; font-size:1.1rem;">${name}</strong>
+                        <div class="score-row"><span>Clarity</span><span class="score-val">${Math.round(s.clarity)}%</span></div>
+                        <div class="score-row"><span>Reasoning</span><span class="score-val">${Math.round(s.reasoning)}%</span></div>
+                        <div class="score-row"><span>Depth</span><span class="score-val">${Math.round(s.depth)}%</span></div>
+                        <div class="score-row"><span>Confidence</span><span class="score-val">${Math.round(s.confidence)}%</span></div>
+                        <hr style="margin:1rem 0; border:0; border-top:1px solid var(--border-color);">
+                        <p style="font-style:italic; font-size:0.9rem; color:var(--text-muted); line-height:1.5;">"${(s.feedback || '').replace(/</g,'&lt;')}"</p>
+                    </div>`;
+                
+                document.getElementById('scores-compare').innerHTML = myIsA ? 
+                    renderScoreCard(sessionData.nameA, a, true) + renderScoreCard(sessionData.nameB, b, false) :
+                    renderScoreCard(sessionData.nameA, a, false) + renderScoreCard(sessionData.nameB, b, true);
             }
         }
 
-        document.getElementById('btn-create').onclick = async () => {
-            const r = await fetch('/api/peer/create', { method: 'POST', headers: headers });
-            const d = await r.json();
-            if (!r.ok) { showToast(d.error || 'Failed', 'error'); return; }
-            room = d.roomCode;
-            window.history.replaceState({}, '', '/peer.html?room=' + room);
-            connectWs();
-            await loadSession();
+        document.getElementById('btn-create').onclick = async function() {
+            ui.setLoading(this, true);
+            try {
+                const r = await fetch('/api/peer/create', { method: 'POST', headers: headers });
+                const d = await r.json();
+                if (!r.ok) throw new Error(d.error || 'Failed to create room');
+                room = d.roomCode;
+                window.history.replaceState({}, '', '/peer.html?room=' + room);
+                showToast('Room created! ✅', 'success');
+                connectWs();
+                await loadSession();
+            } catch (err) {
+                showToast(err.message, 'error');
+            } finally {
+                ui.setLoading(this, false);
+            }
         };
 
-        document.getElementById('btn-join').onclick = async () => {
+        document.getElementById('btn-join').onclick = async function() {
             const c = document.getElementById('join-code').value.trim().toUpperCase();
-            if (c.length < 4) { showToast('Enter room code', 'error'); return; }
-            const r = await fetch('/api/peer/join/' + c, { method: 'POST', headers: headers });
-            const d = await r.json();
-            if (!r.ok) { showToast(d.error || 'Failed', 'error'); return; }
-            room = c;
-            window.history.replaceState({}, '', '/peer.html?room=' + room);
-            connectWs();
-            await loadSession();
+            if (c.length < 4) { showToast('Enter valid room code', 'error'); return; }
+            ui.setLoading(this, true);
+            try {
+                const r = await fetch('/api/peer/join/' + c, { method: 'POST', headers: headers });
+                const d = await r.json();
+                if (!r.ok) throw new Error(d.error || 'Failed to join room');
+                room = c;
+                window.history.replaceState({}, '', '/peer.html?room=' + room);
+                showToast('Joined successfully! ✅', 'success');
+                connectWs();
+                await loadSession();
+            } catch (err) {
+                showToast(err.message, 'error');
+            } finally {
+                ui.setLoading(this, false);
+            }
         };
 
-        document.getElementById('btn-ready').onclick = async () => {
-            const r = await fetch('/api/peer/' + encodeURIComponent(room) + '/ready', { method: 'POST', headers: headers });
-            const d = await r.json();
-            if (!r.ok) { showToast(d.error || 'Failed', 'error'); return; }
-            sessionData = d;
-            render();
+        document.getElementById('btn-ready').onclick = async function() {
+            ui.setLoading(this, true);
+            try {
+                const r = await fetch('/api/peer/' + encodeURIComponent(room) + '/ready', { method: 'POST', headers: headers });
+                const d = await r.json();
+                if (!r.ok) throw new Error(d.error || 'Failed');
+                sessionData = d;
+                render();
+            } catch (err) {
+                showToast(err.message, 'error');
+            } finally {
+                ui.setLoading(this, false);
+            }
         };
 
-        document.getElementById('btn-submit').onclick = async () => {
+        document.getElementById('btn-submit').onclick = async function() {
             const t = document.getElementById('ans-me').value;
-            if (t.length < 5) { showToast('Write a bit more', 'error'); return; }
-            const r = await fetch('/api/peer/' + encodeURIComponent(room) + '/answer', {
-                method: 'POST',
-                headers: headers,
-                body: JSON.stringify({ questionIndex: currentIdx, answer: t })
-            });
-            const d = await r.json();
-            if (!r.ok) { showToast(d.error || 'Failed', 'error'); return; }
-            sessionData = d;
-            render();
+            if (t.length < 5) { showToast('Please provide a more detailed answer', 'warning'); return; }
+            ui.setLoading(this, true);
+            try {
+                const r = await fetch('/api/peer/' + encodeURIComponent(room) + '/answer', {
+                    method: 'POST',
+                    headers: headers,
+                    body: JSON.stringify({ questionIndex: currentIdx, answer: t })
+                });
+                const d = await r.json();
+                if (!r.ok) throw new Error(d.error || 'Submission failed');
+                showToast('Answer submitted! ✅', 'success');
+                sessionData = d;
+                render();
+            } catch (err) {
+                showToast(err.message, 'error');
+            } finally {
+                ui.setLoading(this, false);
+            }
         };
 
-        document.getElementById('btn-comment').onclick = async () => {
+        document.getElementById('btn-comment').onclick = async function() {
             const c = document.getElementById('comment-me').value;
-            await fetch('/api/peer/' + encodeURIComponent(room) + '/comment', {
-                method: 'POST',
-                headers: headers,
-                body: JSON.stringify({ questionIndex: currentIdx, comment: c })
-            });
-            showToast('Comment saved', 'success');
+            if (!c.trim()) { showToast('Please enter a comment', 'warning'); return; }
+            ui.setLoading(this, true);
+            try {
+                const r = await fetch('/api/peer/' + encodeURIComponent(room) + '/comment', {
+                    method: 'POST',
+                    headers: headers,
+                    body: JSON.stringify({ questionIndex: currentIdx, comment: c })
+                });
+                if (!r.ok) throw new Error('Failed to save comment');
+                showToast('Comment sent! ✅', 'success');
+                document.getElementById('comment-me').value = '';
+            } catch (err) {
+                showToast(err.message, 'error');
+            } finally {
+                ui.setLoading(this, false);
+            }
         };
 
-        document.getElementById('btn-next').onclick = async () => {
-            const r = await fetch('/api/peer/' + encodeURIComponent(room) + '/next', {
-                method: 'POST',
-                headers: headers,
-                body: JSON.stringify({})
-            });
-            const d = await r.json();
-            if (r.ok) { sessionData = d; currentIdx = d.currentQuestionIndex; render(); }
+        document.getElementById('btn-next').onclick = async function() {
+            ui.setLoading(this, true);
+            try {
+                const r = await fetch('/api/peer/' + encodeURIComponent(room) + '/next', {
+                    method: 'POST',
+                    headers: headers,
+                    body: JSON.stringify({})
+                });
+                const d = await r.json();
+                if (!r.ok) throw new Error('Failed to move to next question');
+                sessionData = d; 
+                currentIdx = d.currentQuestionIndex; 
+                render();
+            } catch (err) {
+                showToast(err.message, 'error');
+            } finally {
+                ui.setLoading(this, false);
+            }
         };
+
+        function toggleTheme() {
+            const isDark = document.documentElement.classList.toggle('dark-mode');
+            localStorage.setItem('pdrs_theme', isDark ? 'dark' : 'light');
+            document.getElementById('theme-btn').textContent = isDark ? '☀️' : '🌙';
+        }
+
+        if (localStorage.getItem('pdrs_theme') === 'dark') {
+            document.getElementById('theme-btn').textContent = '☀️';
+        }
 
         (async function init() {
             if (room) {

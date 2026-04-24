@@ -4,66 +4,169 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Security Settings - PDRS</title>
+    <link rel="icon" type="image/png" href="/img/favicon.png">
     <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/animations.css">
     <style>
-        body { background: #f8fafc; }
+        body.dark-mode { --bg-color: #0f172a; --card-bg: #1e293b; --text-color: #f1f5f9; --text-muted: #94a3b8; --border-color: rgba(255,255,255,0.1); --danger-bg: rgba(220, 38, 38, 0.1); --hover-bg: rgba(255,255,255,0.05); --active-bg: rgba(37, 99, 235, 0.1); --input-bg: #0f172a; }
         .container { max-width: 960px; margin: 2rem auto; padding: 0 1rem; }
-        .card { background: #fff; border-radius: 12px; border: 1px solid #e2e8f0; padding: 1rem 1.2rem; margin-bottom: 1rem; }
-        .danger { border-color: #fecaca; background: #fff5f5; }
-        .badge-success { background: #dcfce7; color: #166534; padding: 0.3rem 0.55rem; border-radius: 999px; font-size: 0.8rem; font-weight: 600; }
-        table { width: 100%; border-collapse: collapse; }
-        th, td { text-align: left; border-bottom: 1px solid #e2e8f0; padding: 0.6rem; font-size: 0.9rem; }
-        .current-device { background: #eff6ff; }
+        .card { background: var(--card-bg, #fff); border-radius: 12px; border: 1px solid var(--border-color, #e2e8f0); padding: 1.5rem; margin-bottom: 1.5rem; transition: transform 0.2s, box-shadow 0.2s; }
+        .card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+        .danger-card { border-color: #fecaca; background: var(--danger-bg, #fff5f5); }
+        .badge-success { background: #dcfce7; color: #166534; padding: 0.3rem 0.75rem; border-radius: 999px; font-size: 0.8rem; font-weight: 600; display: inline-flex; align-items: center; gap: 0.4rem; }
+        .badge-current { background: #dcfce7; color: #166534; padding: 0.25rem 0.6rem; border-radius: 6px; font-size: 0.65rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; border: 1px solid #bbf7d0; }
+        .dark-mode .badge-current { background: rgba(22, 101, 52, 0.2); color: #4ade80; border-color: rgba(74, 222, 128, 0.2); }
+        
+        .device-table-wrapper { overflow-x: auto; margin: 1rem -1.5rem; padding: 0 1.5rem; }
+        table { width: 100%; border-collapse: collapse; min-width: 600px; }
+        th { text-align: left; border-bottom: 2px solid var(--border-color, #e2e8f0); padding: 1rem 0.75rem; font-size: 0.85rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+        td { text-align: left; border-bottom: 1px solid var(--border-color, #e2e8f0); padding: 1rem 0.75rem; font-size: 0.95rem; vertical-align: middle; }
+        tr:hover { background: var(--hover-bg, #f8fafc); }
+        .current-device { background: var(--active-bg, #eff6ff); }
+        
+        .device-info { display: flex; align-items: center; gap: 1rem; }
+        .device-icon { font-size: 1.25rem; width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; background: var(--bg-color); border-radius: 12px; border: 1px solid var(--border-color); box-shadow: var(--shadow-sm); position: relative; transition: all 0.3s ease; }
+        .current-device .device-icon { border-color: #22c55e; background: rgba(34, 197, 94, 0.05); }
+        .current-device .device-icon::after { content: ''; position: absolute; bottom: -2px; right: -2px; width: 12px; height: 12px; background: #22c55e; border: 2px solid var(--card-bg); border-radius: 50%; }
+
+        .password-wrapper { position: relative; display: flex; align-items: center; width: 100%; max-width: 400px; }
+        .password-toggle { position: absolute; right: 10px; background: none; border: none; cursor: pointer; padding: 5px; color: var(--text-muted); transition: color 0.2s; }
+        .password-toggle:hover { color: var(--primary-color); }
+
+        #totp-qr-container { position: relative; width: 220px; height: 220px; background: #eee; border-radius: 8px; margin-bottom: 1rem; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+        #totp-qr { max-width: 100%; display: none; }
+        .qr-skeleton { width: 100%; height: 100%; background: linear-gradient(90deg, var(--bg-color) 25%, var(--border-color) 50%, var(--bg-color) 75%); background-size: 200% 100%; animation: skeleton-loading 1.5s infinite linear; }
+        
+        /* TOTP Code Input */
+        .totp-code-wrap { display: flex; gap: 0.5rem; justify-content: center; margin: 1.5rem 0; }
+        .totp-input { width: 45px; height: 55px; border: 2px solid var(--border-color); border-radius: 8px; text-align: center; font-size: 1.5rem; font-weight: 700; background: var(--input-bg); color: var(--text-color); transition: all 0.2s; }
+        .totp-input:focus { border-color: var(--primary-color); outline: none; box-shadow: 0 0 0 3px var(--primary-glow); transform: translateY(-2px); }
+
+        @keyframes skeleton-loading { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+        .form-group { margin-bottom: 1.25rem; }
+        .form-group label { display: block; margin-bottom: 0.5rem; font-weight: 500; }
+        .input-field { width: 100%; padding: 0.75rem; border: 1px solid var(--border-color); border-radius: 8px; background: var(--input-bg); color: var(--text-color); font-size: 1rem; transition: border-color 0.2s, box-shadow 0.2s; }
+        .input-field:focus { outline: none; border-color: var(--primary-color); box-shadow: 0 0 0 3px var(--primary-glow); }
+
+        .btn-destructive { background: #dc2626; color: white; }
+        .btn-destructive:hover { background: #b91c1c; }
+
+        @media (max-width: 640px) {
+            .navbar { flex-direction: column; gap: 1rem; padding: 1rem; height: auto; }
+            .container { margin: 1rem auto; }
+            .card { padding: 1rem; }
+            .device-table-wrapper { margin: 1rem -1rem; padding: 0 1rem; }
+            .btn { width: 100% !important; margin-bottom: 0.5rem; }
+        }
     </style>
+    <script>
+        const savedTheme = localStorage.getItem('pdrs_theme');
+        if (savedTheme === 'dark') document.documentElement.classList.add('dark-mode');
+    </script>
 </head>
 <body>
+    <nav class="navbar">
+        <div style="display:flex; align-items:center; gap:1rem;">
+            <button onclick="history.back()" class="btn-icon" aria-label="Back">←</button>
+            <h1 style="color: var(--primary-color); font-size: 1.5rem; cursor: pointer;" onclick="window.location.href='/'">Security</h1>
+        </div>
+        <button onclick="toggleTheme()" class="theme-toggle">🌙</button>
+    </nav>
     <div class="container">
-        <h2>Security Settings</h2>
 
         <section class="card">
-            <h3>Two-Factor Authentication</h3>
-            <div id="totp-status"></div>
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:1rem;">
+                <div>
+                    <h3 style="margin:0 0 0.5rem 0;">Two-Factor Authentication</h3>
+                    <p class="text-muted" style="margin:0; font-size:0.9rem;">Add an extra layer of security to your account.</p>
+                </div>
+                <div id="totp-status"></div>
+            </div>
+            
             <button id="enable-totp-btn" class="btn" style="width:auto;">Enable Authenticator App</button>
-            <button id="disable-totp-btn" class="btn btn-secondary" style="width:auto; display:none;">Disable</button>
-            <div id="totp-setup-box" style="display:none; margin-top:1rem;">
-                <img id="totp-qr" alt="TOTP QR code" style="max-width:220px; display:block;">
-                <p>Manual key: <code id="totp-manual-key"></code></p>
-                <input id="totp-confirm-token" maxlength="6" placeholder="Enter 6-digit code">
-                <button id="confirm-totp-btn" class="btn" style="width:auto;">Confirm</button>
+            <button id="disable-totp-btn" class="btn btn-secondary" style="width:auto; display:none;">Disable 2FA</button>
+            
+            <div id="totp-setup-box" style="display:none; margin-top:1.5rem; padding-top:1.5rem; border-top:1px solid var(--border-color);">
+                <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 2rem;">
+                    <div>
+                        <div id="totp-qr-container">
+                            <div class="qr-skeleton"></div>
+                            <img id="totp-qr" alt="TOTP QR code">
+                        </div>
+                        <p style="font-size:0.9rem;">Manual key: <code id="totp-manual-key" style="background:var(--hover-bg); padding:0.2rem 0.4rem; border-radius:4px;"></code></p>
+                    </div>
+                    <div>
+                        <p style="margin-top:0;">1. Scan the QR code with your authenticator app (e.g., Google Authenticator, Authy).</p>
+                        <p>2. Enter the 6-digit code from the app below.</p>
+                        <div class="totp-code-wrap" id="totp-inputs">
+                            <input type="text" class="totp-input" maxlength="1" pattern="\d*">
+                            <input type="text" class="totp-input" maxlength="1" pattern="\d*">
+                            <input type="text" class="totp-input" maxlength="1" pattern="\d*">
+                            <input type="text" class="totp-input" maxlength="1" pattern="\d*">
+                            <input type="text" class="totp-input" maxlength="1" pattern="\d*">
+                            <input type="text" class="totp-input" maxlength="1" pattern="\d*">
+                        </div>
+                        <button id="confirm-totp-btn" class="btn" style="width:auto;">Verify & Enable</button>
+                    </div>
+                </div>
             </div>
         </section>
 
         <section class="card">
-            <h3>My Devices</h3>
-            <table>
-                <thead>
-                    <tr><th>Device</th><th>Browser</th><th>IP</th><th>Last Active</th><th></th></tr>
-                </thead>
-                <tbody id="devices-body"></tbody>
-            </table>
-            <button id="remove-others-btn" class="btn btn-secondary" style="width:auto; margin-top:0.7rem;">Remove All Other Devices</button>
+            <h3 style="margin:0 0 1rem 0;">My Devices</h3>
+            <div class="device-table-wrapper" id="devices-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Device</th>
+                            <th>Browser</th>
+                            <th>IP Address</th>
+                            <th>Last Active</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="devices-body"></tbody>
+                </table>
+            </div>
+            <button id="remove-others-btn" class="btn btn-secondary" style="width:auto; margin-top:1rem;">Log out of all other devices</button>
         </section>
 
         <section class="card">
-            <h3>Session Timeout</h3>
-            <label><input type="checkbox" id="auto-logout-toggle"> Auto logout after inactivity</label>
-            <select id="timeout-select">
-                <option value="900000">15 min</option>
-                <option value="1800000">30 min</option>
-                <option value="3600000">1 hour</option>
-                <option value="7200000">2 hours</option>
-            </select>
-            <button id="save-timeout-btn" class="btn btn-secondary" style="width:auto;">Save</button>
+            <h3 style="margin:0 0 1rem 0;">Session Timeout</h3>
+            <div style="display:flex; flex-wrap:wrap; gap:1rem; align-items:center;">
+                <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer;">
+                    <input type="checkbox" id="auto-logout-toggle" style="width:1.2rem; height:1.2rem;"> 
+                    Auto logout after inactivity
+                </label>
+                <select id="timeout-select" class="input-field" style="width:auto; min-width:150px;">
+                    <option value="900000">15 minutes</option>
+                    <option value="1800000">30 minutes</option>
+                    <option value="3600000">1 hour</option>
+                    <option value="7200000">2 hours</option>
+                </select>
+                <button id="save-timeout-btn" class="btn btn-secondary" style="width:auto;">Update Preferences</button>
+            </div>
         </section>
 
-        <section class="card danger">
-            <h3>Danger Zone</h3>
-            <button id="delete-account-btn" class="btn" style="background:#dc2626;">Delete My Account</button>
-            <div id="delete-account-box" style="display:none; margin-top:1rem;">
-                <p>Type <strong>DELETE MY ACCOUNT</strong> and enter your password.</p>
-                <input id="delete-confirmation" placeholder="DELETE MY ACCOUNT">
-                <input id="delete-password" type="password" placeholder="Password">
-                <button id="confirm-delete-btn" class="btn" style="background:#dc2626;">Confirm Delete</button>
+        <section class="card danger-card">
+            <h3 style="margin:0 0 0.5rem 0; color:#991b1b;">Danger Zone</h3>
+            <p style="margin:0 0 1rem 0; font-size:0.9rem; color:#991b1b;">Once you delete your account, there is no going back. Please be certain.</p>
+            
+            <button id="delete-account-btn" class="btn btn-destructive" style="width:auto;">Delete My Account</button>
+            
+            <div id="delete-account-box" style="display:none; margin-top:1.5rem; padding-top:1.5rem; border-top:1px solid #fecaca;">
+                <p style="font-size:0.9rem; margin-bottom:1rem;">To confirm, type <strong>DELETE MY ACCOUNT</strong> and enter your password.</p>
+                <div class="form-group">
+                    <input id="delete-confirmation" class="input-field" placeholder="DELETE MY ACCOUNT">
+                </div>
+                <div class="form-group">
+                    <div class="password-wrapper">
+                        <input id="delete-password" type="password" class="input-field" placeholder="Your Password">
+                        <button type="button" class="password-toggle" onclick="togglePassword('delete-password', this)">👁</button>
+                    </div>
+                </div>
+                <button id="confirm-delete-btn" class="btn btn-destructive" style="width:auto;">Permanently Delete Account</button>
             </div>
         </section>
     </div>
@@ -72,106 +175,315 @@
     <script src="/js/toast.js"></script>
     <script>
         auth.requireAuth();
+        document.title = "Security Settings | PDRS";
+        
         const token = auth.getToken();
-        const headers = () => ({ Authorization: `Bearer ${token}`, 'x-device-id': auth.getDeviceId() || '' });
+        const headers = () => ({ 
+            Authorization: `Bearer ${token}`, 
+            'x-device-id': auth.getDeviceId() || '',
+            'Content-Type': 'application/json'
+        });
+        
         let devices = [];
 
+        function togglePassword(inputId, btn) {
+            const input = document.getElementById(inputId);
+            if (input.type === 'password') {
+                input.type = 'text';
+                btn.textContent = '🙈';
+            } else {
+                input.type = 'password';
+                btn.textContent = '👁';
+            }
+        }
+
+        function getDeviceIcon(name = '', browser = '') {
+            name = name.toLowerCase();
+            browser = browser.toLowerCase();
+            if (name.includes('iphone') || name.includes('android') || name.includes('mobile')) return '📱';
+            if (name.includes('ipad') || name.includes('tablet')) return '📟';
+            if (name.includes('mac') || name.includes('windows') || name.includes('linux')) return '💻';
+            return '🖥';
+        }
+
         async function loadTOTPStatus() {
-            const res = await fetch('/api/auth/totp-status', { headers: headers() });
-            const data = await res.json();
-            const status = document.getElementById('totp-status');
-            document.getElementById('disable-totp-btn').style.display = data.enabled ? 'inline-block' : 'none';
-            document.getElementById('enable-totp-btn').style.display = data.enabled ? 'none' : 'inline-block';
-            status.innerHTML = data.enabled ? '<span class="badge-success">Authenticator App Active</span>' : '<span class="text-muted">Authenticator app is disabled.</span>';
+            try {
+                const res = await fetch('/api/auth/totp-status', { headers: headers() });
+                const data = await res.json();
+                const status = document.getElementById('totp-status');
+                document.getElementById('disable-totp-btn').style.display = data.enabled ? 'inline-block' : 'none';
+                document.getElementById('enable-totp-btn').style.display = data.enabled ? 'none' : 'inline-block';
+                status.innerHTML = data.enabled ? 
+                    '<span class="badge-success"><span>✅</span> 2FA Active</span>' : 
+                    '<span class="text-muted" style="font-size:0.9rem;">Disabled</span>';
+            } catch (err) {
+                console.error('Failed to load TOTP status', err);
+            }
         }
 
         async function loadDevices() {
-            const res = await fetch('/api/auth/devices', { headers: headers() });
-            devices = await res.json();
-            const current = String(auth.getDeviceId() || '');
-            document.getElementById('devices-body').innerHTML = devices.map(d => `
-                <tr class="${String(d.id) === current ? 'current-device' : ''}">
-                    <td>${d.device_name || '-'}</td>
-                    <td>${d.browser || '-'}</td>
-                    <td>${d.ip || '-'}</td>
-                    <td>${d.last_active || '-'}</td>
-                    <td><button onclick="removeDevice(${d.id})" class="btn btn-secondary" style="width:auto;">Remove</button></td>
-                </tr>
-            `).join('');
+            const container = document.getElementById('devices-container');
+            const tbody = document.getElementById('devices-body');
+            
+            ui.showSkeleton('devices-body', 3, 'table-row');
+            
+            try {
+                const res = await fetch('/api/auth/devices', { headers: headers() });
+                if (!res.ok) throw new Error('Failed to load devices');
+                
+                devices = await res.json();
+                const currentId = String(auth.getDeviceId() || '');
+                
+                if (devices.length === 0) {
+                    ui.showEmptyState('devices-body', '🛡', 'No devices found', 'Wait, how are you here?');
+                    return;
+                }
+
+                tbody.innerHTML = devices.map(d => `
+                    <tr class="${String(d.id) === currentId ? 'current-device' : ''}">
+                        <td>
+                            <div class="device-info">
+                                <div class="device-icon">${getDeviceIcon(d.device_name, d.browser)}</div>
+                                <div>
+                                    <div style="font-weight:600;">${d.device_name || 'Unknown Device'}</div>
+                                    ${String(d.id) === currentId ? '<span class="badge-current">This Device</span>' : ''}
+                                </div>
+                            </div>
+                        </td>
+                        <td>${d.browser || 'Unknown'}</td>
+                        <td><code style="font-size:0.85rem;">${d.ip || '-'}</code></td>
+                        <td>${d.last_active || 'Just now'}</td>
+                        <td>
+                            <button onclick="confirmRemoveDevice(${d.id}, '${d.device_name || 'this device'}')" 
+                                class="btn btn-secondary" style="width:auto; padding:0.4rem 0.8rem; font-size:0.85rem;"
+                                ${String(d.id) === currentId ? 'disabled' : ''}>
+                                Remove
+                            </button>
+                        </td>
+                    </tr>
+                `).join('');
+            } catch (err) {
+                showToast('Failed to load devices', 'error');
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:2rem; color:var(--danger-color);">Error loading devices. <button onclick="loadDevices()" class="btn btn-secondary" style="width:auto; margin-left:1rem;">Retry</button></td></tr>';
+            }
+        }
+
+        function confirmRemoveDevice(id, name) {
+            ui.showConfirm(
+                'Remove Device?',
+                `Are you sure you want to log out of ${name}? You'll need to sign in again on that device.`,
+                () => removeDevice(id)
+            );
         }
 
         async function removeDevice(id) {
-            const res = await fetch(`/api/auth/devices/${id}`, { method: 'DELETE', headers: headers() });
-            const data = await res.json();
-            if (!res.ok) return showToast(data.error || 'Failed to remove device', 'error');
-            if (data.invalidateToken) return auth.logout();
-            loadDevices();
+            try {
+                const res = await fetch(`/api/auth/devices/${id}`, { method: 'DELETE', headers: headers() });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'Failed to remove device');
+                
+                showToast('Device removed successfully', 'success');
+                if (data.invalidateToken) return auth.logout();
+                loadDevices();
+            } catch (err) {
+                showToast(err.message, 'error');
+            }
         }
 
-        document.getElementById('remove-others-btn').onclick = async () => {
-            const current = String(auth.getDeviceId() || '');
-            for (const d of devices) {
-                if (String(d.id) !== current) {
-                    await fetch(`/api/auth/devices/${d.id}`, { method: 'DELETE', headers: headers() });
+        document.getElementById('remove-others-btn').onclick = () => {
+            ui.showConfirm(
+                'Log out all other devices?',
+                'This will sign you out of every device except the one you are currently using. Continue?',
+                async () => {
+                    const btn = document.getElementById('remove-others-btn');
+                    ui.setLoading(btn, true);
+                    const currentId = String(auth.getDeviceId() || '');
+                    let successCount = 0;
+                    
+                    try {
+                        for (const d of devices) {
+                            if (String(d.id) !== currentId) {
+                                const res = await fetch(`/api/auth/devices/${d.id}`, { method: 'DELETE', headers: headers() });
+                                if (res.ok) successCount++;
+                            }
+                        }
+                        showToast(`Logged out of ${successCount} other devices`, 'success');
+                        loadDevices();
+                    } catch (err) {
+                        showToast('Error during bulk removal', 'error');
+                    } finally {
+                        ui.setLoading(btn, false);
+                    }
                 }
-            }
-            loadDevices();
+            );
         };
 
         document.getElementById('enable-totp-btn').onclick = async () => {
-            const res = await fetch('/api/auth/setup-totp', { method: 'POST', headers: headers() });
-            const data = await res.json();
-            if (!res.ok) return showToast(data.error || 'Unable to setup TOTP', 'error');
-            document.getElementById('totp-setup-box').style.display = 'block';
-            document.getElementById('totp-qr').src = data.qrCodeDataUrl;
-            document.getElementById('totp-manual-key').textContent = data.manualEntryKey;
+            const btn = document.getElementById('enable-totp-btn');
+            ui.setLoading(btn, true);
+            
+            try {
+                const res = await fetch('/api/auth/setup-totp', { method: 'POST', headers: headers() });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'Unable to setup TOTP');
+                
+                document.getElementById('totp-setup-box').style.display = 'block';
+                const qrImg = document.getElementById('totp-qr');
+                const qrSkeleton = document.querySelector('.qr-skeleton');
+                
+                qrImg.onload = () => {
+                    qrSkeleton.style.display = 'none';
+                    qrImg.style.display = 'block';
+                };
+                qrImg.src = data.qrCodeDataUrl;
+                document.getElementById('totp-manual-key').textContent = data.manualEntryKey;
+                
+                // Scroll to setup box
+                document.getElementById('totp-setup-box').scrollIntoView({ behavior: 'smooth' });
+            } catch (err) {
+                showToast(err.message, 'error');
+            } finally {
+                ui.setLoading(btn, false);
+            }
         };
+
+        // TOTP Input Logic
+        const totpInputs = document.querySelectorAll('.totp-input');
+        totpInputs.forEach((input, index) => {
+            input.addEventListener('input', (e) => {
+                if (e.target.value.length === 1 && index < totpInputs.length - 1) {
+                    totpInputs[index + 1].focus();
+                }
+            });
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Backspace' && !e.target.value && index > 0) {
+                    totpInputs[index - 1].focus();
+                }
+            });
+            input.addEventListener('paste', (e) => {
+                e.preventDefault();
+                const pasteData = e.clipboardData.getData('text').slice(0, 6).split('');
+                pasteData.forEach((char, i) => {
+                    if (totpInputs[i]) {
+                        totpInputs[i].value = char;
+                        if (i < totpInputs.length - 1) totpInputs[i + 1].focus();
+                    }
+                });
+            });
+        });
 
         document.getElementById('confirm-totp-btn').onclick = async () => {
-            const tokenVal = document.getElementById('totp-confirm-token').value.trim();
-            const res = await fetch('/api/auth/confirm-totp', {
-                method: 'POST',
-                headers: { ...headers(), 'Content-Type': 'application/json' },
-                body: JSON.stringify({ token: tokenVal })
-            });
-            const data = await res.json();
-            if (!res.ok) return showToast(data.error || 'Invalid code', 'error');
-            showToast('TOTP enabled', 'success');
-            document.getElementById('totp-setup-box').style.display = 'none';
-            loadTOTPStatus();
+            const btn = document.getElementById('confirm-totp-btn');
+            const tokenVal = Array.from(totpInputs).map(i => i.value).join('');
+            
+            if (tokenVal.length !== 6) {
+                return showToast('Please enter the 6-digit code', 'error');
+            }
+
+            ui.setLoading(btn, true);
+            try {
+                const res = await fetch('/api/auth/confirm-totp', {
+                    method: 'POST',
+                    headers: headers(),
+                    body: JSON.stringify({ token: tokenVal })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'Invalid code');
+                
+                showToast('Two-factor authentication enabled! ✅', 'success');
+                document.getElementById('totp-setup-box').style.display = 'none';
+                loadTOTPStatus();
+            } catch (err) {
+                showToast(err.message, 'error');
+            } finally {
+                ui.setLoading(btn, false);
+            }
         };
 
-        document.getElementById('disable-totp-btn').onclick = async () => {
-            const res = await fetch('/api/auth/totp', { method: 'DELETE', headers: headers() });
-            const data = await res.json();
-            if (!res.ok) return showToast(data.error || 'Failed to disable', 'error');
-            showToast('TOTP disabled', 'success');
-            loadTOTPStatus();
+        document.getElementById('disable-totp-btn').onclick = () => {
+            ui.showConfirm(
+                'Disable 2FA?',
+                'Are you sure you want to disable two-factor authentication? This will make your account less secure.',
+                async () => {
+                    const btn = document.getElementById('disable-totp-btn');
+                    ui.setLoading(btn, true);
+                    try {
+                        const res = await fetch('/api/auth/totp', { method: 'DELETE', headers: headers() });
+                        if (!res.ok) throw new Error('Failed to disable');
+                        showToast('2FA has been disabled', 'success');
+                        loadTOTPStatus();
+                    } catch (err) {
+                        showToast(err.message, 'error');
+                    } finally {
+                        ui.setLoading(btn, false);
+                    }
+                }
+            );
         };
 
         document.getElementById('save-timeout-btn').onclick = () => {
-            const enabled = document.getElementById('auto-logout-toggle').checked;
-            const timeoutMs = document.getElementById('timeout-select').value;
-            localStorage.setItem('pdrs_auto_logout_enabled', String(enabled));
-            localStorage.setItem('pdrs_timeout_ms', String(timeoutMs));
-            showToast('Session timeout preferences saved', 'success');
+            const btn = document.getElementById('save-timeout-btn');
+            ui.setLoading(btn, true);
+            
+            setTimeout(() => {
+                const enabled = document.getElementById('auto-logout-toggle').checked;
+                const timeoutMs = document.getElementById('timeout-select').value;
+                localStorage.setItem('pdrs_auto_logout_enabled', String(enabled));
+                localStorage.setItem('pdrs_timeout_ms', String(timeoutMs));
+                showToast('Session preferences updated ✅', 'success');
+                ui.setLoading(btn, false);
+            }, 500);
         };
 
+        function toggleTheme() {
+            const isDark = document.documentElement.classList.toggle('dark-mode');
+            localStorage.setItem('pdrs_theme', isDark ? 'dark' : 'light');
+        }
+
         document.getElementById('delete-account-btn').onclick = () => {
-            document.getElementById('delete-account-box').style.display = 'block';
+            const box = document.getElementById('delete-account-box');
+            box.style.display = box.style.display === 'none' ? 'block' : 'none';
+            if (box.style.display === 'block') {
+                box.scrollIntoView({ behavior: 'smooth' });
+                document.getElementById('delete-confirmation').focus();
+            }
         };
 
         document.getElementById('confirm-delete-btn').onclick = async () => {
             const confirmation = document.getElementById('delete-confirmation').value;
             const password = document.getElementById('delete-password').value;
-            const res = await fetch('/api/auth/account', {
-                method: 'DELETE',
-                headers: { ...headers(), 'Content-Type': 'application/json' },
-                body: JSON.stringify({ password, confirmation })
-            });
-            const data = await res.json();
-            if (!res.ok) return showToast(data.error || 'Delete failed', 'error');
-            auth.logout();
+            const btn = document.getElementById('confirm-delete-btn');
+            
+            if (confirmation !== 'DELETE MY ACCOUNT') {
+                return showToast('Please type the confirmation phrase exactly', 'error');
+            }
+            if (!password) {
+                return showToast('Please enter your password', 'error');
+            }
+
+            ui.showConfirm(
+                'Final Warning!',
+                'This action is irreversible. All your data will be permanently erased. Proceed?',
+                async () => {
+                    ui.setLoading(btn, true);
+                    try {
+                        const res = await fetch('/api/auth/account', {
+                            method: 'DELETE',
+                            headers: headers(),
+                            body: JSON.stringify({ password, confirmation })
+                        });
+                        const data = await res.json();
+                        if (!res.ok) throw new Error(data.error || 'Delete failed');
+                        
+                        showToast('Account deleted. Goodbye!', 'success');
+                        setTimeout(() => auth.logout(), 2000);
+                    } catch (err) {
+                        showToast(err.message, 'error');
+                        ui.setLoading(btn, false);
+                    }
+                },
+                true
+            );
         };
 
         (function init() {
@@ -179,6 +491,14 @@
             document.getElementById('timeout-select').value = localStorage.getItem('pdrs_timeout_ms') || '1800000';
             loadTOTPStatus();
             loadDevices();
+            
+            // Handle Escape to close boxes
+            window.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') {
+                    document.getElementById('totp-setup-box').style.display = 'none';
+                    document.getElementById('delete-account-box').style.display = 'none';
+                }
+            });
         })();
     </script>
 </body>

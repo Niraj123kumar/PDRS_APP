@@ -4,82 +4,232 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Flashcards - PDRS</title>
+    <link rel="icon" type="image/png" href="/img/favicon.png">
     <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/animations.css">
     <style>
         .container-card { max-width: 760px; margin: 2rem auto; padding: 1rem; }
-        .flashcard-wrap { perspective: 1000px; margin: 1rem 0; }
-        .flashcard { position: relative; min-height: 260px; transform-style: preserve-3d; transition: transform 0.6s; cursor: pointer; }
+        .flashcard-wrap { perspective: 1000px; margin: 2rem 0; height: 320px; }
+        .flashcard { position: relative; height: 100%; transform-style: preserve-3d; transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1); cursor: pointer; }
         .flashcard.flipped { transform: rotateY(180deg); }
-        .face { position: absolute; inset: 0; backface-visibility: hidden; border: 1px solid #e2e8f0; border-radius: 12px; background: #fff; padding: 1rem; display: flex; align-items: center; justify-content: center; text-align: center; }
-        .back { transform: rotateY(180deg); background: #f8fafc; }
-        .stars { display: flex; gap: 0.4rem; justify-content: center; margin-top: 1rem; }
+        .face { position: absolute; inset: 0; backface-visibility: hidden; border: 2px solid var(--border-color); border-radius: 16px; background: var(--card-bg); padding: 2rem; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; box-shadow: var(--shadow); transition: all 0.3s ease; }
+        .flashcard:hover .face { border-color: var(--primary-color); box-shadow: var(--shadow-lg); }
+        .back { transform: rotateY(180deg); background: var(--bg-color); }
+        .stars { display: flex; gap: 0.75rem; justify-content: center; margin-top: 2rem; opacity: 0; transform: translateY(10px); transition: all 0.3s ease; pointer-events: none; }
+        .flashcard.flipped ~ .stars { opacity: 1; transform: translateY(0); pointer-events: auto; }
+        
+        /* Progress Ring */
+        .progress-circle { width: 60px; height: 60px; position: relative; }
+        .progress-circle svg { transform: rotate(-90deg); width: 60px; height: 60px; }
+        .progress-circle circle { fill: none; stroke-width: 6; stroke-linecap: round; }
+        .progress-circle .bg { stroke: var(--border-color); }
+        .progress-circle .fg { stroke: var(--primary-color); transition: stroke-dashoffset 0.5s ease; }
+        
+        .stats-bar { display: flex; align-items: center; gap: 1.5rem; background: var(--card-bg); padding: 1rem 1.5rem; border-radius: 16px; margin-bottom: 2rem; box-shadow: var(--shadow); }
+        .streak-badge { display: flex; align-items: center; gap: 0.5rem; font-weight: 700; color: #f97316; font-size: 1.1rem; padding: 0.5rem 1rem; background: rgba(249, 115, 22, 0.1); border-radius: 20px; transition: all 0.3s ease; }
+        .streak-badge.active { color: #f97316; background: rgba(249, 115, 22, 0.15); box-shadow: 0 0 15px rgba(249, 115, 22, 0.2); }
+        .streak-badge i { font-size: 1.25rem; }
+        .streak-badge.active i { animation: flame 1.5s infinite alternate cubic-bezier(0.4, 0, 0.2, 1); }
+        @keyframes flame { 
+            0% { transform: scale(1) rotate(-5deg); filter: drop-shadow(0 0 2px #f97316); }
+            100% { transform: scale(1.2) rotate(5deg); filter: drop-shadow(0 0 12px #f59e0b); }
+        }
+
+        /* Swipe Animations */
+        @keyframes swipeRight {
+            0% { transform: rotateY(180deg) translateX(0) rotateZ(0); opacity: 1; }
+            100% { transform: rotateY(180deg) translateX(200px) rotateZ(20deg); opacity: 0; }
+        }
+        @keyframes swipeLeft {
+            0% { transform: rotateY(180deg) translateX(0) rotateZ(0); opacity: 1; }
+            100% { transform: rotateY(180deg) translateX(-200px) rotateZ(-20deg); opacity: 0; }
+        }
+        .swipe-right { animation: swipeRight 0.5s forwards; }
+        .swipe-left { animation: swipeLeft 0.5s forwards; }
+
+        @media (max-width: 600px) {
+            .navbar { flex-direction: column; gap: 1rem; padding: 1rem; height: auto; }
+            .stats-bar { flex-direction: column; text-align: center; }
+            .progress-circle { margin-bottom: 1rem; }
+            .face { padding: 1rem; }
+            .flashcard-wrap { height: 280px; }
+            .stars { flex-wrap: wrap; }
+            .stars .btn { width: 45% !important; }
+        }
     </style>
+    <script>
+        const savedTheme = localStorage.getItem('pdrs_theme');
+        if (savedTheme === 'dark') document.documentElement.classList.add('dark-mode');
+    </script>
 </head>
 <body>
     <nav class="navbar">
-        <h1 style="color: var(--primary-color);">Flashcards</h1>
-        <button class="btn btn-secondary" style="width:auto;" onclick="window.location.href='/student.html'">Dashboard</button>
+        <div style="display:flex; align-items:center; gap:1rem;">
+            <button class="btn-icon" onclick="window.location.href='/student.html'" aria-label="Back">←</button>
+            <h1 style="color: var(--primary-color); font-size: 1.5rem;">Flashcards</h1>
+        </div>
+        <div class="streak-badge active">
+            <i style="font-style: normal;">🔥</i> <span id="streak-count">0</span> Day Streak
+        </div>
     </nav>
-    <div class="container-card">
-        <div style="display:flex; justify-content:space-between; align-items:center;">
-            <h3>Due Today: <span id="due-count">0</span></h3>
-            <div style="display:flex; gap:0.5rem;">
-                <button id="new-card-btn" class="btn btn-secondary" style="width:auto;">Add New Card</button>
-                <button id="generate-btn" class="btn" style="width:auto;">Generate from Project</button>
-            </div>
-        </div>
-        <div style="margin-top:0.5rem;">Progress: <span id="progress-text">0 of 0 reviewed today</span></div>
-        <div style="height:10px; background:#e2e8f0; border-radius:6px; margin-top:0.4rem;"><div id="progress-fill" style="height:100%; width:0%; background:#2563eb; border-radius:6px;"></div></div>
 
-        <div id="empty-state" style="display:none; margin-top:2rem; text-align:center;">All caught up! 🎉</div>
-        <div class="flashcard-wrap">
-            <div id="flashcard" class="flashcard">
-                <div id="card-front" class="face"></div>
-                <div id="card-back" class="face back"></div>
+    <div class="container-card">
+        <div class="stats-bar">
+            <div class="progress-circle">
+                <svg>
+                    <circle class="bg" cx="30" cy="30" r="24"></circle>
+                    <circle id="progress-ring" class="fg" cx="30" cy="30" r="24" stroke-dasharray="150.8" stroke-dashoffset="150.8"></circle>
+                </svg>
+                <div style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:0.75rem; font-weight:700;" id="progress-percent">0%</div>
+            </div>
+            <div style="flex:1;">
+                <div style="display:flex; justify-content:space-between; margin-bottom:0.25rem;">
+                    <span style="font-weight:600;">Daily Progress</span>
+                    <span id="progress-text" style="color:var(--text-muted); font-size:0.875rem;">0 of 0 reviewed</span>
+                </div>
+                <div style="height:8px; background:var(--border-color); border-radius:4px; overflow:hidden;">
+                    <div id="progress-fill" style="height:100%; width:0%; background:var(--primary-color); transition: width 0.5s ease;"></div>
+                </div>
             </div>
         </div>
-        <div class="stars" id="rating-stars"></div>
+
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 1.5rem;">
+            <h3>Due Today: <span id="due-count" class="badge">0</span></h3>
+            <div style="display:flex; gap:0.75rem;">
+                <button id="new-card-btn" class="btn btn-secondary" style="width:auto;">+ New Card</button>
+                <button id="generate-btn" class="btn" style="width:auto;">✨ Generate</button>
+            </div>
+        </div>
+
+        <div id="cards-container">
+            <div class="flashcard-wrap">
+                <div id="flashcard" class="flashcard">
+                    <div id="card-front" class="face">
+                        <p style="color:var(--text-muted); font-size:0.875rem; margin-bottom:1rem;">QUESTION</p>
+                        <div class="card-content" style="font-size:1.25rem; font-weight:600;"></div>
+                    </div>
+                    <div id="card-back" class="face back">
+                        <p style="color:var(--text-muted); font-size:0.875rem; margin-bottom:1rem;">ANSWER</p>
+                        <div class="card-content" style="font-size:1.1rem;"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="stars" id="rating-stars"></div>
+        </div>
     </div>
 
+    <!-- New Card Modal -->
+    <div id="card-modal" class="modal">
+        <div class="modal-content">
+            <button class="modal-close">&times;</button>
+            <h3 style="margin-bottom:1.5rem;">Add New Flashcard</h3>
+            <form id="card-form">
+                <div class="form-group">
+                    <label>Question</label>
+                    <textarea id="q-input" required placeholder="Enter question..." rows="3" maxlength="200"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Answer</label>
+                    <textarea id="a-input" required placeholder="Enter answer..." rows="3" maxlength="500"></textarea>
+                </div>
+                <button type="submit" class="btn">Create Card</button>
+            </form>
+        </div>
+    </div>
+    
+    <button onclick="toggleTheme()" class="theme-toggle-fixed" id="theme-btn">🌙</button>
+
     <script src="/js/auth.js"></script>
+    <script src="/js/toast.js"></script>
     <script>
         auth.requireAuth();
         auth.requireRole('student');
+        
         const flashcardEl = document.getElementById('flashcard');
-        const frontEl = document.getElementById('card-front');
-        const backEl = document.getElementById('card-back');
+        const frontEl = document.querySelector('#card-front .card-content');
+        const backEl = document.querySelector('#card-back .card-content');
         const dueCountEl = document.getElementById('due-count');
         const progressText = document.getElementById('progress-text');
         const progressFill = document.getElementById('progress-fill');
-        const emptyState = document.getElementById('empty-state');
+        const progressRing = document.getElementById('progress-ring');
+        const progressPercent = document.getElementById('progress-percent');
         const ratingStars = document.getElementById('rating-stars');
+        const cardsContainer = document.getElementById('cards-container');
+        
         let cards = [];
         let currentIndex = 0;
         let reviewed = 0;
+        let totalDue = 0;
 
         async function loadCards() {
-            const res = await fetch('/api/flashcards', { headers: { Authorization: `Bearer ${auth.getToken()}` } });
-            const data = await res.json();
-            cards = data.cards || [];
-            dueCountEl.textContent = data.dueCount || cards.length;
-            currentIndex = 0;
-            reviewed = 0;
-            renderCard();
+            try {
+                ui.showSkeleton('cards-container', 1, 'card');
+                const res = await fetch('/api/flashcards', { 
+                    headers: { Authorization: `Bearer ${auth.getToken()}` } 
+                });
+                const data = await res.json();
+                
+                cards = data.cards || [];
+                totalDue = data.dueCount || cards.length;
+                dueCountEl.textContent = totalDue;
+                currentIndex = 0;
+                reviewed = 0;
+                
+                // Load streak from data or set default
+                document.getElementById('streak-count').textContent = data.streak || 0;
+                
+                if (cards.length === 0) {
+                    ui.showEmptyState('cards-container', '🗂️', 'No cards due today', 
+                        'You have completed all your reviews! Want to create some new cards?', 
+                        'Create Card', '#');
+                    document.querySelector('.empty-state button').onclick = () => document.getElementById('card-modal').classList.add('active');
+                } else {
+                    cardsContainer.innerHTML = `
+                        <div class="flashcard-wrap">
+                            <div id="flashcard" class="flashcard">
+                                <div id="card-front" class="face">
+                                    <p style="color:var(--text-muted); font-size:0.875rem; margin-bottom:1rem;">QUESTION</p>
+                                    <div class="card-content" style="font-size:1.25rem; font-weight:600;"></div>
+                                </div>
+                                <div id="card-back" class="face back">
+                                    <p style="color:var(--text-muted); font-size:0.875rem; margin-bottom:1rem;">ANSWER</p>
+                                    <div class="card-content" style="font-size:1.1rem;"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="stars" id="rating-stars"></div>
+                    `;
+                    // Re-bind elements after innerHTML update
+                    bindElements();
+                    renderCard();
+                }
+            } catch (err) {
+                console.error(err);
+                showToast('Failed to load cards', 'error');
+            }
+        }
+
+        function bindElements() {
+            const newFlashcardEl = document.getElementById('flashcard');
+            newFlashcardEl.addEventListener('click', () => newFlashcardEl.classList.toggle('flipped'));
         }
 
         function renderCard() {
-            if (!cards.length || currentIndex >= cards.length) {
-                frontEl.textContent = '';
-                backEl.textContent = '';
-                emptyState.style.display = 'block';
-                ratingStars.innerHTML = '';
-                progressText.textContent = `${reviewed} of ${Math.max(reviewed, cards.length)} reviewed today`;
-                progressFill.style.width = '100%';
+            const frontEl = document.querySelector('#card-front .card-content');
+            const backEl = document.querySelector('#card-back .card-content');
+            const flashcardEl = document.getElementById('flashcard');
+            const ratingStars = document.getElementById('rating-stars');
+
+            if (currentIndex >= cards.length) {
+                ui.showEmptyState('cards-container', '🎉', 'All caught up!', 
+                    'You\'ve reviewed all your cards for today. Keep up the streak!', 
+                    'Back to Dashboard', '/student.html');
+                updateProgress();
                 return;
             }
-            emptyState.style.display = 'none';
+
             const card = cards[currentIndex];
-            flashcardEl.classList.remove('flipped');
+            flashcardEl.classList.remove('flipped', 'swipe-left', 'swipe-right');
             frontEl.textContent = card.question;
             backEl.textContent = card.answer;
             renderStars(card.id);
@@ -87,49 +237,162 @@
         }
 
         function updateProgress() {
-            progressText.textContent = `${reviewed} of ${cards.length} reviewed today`;
-            progressFill.style.width = `${cards.length ? (reviewed / cards.length) * 100 : 0}%`;
+            const total = Math.max(cards.length, totalDue);
+            const percent = total > 0 ? Math.round((reviewed / total) * 100) : 100;
+            
+            progressText.textContent = `${reviewed} of ${total} reviewed`;
+            progressFill.style.width = `${percent}%`;
+            progressPercent.textContent = `${percent}%`;
+            
+            // Update ring
+            const circumference = 2 * Math.PI * 24;
+            const offset = circumference - (percent / 100) * circumference;
+            progressRing.style.strokeDashoffset = offset;
         }
 
         function renderStars(cardId) {
-            ratingStars.innerHTML = Array.from({ length: 5 }).map((_, i) => `<button class="btn btn-secondary" style="width:auto; padding:0.4rem 0.6rem;" onclick="reviewCard(${cardId}, ${i + 1})">${i + 1}★</button>`).join('');
+            const ratingStars = document.getElementById('rating-stars');
+            const labels = ['Again', 'Hard', 'Good', 'Easy', 'Perfect'];
+            ratingStars.innerHTML = labels.map((label, i) => `
+                <button class="btn btn-secondary" style="width:auto; padding:0.5rem 1rem; flex:1;" 
+                    onclick="reviewCard(${cardId}, ${i + 1}, this)">
+                    <div style="font-size:0.75rem;">${label}</div>
+                    <div style="font-weight:700;">${i + 1}★</div>
+                </button>
+            `).join('');
         }
 
-        window.reviewCard = async (cardId, difficulty) => {
-            await fetch(`/api/flashcards/${cardId}/review`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${auth.getToken()}` },
-                body: JSON.stringify({ difficulty })
-            });
-            reviewed += 1;
-            currentIndex += 1;
-            renderCard();
+        window.reviewCard = async (cardId, difficulty, btn) => {
+            try {
+                ui.setLoading(btn, true, btn.innerHTML);
+                await fetch(`/api/flashcards/${cardId}/review`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${auth.getToken()}` },
+                    body: JSON.stringify({ difficulty })
+                });
+                reviewed += 1;
+                currentIndex += 1;
+                renderCard();
+            } catch (err) {
+                showToast('Failed to save review', 'error');
+            } finally {
+                ui.setLoading(btn, false);
+            }
         };
 
-        flashcardEl.addEventListener('click', () => flashcardEl.classList.toggle('flipped'));
+        // Modal Logic
+        const modal = document.getElementById('card-modal');
+        document.getElementById('new-card-btn').onclick = () => modal.classList.add('active');
+        document.querySelector('.modal-close').onclick = () => modal.classList.remove('active');
+        
+        ui.initFormValidation('card-form');
+        ui.initCharCounter('q-input', 200);
+        ui.initCharCounter('a-input', 500);
 
-        document.getElementById('new-card-btn').onclick = async () => {
-            const question = prompt('Question');
-            const answer = prompt('Answer');
-            if (!question || !answer) return;
-            await fetch('/api/flashcards', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${auth.getToken()}` },
-                body: JSON.stringify({ question, answer })
-            });
-            loadCards();
+        document.getElementById('card-form').onsubmit = async (e) => {
+            e.preventDefault();
+            const btn = e.target.querySelector('button[type="submit"]');
+            const question = document.getElementById('q-input').value;
+            const answer = document.getElementById('a-input').value;
+
+            try {
+                ui.setLoading(btn, true);
+                await fetch('/api/flashcards', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${auth.getToken()}` },
+                    body: JSON.stringify({ question, answer })
+                });
+                showToast('Flashcard added ✅', 'success');
+                modal.classList.remove('active');
+                e.target.reset();
+                loadCards();
+            } catch (err) {
+                showToast('Failed to create card', 'error');
+            } finally {
+                ui.setLoading(btn, false);
+            }
         };
 
-        document.getElementById('generate-btn').onclick = async () => {
+        document.getElementById('generate-btn').onclick = async (e) => {
+            const btn = e.target;
             const projectId = prompt('Project ID to generate cards from');
             if (!projectId) return;
-            await fetch('/api/flashcards/generate', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${auth.getToken()}` },
-                body: JSON.stringify({ projectId: Number(projectId) })
-            });
-            loadCards();
+
+            try {
+                ui.setLoading(btn, true, '✨ Generating...');
+                await fetch('/api/flashcards/generate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${auth.getToken()}` },
+                    body: JSON.stringify({ projectId: Number(projectId) })
+                });
+                showToast('Cards generated successfully! ✅', 'success');
+                loadCards();
+            } catch (err) {
+                showToast('Failed to generate cards', 'error');
+            } finally {
+                ui.setLoading(btn, false);
+            }
         };
+
+        // Swipe support
+        let touchStartX = 0;
+        let touchStartY = 0;
+        
+        cardsContainer.addEventListener('touchstart', e => {
+            touchStartX = e.changedTouches[0].screenX;
+            touchStartY = e.changedTouches[0].screenY;
+        }, { passive: true });
+
+        cardsContainer.addEventListener('touchend', e => {
+            const touchEndX = e.changedTouches[0].screenX;
+            const touchEndY = e.changedTouches[0].screenY;
+            const diffX = touchStartX - touchEndX;
+            const diffY = touchStartY - touchEndY;
+            
+            const flashcard = document.getElementById('flashcard');
+            if (!flashcard || !flashcard.classList.contains('flipped')) return;
+
+            // Horizontal swipe only
+            if (Math.abs(diffX) > 80 && Math.abs(diffY) < 100) {
+                if (diffX > 0) {
+                    // Swipe Left -> "Again" (Difficulty 1)
+                    handleSwipe('left', 1);
+                } else {
+                    // Swipe Right -> "Easy" (Difficulty 4)
+                    handleSwipe('right', 4);
+                }
+            }
+        }, { passive: true });
+
+        async function handleSwipe(direction, difficulty) {
+            const flashcard = document.getElementById('flashcard');
+            const card = cards[currentIndex];
+            if (!card) return;
+
+            flashcard.classList.add(`swipe-${direction}`);
+            
+            // Wait for animation
+            setTimeout(async () => {
+                try {
+                    await fetch(`/api/flashcards/${card.id}/review`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${auth.getToken()}` },
+                        body: JSON.stringify({ difficulty })
+                    });
+                    reviewed += 1;
+                    currentIndex += 1;
+                    renderCard();
+                } catch (err) {
+                    showToast('Failed to save review', 'error');
+                    flashcard.classList.remove(`swipe-${direction}`);
+                }
+            }, 300);
+        }
+
+        function toggleTheme() {
+            const isDark = document.documentElement.classList.toggle('dark-mode');
+            localStorage.setItem('pdrs_theme', isDark ? 'dark' : 'light');
+        }
 
         loadCards();
     </script>

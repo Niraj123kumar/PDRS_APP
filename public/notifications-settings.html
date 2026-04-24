@@ -4,57 +4,120 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Notification Settings - PDRS</title>
+    <link rel="icon" type="image/png" href="/img/favicon.png">
     <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/animations.css">
+    <style>
+        body.dark-mode { --bg-color: #0f172a; --card-bg: #1e293b; --text-color: #f1f5f9; --text-muted: #94a3b8; --border-color: rgba(255,255,255,0.1); }
+        .card { background: white; padding: 1.5rem; border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 1.5rem; }
+        body.dark-mode .card { background: var(--card-bg); border: 1px solid var(--border-color); color: var(--text-color); }
+        .form-group { margin-bottom: 1.25rem; position: relative; }
+        
+        @media (max-width: 600px) {
+            .navbar { flex-direction: column; gap: 1rem; padding: 1rem; height: auto; }
+            .navbar h1 { font-size: 1.5rem; }
+            .container { padding: 0 1rem; }
+            .btn { width: 100% !important; }
+            #save-prefs-btn { margin-bottom: 4rem; }
+        }
+    </style>
+    <script>
+        const savedTheme = localStorage.getItem('pdrs_theme');
+        if (savedTheme === 'dark') document.documentElement.classList.add('dark-mode');
+    </script>
 </head>
-<body>
+<body class="animate-up">
     <nav class="navbar">
-        <h1 style="color: var(--primary-color);">Notification Settings</h1>
-        <button class="btn btn-secondary" style="width:auto;" onclick="window.location.href='/notifications.html'">Back</button>
+        <h1 style="color: var(--primary-color); cursor: pointer;" onclick="window.location.href='/'">PDRS</h1>
+        <div style="display: flex; align-items: center; gap: 1rem;">
+            <button onclick="toggleTheme()" class="theme-toggle">🌙</button>
+            <button class="btn btn-secondary" style="width:auto;" onclick="window.location.href='/notifications.html'">Back</button>
+        </div>
     </nav>
     <div class="container" style="max-width:760px;">
-        <div class="card" style="margin-top:1rem;">
-            <h3>Push Notifications</h3>
-            <p id="push-status" class="text-muted">Status: unknown</p>
-            <button id="enable-push-btn" class="btn" style="width:auto;">Enable Push Notifications</button>
-            <button id="disable-push-btn" class="btn btn-secondary" style="width:auto;">Disable Push Notifications</button>
-        </div>
-
-        <div class="card">
-            <h3>SMS Notifications</h3>
-            <input id="phone-input" placeholder="+1234567890">
-            <button id="verify-phone-btn" class="btn" style="width:auto; margin-top:0.5rem;">Verify Phone</button>
-            <div style="margin-top:0.75rem;">
-                <input id="phone-code-input" placeholder="6-digit code">
-                <button id="submit-phone-code-btn" class="btn btn-secondary" style="width:auto;">Submit Code</button>
+        <div id="loading-prefs" style="display: none; margin-top: 1rem;"></div>
+        <div id="settings-content">
+            <div class="card" style="margin-top:1rem;">
+                <h3>Push Notifications</h3>
+                <p id="push-status" class="text-muted">Status: unknown</p>
+                <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                    <button id="enable-push-btn" class="btn" style="width:auto;">Enable Push Notifications</button>
+                    <button id="disable-push-btn" class="btn btn-secondary" style="width:auto;">Disable Push Notifications</button>
+                </div>
             </div>
-            <label style="display:block; margin-top:0.75rem;"><input type="checkbox" id="sms-toggle"> Enable SMS for defense reminders</label>
-        </div>
 
-        <div class="card">
-            <h3>Email Notifications</h3>
-            <label style="display:block;"><input type="checkbox" id="weekly-toggle"> Weekly progress report</label>
-            <label style="display:block;"><input type="checkbox" id="defense-toggle"> Defense countdown reminders</label>
-            <label style="display:block;"><input type="checkbox" id="inactivity-toggle"> Inactivity alerts (faculty only)</label>
-            <label style="display:block;"><input type="checkbox" id="email-master-toggle"> Enable email notifications</label>
-        </div>
+            <div class="card">
+                <h3>SMS Notifications</h3>
+                <div class="form-group">
+                    <label>Phone Number (International format)</label>
+                    <input id="phone-input" placeholder="+1234567890" style="margin-bottom: 0.5rem;">
+                    <button id="verify-phone-btn" class="btn" style="width:auto;">Verify Phone</button>
+                </div>
+                <div style="margin-top:1.5rem; padding-top: 1rem; border-top: 1px solid var(--border-color);">
+                    <label>Enter Verification Code</label>
+                    <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
+                        <input id="phone-code-input" placeholder="6-digit code" style="flex: 1;">
+                        <button id="submit-phone-code-btn" class="btn btn-secondary" style="width:auto;">Submit Code</button>
+                    </div>
+                </div>
+                <label style="display:flex; align-items: center; gap: 0.5rem; margin-top:1rem; cursor: pointer;">
+                    <input type="checkbox" id="sms-toggle"> Enable SMS for defense reminders
+                </label>
+            </div>
 
-        <button id="save-prefs-btn" class="btn">Save Preferences</button>
+            <div class="card">
+                <h3>Email Notifications</h3>
+                <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                    <label style="display:flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                        <input type="checkbox" id="weekly-toggle"> Weekly progress report
+                    </label>
+                    <label style="display:flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                        <input type="checkbox" id="defense-toggle"> Defense countdown reminders
+                    </label>
+                    <label style="display:flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                        <input type="checkbox" id="inactivity-toggle"> Inactivity alerts (faculty only)
+                    </label>
+                    <label style="display:flex; align-items: center; gap: 0.5rem; cursor: pointer; padding-top: 0.5rem; border-top: 1px solid var(--border-color);">
+                        <input type="checkbox" id="email-master-toggle"> <strong>Enable email notifications</strong>
+                    </label>
+                </div>
+            </div>
+
+            <button id="save-prefs-btn" class="btn" style="margin-bottom: 2rem;">Save Preferences</button>
+        </div>
     </div>
+
+    <button onclick="toggleTheme()" class="theme-toggle-fixed" id="theme-btn">🌙</button>
 
     <script src="/js/auth.js"></script>
     <script src="/js/toast.js"></script>
     <script>
         auth.requireAuth();
         async function loadPrefs() {
-            const res = await fetch('/api/notifications/preferences', { headers: { Authorization: `Bearer ${auth.getToken()}` } });
-            const p = await res.json();
-            document.getElementById('phone-input').value = p.phone_number || '';
-            document.getElementById('sms-toggle').checked = !!p.sms_notifications;
-            document.getElementById('weekly-toggle').checked = !!p.email_weekly_reports;
-            document.getElementById('defense-toggle').checked = !!p.email_defense_reminders;
-            document.getElementById('inactivity-toggle').checked = !!p.email_inactivity_alerts;
-            document.getElementById('email-master-toggle').checked = !!p.email_notifications;
-            document.getElementById('push-status').textContent = `Status: ${p.push_notifications ? 'enabled' : 'disabled'}`;
+            const loading = document.getElementById('loading-prefs');
+            const content = document.getElementById('settings-content');
+            
+            loading.style.display = 'block';
+            content.style.display = 'none';
+            ui.showSkeleton('loading-prefs', 3, 'card');
+
+            try {
+                const res = await fetch('/api/notifications/preferences', { headers: { Authorization: `Bearer ${auth.getToken()}` } });
+                const p = await res.json();
+                document.getElementById('phone-input').value = p.phone_number || '';
+                document.getElementById('sms-toggle').checked = !!p.sms_notifications;
+                document.getElementById('weekly-toggle').checked = !!p.email_weekly_reports;
+                document.getElementById('defense-toggle').checked = !!p.email_defense_reminders;
+                document.getElementById('inactivity-toggle').checked = !!p.email_inactivity_alerts;
+                document.getElementById('email-master-toggle').checked = !!p.email_notifications;
+                document.getElementById('push-status').textContent = `Status: ${p.push_notifications ? 'Enabled ✅' : 'Disabled ❌'}`;
+                
+                content.style.display = 'block';
+            } catch (err) {
+                showToast('Failed to load preferences', 'error');
+            } finally {
+                loading.style.display = 'none';
+            }
         }
 
         function urlBase64ToUint8Array(base64String) {
@@ -65,91 +128,150 @@
         }
 
         async function enablePush() {
+            const btn = document.getElementById('enable-push-btn');
             if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
                 showToast('Push not supported on this browser', 'error');
                 return;
             }
-            const permission = await Notification.requestPermission();
-            if (permission !== 'granted') return showToast('Notification permission denied', 'error');
-            const reg = await navigator.serviceWorker.register('/sw.js');
-            const vapidRes = await fetch('/api/notifications/vapid-key');
-            const vapid = await vapidRes.json();
-            const sub = await reg.pushManager.subscribe({
-                userVisibleOnly: true,
-                applicationServerKey: urlBase64ToUint8Array(vapid.publicKey)
-            });
-            const json = sub.toJSON();
-            await fetch('/api/notifications/subscribe-push', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${auth.getToken()}` },
-                body: JSON.stringify({
-                    endpoint: json.endpoint,
-                    p256dh: json.keys.p256dh,
-                    auth: json.keys.auth
-                })
-            });
-            showToast('Push notifications enabled', 'success');
-            loadPrefs();
+            
+            ui.setLoading(btn, true);
+            try {
+                const permission = await Notification.requestPermission();
+                if (permission !== 'granted') throw new Error('Notification permission denied');
+                
+                const reg = await navigator.serviceWorker.register('/sw.js');
+                const vapidRes = await fetch('/api/notifications/vapid-key');
+                const vapid = await vapidRes.json();
+                
+                const sub = await reg.pushManager.subscribe({
+                    userVisibleOnly: true,
+                    applicationServerKey: urlBase64ToUint8Array(vapid.publicKey)
+                });
+                
+                const json = sub.toJSON();
+                await fetch('/api/notifications/subscribe-push', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${auth.getToken()}` },
+                    body: JSON.stringify({
+                        endpoint: json.endpoint,
+                        p256dh: json.keys.p256dh,
+                        auth: json.keys.auth
+                    })
+                });
+                showToast('Push notifications enabled! 🔔', 'success');
+                loadPrefs();
+            } catch (err) {
+                showToast(err.message, 'error');
+            } finally {
+                ui.setLoading(btn, false);
+            }
         }
 
         async function disablePush() {
-            if ('serviceWorker' in navigator) {
-                const reg = await navigator.serviceWorker.getRegistration('/sw.js');
-                const sub = reg ? await reg.pushManager.getSubscription() : null;
-                await fetch('/api/notifications/unsubscribe-push', {
-                    method: 'DELETE',
-                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${auth.getToken()}` },
-                    body: JSON.stringify({ endpoint: sub?.endpoint })
-                });
-                if (sub) await sub.unsubscribe();
+            const btn = document.getElementById('disable-push-btn');
+            ui.setLoading(btn, true);
+            try {
+                if ('serviceWorker' in navigator) {
+                    const reg = await navigator.serviceWorker.getRegistration('/sw.js');
+                    const sub = reg ? await reg.pushManager.getSubscription() : null;
+                    if (sub) {
+                        await fetch('/api/notifications/unsubscribe-push', {
+                            method: 'DELETE',
+                            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${auth.getToken()}` },
+                            body: JSON.stringify({ endpoint: sub.endpoint })
+                        });
+                        await sub.unsubscribe();
+                    }
+                }
+                showToast('Push notifications disabled', 'success');
+                loadPrefs();
+            } catch (err) {
+                showToast('Failed to disable push', 'error');
+            } finally {
+                ui.setLoading(btn, false);
             }
-            showToast('Push notifications disabled', 'success');
-            loadPrefs();
         }
 
         document.getElementById('enable-push-btn').onclick = enablePush;
         document.getElementById('disable-push-btn').onclick = disablePush;
-        document.getElementById('verify-phone-btn').onclick = async () => {
+        
+        document.getElementById('verify-phone-btn').onclick = async function() {
             const phoneNumber = document.getElementById('phone-input').value.trim();
-            const res = await fetch('/api/notifications/update-phone', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${auth.getToken()}` },
-                body: JSON.stringify({ phoneNumber })
-            });
-            const data = await res.json();
-            if (!res.ok) return showToast(data.error || 'Failed', 'error');
-            showToast('Verification code sent', 'success');
+            if (!phoneNumber) return showToast('Please enter a phone number', 'warning');
+
+            ui.setLoading(this, true);
+            try {
+                const res = await fetch('/api/notifications/update-phone', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${auth.getToken()}` },
+                    body: JSON.stringify({ phoneNumber })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'Failed to send code');
+                showToast('Verification code sent! 📱', 'success');
+            } catch (err) {
+                showToast(err.message, 'error');
+            } finally {
+                ui.setLoading(this, false);
+            }
         };
-        document.getElementById('submit-phone-code-btn').onclick = async () => {
+
+        document.getElementById('submit-phone-code-btn').onclick = async function() {
             const code = document.getElementById('phone-code-input').value.trim();
-            const res = await fetch('/api/notifications/verify-phone', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${auth.getToken()}` },
-                body: JSON.stringify({ code })
-            });
-            const data = await res.json();
-            if (!res.ok) return showToast(data.error || 'Verification failed', 'error');
-            showToast('Phone verified', 'success');
-            loadPrefs();
+            if (!code) return showToast('Please enter the code', 'warning');
+
+            ui.setLoading(this, true);
+            try {
+                const res = await fetch('/api/notifications/verify-phone', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${auth.getToken()}` },
+                    body: JSON.stringify({ code })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'Verification failed');
+                showToast('Phone verified! ✅', 'success');
+                loadPrefs();
+            } catch (err) {
+                showToast(err.message, 'error');
+            } finally {
+                ui.setLoading(this, false);
+            }
         };
-        document.getElementById('save-prefs-btn').onclick = async () => {
-            const payload = {
-                smsNotifications: document.getElementById('sms-toggle').checked,
-                emailNotifications: document.getElementById('email-master-toggle').checked,
-                weeklyReports: document.getElementById('weekly-toggle').checked,
-                defenseReminders: document.getElementById('defense-toggle').checked,
-                inactivityAlerts: document.getElementById('inactivity-toggle').checked
-            };
-            const res = await fetch('/api/notifications/preferences', {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${auth.getToken()}` },
-                body: JSON.stringify(payload)
-            });
-            const data = await res.json();
-            if (!res.ok) return showToast(data.error || 'Failed to save', 'error');
-            showToast('Preferences saved', 'success');
+
+        document.getElementById('save-prefs-btn').onclick = async function() {
+            ui.setLoading(this, true);
+            try {
+                const payload = {
+                    smsNotifications: document.getElementById('sms-toggle').checked,
+                    emailNotifications: document.getElementById('email-master-toggle').checked,
+                    weeklyReports: document.getElementById('weekly-toggle').checked,
+                    defenseReminders: document.getElementById('defense-toggle').checked,
+                    inactivityAlerts: document.getElementById('inactivity-toggle').checked
+                };
+                const res = await fetch('/api/notifications/preferences', {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${auth.getToken()}` },
+                    body: JSON.stringify(payload)
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'Failed to save');
+                showToast('Preferences saved! 💾', 'success');
+            } catch (err) {
+                showToast(err.message, 'error');
+            } finally {
+                ui.setLoading(this, false);
+            }
         };
         loadPrefs();
+
+        function toggleTheme() {
+            const isDark = document.documentElement.classList.toggle('dark-mode');
+            localStorage.setItem('pdrs_theme', isDark ? 'dark' : 'light');
+        }
+
+        // Character Counters
+        ui.initCharCounter('phone-input', 20);
+        ui.initCharCounter('phone-code-input', 6);
     </script>
 </body>
 </html>

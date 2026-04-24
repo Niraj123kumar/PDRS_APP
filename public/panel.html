@@ -4,78 +4,74 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mock Defense Panel - PDRS</title>
+    <link rel="icon" type="image/png" href="/img/favicon.png">
     <link rel="stylesheet" href="/css/style.css">
     <link rel="stylesheet" href="/css/animations.css">
     <style>
-        body { background: #f1f5f9; height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
-        body.dark-mode { --bg-color: #0f172a; --card-bg: #1e293b; --text-color: #f1f5f9; --text-muted: #94a3b8; --border-color: rgba(255,255,255,0.1); background: var(--bg-color); color: var(--text-color); }
+        body.dark-mode { --bg-color: #0f172a; --card-bg: #1e293b; --text-color: #f1f5f9; --text-muted: #94a3b8; --border-color: rgba(255,255,255,0.1); }
+        body { background: var(--bg-color); height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
         
-        .navbar { height: 70px; display: flex; align-items: center; justify-content: space-between; padding: 0 2rem; background: white; box-shadow: var(--shadow); z-index: 100; }
-        body.dark-mode .navbar { background: var(--card-bg); border-bottom: 1px solid var(--border-color); }
+        .navbar { height: 70px; display: flex; align-items: center; justify-content: space-between; padding: 0 2rem; background: var(--card-bg); box-shadow: var(--shadow); z-index: 100; border-bottom: 1px solid var(--border-color); }
         
         .panel-container { display: flex; flex: 1; overflow: hidden; gap: 1rem; padding: 1rem; }
         
         /* Layout Sections */
-        .sidebar-left { width: 30%; background: white; border-radius: var(--radius); box-shadow: var(--shadow); display: flex; flex-direction: column; }
-        .main-content { flex: 1; background: white; border-radius: var(--radius); box-shadow: var(--shadow); display: flex; flex-direction: column; position: relative; }
-        .sidebar-right { width: 30%; background: white; border-radius: var(--radius); box-shadow: var(--shadow); display: flex; flex-direction: column; }
+        .sidebar-left { width: 300px; background: var(--card-bg); border-radius: var(--radius); box-shadow: var(--shadow); display: flex; flex-direction: column; border: 1px solid var(--border-color); }
+        .main-content { flex: 1; background: var(--card-bg); border-radius: var(--radius); box-shadow: var(--shadow); display: flex; flex-direction: column; position: relative; border: 1px solid var(--border-color); }
+        .sidebar-right { width: 320px; background: var(--card-bg); border-radius: var(--radius); box-shadow: var(--shadow); display: flex; flex-direction: column; border: 1px solid var(--border-color); }
         
-        body.dark-mode .sidebar-left, body.dark-mode .main-content, body.dark-mode .sidebar-right { background: var(--card-bg); border: 1px solid var(--border-color); }
-
         /* Components */
-        .section-header { padding: 1rem; border-bottom: 1px solid var(--border-color); font-weight: 700; display: flex; justify-content: space-between; align-items: center; }
+        .section-header { padding: 1rem; border-bottom: 1px solid var(--border-color); font-weight: 700; display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.02); }
+        .dark-mode .section-header { background: rgba(255,255,255,0.02); }
         .scroll-area { flex: 1; overflow-y: auto; padding: 1rem; }
         
-        /* Phase Bar */
-        .phase-bar { display: flex; background: #e2e8f0; padding: 0.5rem; border-radius: 30px; margin: 1rem; gap: 0.5rem; }
-        body.dark-mode .phase-bar { background: rgba(255,255,255,0.05); }
-        .phase-step { flex: 1; text-align: center; padding: 0.4rem; border-radius: 20px; font-size: 0.75rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; }
-        .phase-step.active { background: var(--primary-color); color: white; }
-
         /* Timer */
-        .timer-circle { width: 120px; height: 120px; border-radius: 50%; border: 8px solid #e2e8f0; display: flex; align-items: center; justify-content: center; font-size: 2rem; font-weight: 800; margin: 2rem auto; position: relative; }
-        .timer-circle.danger { border-color: var(--accent-red); color: var(--accent-red); animation: pulseRed 1s infinite; }
-
-        /* Chat */
-        .chat-list { flex: 1; overflow-y: auto; padding: 1rem; display: flex; flex-direction: column; gap: 0.75rem; }
-        .chat-msg { padding: 0.75rem; border-radius: 10px; background: #f8fafc; font-size: 0.9rem; position: relative; }
-        body.dark-mode .chat-msg { background: rgba(255,255,255,0.05); }
-        .chat-msg.private { border-left: 4px solid var(--accent-amber); background: #fffbeb; }
-        body.dark-mode .chat-msg.private { background: rgba(245, 158, 11, 0.1); }
-        .chat-meta { font-size: 0.7rem; color: var(--text-muted); margin-bottom: 0.25rem; }
-
-        /* Video / Screen Share */
-        .video-tile { width: 100%; aspect-ratio: 16/9; background: #0f172a; border-radius: 8px; overflow: hidden; margin-bottom: 1rem; position: relative; }
-        video { width: 100%; height: 100%; object-fit: cover; }
-
-        /* Alerts */
-        .hand-alert { background: #fffbeb; border: 1px solid var(--accent-amber); padding: 1rem; border-radius: 8px; margin-bottom: 0.75rem; display: flex; justify-content: space-between; align-items: center; animation: fadeInUp 0.3s ease; }
-        body.dark-mode .hand-alert { background: rgba(245, 158, 11, 0.1); }
-
-        /* Overlay */
-        .pause-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 50; border-radius: var(--radius); }
-        .pause-overlay h2 { color: white; margin-bottom: 1rem; }
-
-        /* Form Controls */
-        .input-group { display: flex; gap: 0.5rem; padding: 1rem; border-top: 1px solid var(--border-color); }
-        input, textarea, select { padding: 0.6rem; border: 1px solid var(--border-color); border-radius: 6px; font-family: inherit; }
-        body.dark-mode input, body.dark-mode textarea, body.dark-mode select { background: rgba(255,255,255,0.05); color: white; }
-
-        .btn-interrupt { background: var(--accent-red); color: white; font-weight: 800; padding: 1rem; border-radius: 8px; width: 100%; margin-top: 1rem; border: none; cursor: pointer; text-transform: uppercase; }
-        .btn-interrupt:hover { background: #dc2626; }
-
-        .theme-toggle { cursor: pointer; font-size: 1.25rem; background: none; border: none; padding: 0.5rem; }
+        .timer-circle { width: 140px; height: 140px; border-radius: 50%; border: 8px solid var(--border-color); display: flex; align-items: center; justify-content: center; font-size: 2.25rem; font-weight: 800; margin: 2rem auto; position: relative; transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 0 0 20px rgba(0,0,0,0.05); background: var(--card-bg); }
+        .timer-circle.warning { border-color: #f59e0b; color: #f59e0b; box-shadow: 0 0 30px rgba(245, 158, 11, 0.2); }
+        .timer-circle.danger { border-color: #ef4444; color: #ef4444; animation: pulseRed 1s infinite; box-shadow: 0 0 40px rgba(239, 68, 68, 0.3); }
         
-        /* Room Entry Form */
-        .room-entry { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #f1f5f9; z-index: 1000; display: flex; align-items: center; justify-content: center; }
-        body.dark-mode .room-entry { background: var(--bg-color); }
-        .entry-card { background: white; padding: 3rem; border-radius: var(--radius); box-shadow: var(--shadow); width: 100%; max-width: 400px; text-align: center; }
-        body.dark-mode .entry-card { background: var(--card-bg); border: 1px solid var(--border-color); }
-        .amber-banner { background: #fef3c7; border: 1px solid #f59e0b; color: #92400e; border-radius: 8px; padding: 0.65rem; margin: 1rem 2rem; font-size: 0.85rem; display: none; }
-        .whiteboard-wrap { display: none; border-top: 1px solid var(--border-color); padding: 1rem; }
-        .whiteboard-toolbar { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.5rem; margin-bottom: 0.75rem; }
-        .whiteboard-canvas { border: 1px solid var(--border-color); border-radius: 8px; background: white; width: 100%; max-width: 800px; height: 500px; }
-        .attendance-row { display: flex; justify-content: space-between; font-size: 0.82rem; border-bottom: 1px dashed var(--border-color); padding: 0.4rem 0; }
+        @keyframes pulseRed {
+            0% { transform: scale(1); box-shadow: 0 0 20px rgba(239, 68, 68, 0.2); }
+            50% { transform: scale(1.08); box-shadow: 0 0 50px rgba(239, 68, 68, 0.5); }
+            100% { transform: scale(1); box-shadow: 0 0 20px rgba(239, 68, 68, 0.2); }
+        }
+
+        /* Speaking Indicator */
+        .speaking-indicator-wrap { display: flex; align-items: flex-end; gap: 2px; height: 16px; margin-right: 8px; }
+        .speaking-bar { width: 3px; background: #22c55e; border-radius: 1px; animation: waveSpeak 1s infinite ease-in-out; }
+        .speaking-bar:nth-child(2) { animation-delay: 0.1s; }
+        .speaking-bar:nth-child(3) { animation-delay: 0.2s; }
+        @keyframes waveSpeak {
+            0%, 100% { height: 4px; }
+            50% { height: 16px; }
+        }
+
+        /* Connection Indicator */
+        .conn-indicator { display: flex; gap: 3px; align-items: flex-end; height: 18px; padding: 4px; border-radius: 4px; background: rgba(0,0,0,0.05); transition: all 0.3s ease; }
+        .dark-mode .conn-indicator { background: rgba(255,255,255,0.05); }
+        .conn-bar { width: 4px; background: var(--border-color); border-radius: 2px; transition: all 0.3s ease; }
+        .conn-excellent .conn-bar { background: #22c55e; box-shadow: 0 0 5px rgba(34, 197, 94, 0.3); }
+        .conn-fair .conn-bar:nth-child(-n+2) { background: #f59e0b; }
+        .conn-poor .conn-bar:nth-child(1) { background: #ef4444; animation: blinkPoor 1s infinite; }
+        @keyframes blinkPoor { 50% { opacity: 0.3; } }
+
+        /* Raise Hand Pulse */
+        .btn-raise-hand.pending { animation: pulseAmber 2s infinite; background: #f59e0b !important; border-color: #f59e0b !important; color: white !important; font-weight: 800; }
+        @keyframes pulseAmber {
+            0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.6); }
+            70% { transform: scale(1.05); box-shadow: 0 0 0 15px rgba(245, 158, 11, 0); }
+            100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+        }
+
+        /* Mobile Adjustments */
+        @media (max-width: 1024px) {
+            body { height: auto; overflow: auto; }
+            .navbar { flex-direction: column; height: auto; padding: 1rem; gap: 1rem; }
+            .panel-container { flex-direction: column; overflow-y: visible; padding: 0.5rem; }
+            .sidebar-left, .sidebar-right { width: 100%; height: auto; min-height: 300px; }
+            .main-content { min-height: 500px; }
+            .timer-circle { width: 100px; height: 100px; font-size: 1.5rem; margin: 1rem auto; }
+        }
     </style>
     <script>
         const savedTheme = localStorage.getItem('pdrs_theme');
@@ -83,29 +79,44 @@
     </script>
 </head>
 <body>
-    <!-- Room Entry Form (Hidden by default) -->
-    <div id="room-entry" class="room-entry" style="display: none;">
+    <!-- Room Entry Form -->
+    <div id="room-entry" class="room-entry" style="display: flex;">
         <div class="entry-card animate-up">
             <h1 style="color: var(--primary-color); margin-bottom: 1rem;">Join Panel</h1>
             <p class="text-muted" style="margin-bottom: 2rem;">Enter the 6-character room code provided by your instructor.</p>
             <div class="form-group">
                 <input type="text" id="entry-code" maxlength="6" style="text-align: center; font-size: 2rem; font-weight: 800; letter-spacing: 0.5rem; text-transform: uppercase; width: 100%;" placeholder="CODE">
             </div>
-            <p id="entry-error" style="color: var(--accent-red); margin: 1rem 0; font-weight: 600; display: none;">Room not found</p>
-            <button onclick="joinRoom()" class="btn" style="margin-top: 1rem;">Join Session</button>
+            <p id="entry-error" style="color: var(--error-color); margin: 1rem 0; font-weight: 600; display: none;">Room not found</p>
+            <button id="join-btn" onclick="joinRoom()" class="btn" style="margin-top: 1rem;">Join Session</button>
+            <button onclick="toggleTheme()" class="btn btn-secondary" style="margin-top: 1rem; width: 100%;">🌓 Switch Theme</button>
         </div>
     </div>
 
     <!-- Main Panel UI -->
     <nav class="navbar">
-        <div style="display: flex; align-items: center; gap: 1rem;">
-            <div id="ws-status" style="width: 10px; height: 10px; border-radius: 50%; background: #94a3b8;"></div>
+        <div style="display: flex; align-items: center; gap: 1.5rem; flex-wrap: wrap; justify-content: center;">
+            <div id="ws-status" style="width: 12px; height: 12px; border-radius: 50%; background: #94a3b8; border: 2px solid white; box-shadow: 0 0 5px rgba(0,0,0,0.1);"></div>
             <h2 style="font-weight: 800; color: var(--primary-color); cursor: pointer;" onclick="window.location.href='/'">PDRS Panel</h2>
-            <span id="nav-room-code" style="background: #f1f5f9; padding: 0.25rem 0.75rem; border-radius: 4px; font-weight: 800; font-family: monospace; font-size: 1.1rem;">------</span>
+            <div class="conn-indicator" id="conn-quality" title="Connection Quality">
+                <div class="conn-bar" style="height: 6px;"></div>
+                <div class="conn-bar" style="height: 9px;"></div>
+                <div class="conn-bar" style="height: 12px;"></div>
+                <div class="conn-bar" style="height: 15px;"></div>
+            </div>
+            <span id="nav-room-code" style="background: var(--bg-color); padding: 0.25rem 0.75rem; border-radius: 6px; font-weight: 800; font-family: monospace; font-size: 1.1rem; border: 1px solid var(--border-color);">------</span>
         </div>
-        <div style="display: flex; align-items: center; gap: 1.5rem;">
-            <button onclick="toggleTheme()" class="theme-toggle">🌙</button>
-            <button onclick="exitSession()" class="btn btn-secondary" style="width: auto; padding: 0.5rem 1rem;">Exit</button>
+        <div style="display: flex; align-items: center; gap: 1.25rem; flex-wrap: wrap; justify-content: center;">
+            <div id="speaking-indicator" style="display: none; align-items: center; font-size: 0.8rem; font-weight: 800; color: #22c55e;">
+                <div class="speaking-indicator-wrap">
+                    <div class="speaking-bar"></div>
+                    <div class="speaking-bar"></div>
+                    <div class="speaking-bar"></div>
+                </div>
+                SPEAKING
+            </div>
+            <button onclick="toggleTheme()" class="btn-icon" title="Toggle Theme">🌓</button>
+            <button onclick="exitSession()" class="btn btn-secondary" style="width: auto; padding: 0.5rem 1.25rem;">Exit</button>
         </div>
     </nav>
 
@@ -113,41 +124,31 @@
         <!-- Left Sidebar: Questions & Rubric -->
         <aside class="sidebar-left">
             <div class="section-header">Question Queue</div>
-            <div class="scroll-area" id="question-queue">
-                <p class="text-muted">No questions in queue.</p>
-            </div>
+            <div class="scroll-area" id="question-queue"></div>
+            
             <div id="faculty-q-input" class="input-group" style="display: none;">
                 <input type="text" id="new-q-text" placeholder="Add a question..." style="flex: 1;">
-                <button onclick="addQuestion()" class="btn" style="width: auto;">Add</button>
-                <button id="save-bank-btn" onclick="saveQuestionToBank()" class="btn btn-secondary" style="width:auto;">+ Add to Bank</button>
+                <button onclick="addQuestion()" class="btn" style="width: auto; padding: 0.5rem 1rem;">Add</button>
             </div>
-            <div id="question-bank-section" style="display:none; border-top: 1px solid var(--border-color);">
-                <div class="section-header">My Questions</div>
-                <div class="input-group" style="border-top:0;">
-                    <input type="text" id="question-bank-search" placeholder="Search question bank..." style="flex:1;">
-                </div>
-                <div class="scroll-area" id="question-bank-list" style="max-height: 180px;"></div>
-            </div>
+
             <div class="section-header" style="border-top: 1px solid var(--border-color);">Rubric</div>
-            <div class="scroll-area" id="rubric-section" style="flex: 0; min-height: 100px;">
+            <div class="scroll-area" id="rubric-section" style="flex: 0; min-height: 120px;">
                 <div id="faculty-rubric-controls" style="display: none;">
+                    <button onclick="document.getElementById('rubric-upload').click()" class="btn btn-secondary" style="width: 100%;">📄 Upload PDF Rubric</button>
                     <input type="file" id="rubric-upload" accept=".pdf" style="display: none;">
-                    <button onclick="document.getElementById('rubric-upload').click()" class="btn btn-secondary" style="width: 100%;">Upload PDF Rubric</button>
                 </div>
                 <div id="rubric-view" style="display: none; text-align: center; padding: 1rem;">
-                    <a id="rubric-link" href="#" target="_blank" style="color: var(--primary-color); font-weight: 700;">View Rubric PDF</a>
+                    <a id="rubric-link" href="#" target="_blank" class="btn btn-secondary" style="width: 100%;">View Rubric PDF</a>
                 </div>
-            </div>
-            <div id="breakout-controls" class="input-group" style="display:none;">
-                <button class="btn btn-secondary" style="width:100%;" onclick="openBreakoutModal()">Create Breakout Room</button>
             </div>
         </aside>
 
         <!-- Main Content: Stage & Controls -->
         <main class="main-content">
             <div id="pause-overlay" class="pause-overlay">
+                <div style="font-size: 4rem; margin-bottom: 1rem;">⏸️</div>
                 <h2>Session Paused</h2>
-                <p>Waiting for faculty to resume...</p>
+                <p style="color: rgba(255,255,255,0.8);">Waiting for faculty to resume...</p>
             </div>
 
             <div class="phase-bar">
@@ -156,20 +157,21 @@
                 <div class="phase-step" id="phase-questioning">Questions</div>
                 <div class="phase-step" id="phase-scoring">Scoring</div>
             </div>
-            <div id="score-disagreement-banner" class="amber-banner"></div>
 
             <div class="scroll-area" style="text-align: center;">
-                <div id="timer-display" class="timer-circle">03:00</div>
+                <div id="timer-display" class="timer-circle">00:00</div>
                 
-                <div id="current-question-card" class="card" style="margin: 0 2rem; padding: 2rem;">
-                    <small id="q-teacher" style="text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); font-weight: 700;">Current Question</small>
-                    <h2 id="q-text" style="margin-top: 1rem;">Waiting for questions...</h2>
+                <div id="current-question-card" class="card" style="margin: 0 2rem; padding: 2.5rem; border-radius: 20px; border: 2px solid var(--border-color); background: var(--bg-color);">
+                    <small id="q-teacher" style="text-transform: uppercase; letter-spacing: 2px; color: var(--text-muted); font-weight: 800; font-size: 0.75rem;">Current Question</small>
+                    <h2 id="q-text" style="margin-top: 1.5rem; line-height: 1.4;">Waiting for the session to begin...</h2>
                 </div>
 
                 <div id="student-answer-area" style="margin: 2rem; display: none;">
-                    <textarea id="live-answer" style="width: 100%; min-height: 150px;" placeholder="Type your notes or reference here..."></textarea>
+                    <div class="form-group" style="position: relative;">
+                        <textarea id="live-answer" style="width: 100%; min-height: 180px; padding: 1.25rem; font-size: 1.1rem;" placeholder="Type your notes or reference here..." maxlength="2000"></textarea>
+                    </div>
                     <div style="display: flex; gap: 1rem; margin-top: 1rem;">
-                        <button id="raise-hand-btn" onclick="openRaiseHand()" class="btn" style="background: var(--accent-amber); flex: 1;">Raise Hand ✋</button>
+                        <button id="raise-hand-btn" onclick="openRaiseHand()" class="btn btn-raise-hand" style="background: var(--warning-color); flex: 1;">Raise Hand ✋</button>
                         <button id="share-screen-btn" onclick="toggleScreenShare()" class="btn btn-secondary" style="flex: 1;">Share Screen 🖥️</button>
                     </div>
                 </div>
@@ -178,98 +180,50 @@
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
                         <button onclick="updatePhase('briefing')" class="btn btn-secondary">Start Briefing</button>
                         <button onclick="updatePhase('questioning')" class="btn btn-secondary">Start Questions</button>
-                        <button id="pause-btn" onclick="togglePause()" class="btn" style="background: var(--accent-amber);">Pause Session</button>
+                        <button id="pause-btn" onclick="togglePause()" class="btn" style="background: var(--warning-color);">Pause Session</button>
                         <button onclick="startTimer()" class="btn btn-secondary">Start Timer</button>
                     </div>
-                    <button onclick="teacherInterrupt()" class="btn-interrupt">Interrupt Student 📢</button>
-                    
-                    <div id="scoring-area" style="display: none; margin-top: 2rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
-                        <h3>Final Scoring</h3>
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-top: 1rem;">
-                            <div class="form-group"><label>Clarity (1-5)</label><input type="range" id="s-clarity" min="1" max="5" value="3"></div>
-                            <div class="form-group"><label>Reasoning (1-5)</label><input type="range" id="s-reasoning" min="1" max="5" value="3"></div>
-                            <div class="form-group"><label>Depth (1-5)</label><input type="range" id="s-depth" min="1" max="5" value="3"></div>
-                            <div class="form-group"><label>Confidence (1-5)</label><input type="range" id="s-confidence" min="1" max="5" value="3"></div>
-                        </div>
-                        <button onclick="submitScore()" class="btn" style="margin-top: 1rem;">Submit Final Score</button>
-                    </div>
+                    <button onclick="teacherInterrupt()" class="btn-interrupt" style="margin-top: 1.5rem;">Interrupt Student 📢</button>
                 </div>
             </div>
 
-            <div id="live-transcript" style="height: 100px; padding: 1rem; background: rgba(0,0,0,0.02); border-top: 1px solid var(--border-color); font-style: italic; font-size: 0.9rem;">
-                Live Transcript: <span id="transcript-text" class="text-muted">Listening for speech...</span>
-            </div>
-            <div id="whiteboard-wrap" class="whiteboard-wrap">
-                <div class="section-header" style="padding: 0 0 0.5rem 0;">Shared Whiteboard</div>
-                <div class="whiteboard-toolbar">
-                    <button class="btn btn-secondary" style="width:auto;" onclick="setWhiteboardTool('draw')">Pen</button>
-                    <button class="btn btn-secondary" style="width:auto;" onclick="setWhiteboardTool('erase')">Eraser</button>
-                    <button class="btn btn-secondary" style="width:auto;" onclick="setWhiteboardTool('text')">Text</button>
-                    <button class="btn btn-secondary" style="width:auto;" onclick="setWhiteboardTool('shape')">Shape</button>
-                    <button class="btn btn-secondary" style="width:auto;" onclick="clearWhiteboard()">Clear</button>
-                    <input type="color" id="wb-color" value="#2563eb">
-                    <input type="range" id="wb-width" min="1" max="20" value="2">
-                    <button class="btn btn-secondary" style="width:auto;" onclick="toggleWhiteboard()">Hide</button>
-                </div>
-                <canvas id="whiteboard-canvas" class="whiteboard-canvas" width="800" height="500"></canvas>
+            <div id="live-transcript" style="height: 120px; padding: 1.25rem; background: rgba(0,0,0,0.03); border-top: 1px solid var(--border-color); font-style: italic; font-size: 1rem; position: relative;">
+                <div style="font-size: 0.75rem; font-weight: 800; color: var(--text-muted); margin-bottom: 0.5rem; text-transform: uppercase;">Live Transcript</div>
+                <span id="transcript-text" class="text-muted">Listening for speech...</span>
             </div>
         </main>
 
         <!-- Right Sidebar: Participants & Chat -->
         <aside class="sidebar-right">
-            <div class="section-header">Participants <span id="p-count" class="role-badge">0</span></div>
-            <div class="scroll-area" id="participant-list" style="flex: 0; max-height: 150px;"></div>
-            <div id="attendance-panel" style="display:none; padding:0 1rem 0.5rem 1rem;">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
-                    <strong style="font-size:0.8rem;">Attendance</strong>
-                    <button class="btn btn-secondary" style="width:auto; padding:0.2rem 0.5rem; font-size:0.72rem;" onclick="exportAttendanceCSV()">Export CSV</button>
-                </div>
-                <div id="attendance-list" style="max-height:130px; overflow-y:auto;"></div>
+            <div class="section-header">
+                Participants 
+                <span id="p-count" class="badge">0</span>
             </div>
+            <div class="scroll-area" id="participant-list" style="flex: 0; max-height: 200px;"></div>
             
             <div id="hand-raises" style="padding: 0 1rem;"></div>
 
-            <div class="section-header" style="border-top: 1px solid var(--border-color);">
-                Chat
-                <div id="faculty-chat-toggle" style="display: none; font-size: 0.7rem; display: flex; gap: 0.5rem;">
-                    <label><input type="radio" name="chat-mode" value="all" checked> All</label>
-                    <label><input type="radio" name="chat-mode" value="private"> Private 🔒</label>
-                </div>
-            </div>
+            <div class="section-header" style="border-top: 1px solid var(--border-color);">Chat</div>
             <div class="chat-list" id="chat-messages"></div>
-            <div class="input-group">
-                <input type="text" id="chat-input" placeholder="Type a message..." style="flex: 1;">
-                <button onclick="sendChat()" class="btn" style="width: auto;">Send</button>
-            </div>
-
-            <div id="screen-share-area" style="display: none; padding: 1rem; border-top: 1px solid var(--border-color);">
-                <small style="text-transform: uppercase; font-weight: 800; color: var(--text-muted);">Student Screen</small>
-                <div class="video-tile">
-                    <video id="screen-video" autoplay playsinline></video>
-                </div>
+            <div class="input-group" style="position: relative;">
+                <input type="text" id="chat-input" placeholder="Type a message..." style="flex: 1; padding-right: 4rem;" maxlength="500">
+                <button onclick="sendChat()" class="btn" style="width: auto; padding: 0.5rem 1rem;">Send</button>
             </div>
         </aside>
     </div>
 
     <!-- Modals -->
-    <div id="hand-modal" class="room-entry" style="display: none; background: rgba(0,0,0,0.5);">
-        <div class="entry-card">
-            <h3>Raise Hand</h3>
-            <textarea id="hand-reason" placeholder="Why are you raising your hand? (Optional)" style="width: 100%; margin: 1rem 0; min-height: 100px;"></textarea>
-            <div style="display: flex; gap: 1rem;">
-                <button onclick="submitHand()" class="btn">Raise Hand</button>
-                <button onclick="document.getElementById('hand-modal').style.display='none'" class="btn btn-secondary">Cancel</button>
+    <div id="hand-modal" class="modal">
+        <div class="modal-content">
+            <button class="modal-close" onclick="document.getElementById('hand-modal').classList.remove('active')">&times;</button>
+            <h3 style="margin-bottom: 1.5rem;">Raise Hand</h3>
+            <div class="form-group">
+                <label>Reason (Optional)</label>
+                <textarea id="hand-reason" placeholder="Why are you raising your hand?" style="width: 100%; min-height: 120px;" maxlength="200"></textarea>
             </div>
-        </div>
-    </div>
-    <div id="breakout-modal" class="room-entry" style="display:none; background: rgba(0,0,0,0.5);">
-        <div class="entry-card">
-            <h3>Create Breakout Room</h3>
-            <input id="breakout-name" placeholder="Room name" style="width:100%; margin:1rem 0;">
-            <textarea id="breakout-faculty-ids" placeholder="Faculty IDs comma separated" style="width:100%; min-height: 90px;"></textarea>
-            <div style="display:flex; gap:1rem; margin-top:1rem;">
-                <button class="btn" onclick="createBreakoutRoom()">Create</button>
-                <button class="btn btn-secondary" onclick="document.getElementById('breakout-modal').style.display='none'">Cancel</button>
+            <div style="display: flex; gap: 1rem; margin-top: 1.5rem;">
+                <button onclick="submitHand()" class="btn" style="flex: 1;">Confirm Raise Hand</button>
+                <button onclick="document.getElementById('hand-modal').classList.remove('active')" class="btn btn-secondary" style="flex: 1;">Cancel</button>
             </div>
         </div>
     </div>
@@ -279,5 +233,35 @@
     <script src="/js/websocket.js"></script>
     <script src="/js/webrtc.js"></script>
     <script src="/js/panel-logic.js"></script>
+    <script>
+        // Additional UI logic for animations
+        function updateTimerUI(seconds) {
+            const timerEl = document.getElementById('timer-display');
+            timerEl.classList.toggle('warning', seconds <= 60 && seconds > 30);
+            timerEl.classList.toggle('danger', seconds <= 30);
+        }
+
+        function setConnectionQuality(quality) {
+            const bars = document.querySelectorAll('#conn-quality .conn-bar');
+            bars.forEach((bar, i) => {
+                bar.classList.toggle('active', i < quality);
+            });
+            const indicator = document.getElementById('conn-quality');
+            indicator.className = 'conn-indicator ' + (quality > 3 ? 'conn-excellent' : quality > 1 ? 'conn-fair' : 'conn-poor');
+        }
+
+        // Initialize character counters
+        ui.initCharCounter('hand-reason', 200);
+        ui.initCharCounter('chat-input', 500);
+        ui.initCharCounter('live-answer', 2000);
+
+        // Simulation for testing
+        setConnectionQuality(4);
+
+        function toggleTheme() {
+            const isDark = document.documentElement.classList.toggle('dark-mode');
+            localStorage.setItem('pdrs_theme', isDark ? 'dark' : 'light');
+        }
+    </script>
 </body>
 </html>

@@ -4,18 +4,45 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Notifications - PDRS</title>
+    <link rel="icon" type="image/png" href="/img/favicon.png">
     <link rel="stylesheet" href="/css/style.css">
     <link rel="stylesheet" href="/css/animations.css">
     <style>
         body.dark-mode { --bg-color: #0f172a; --card-bg: #1e293b; --text-color: #f1f5f9; --text-muted: #94a3b8; --border-color: rgba(255,255,255,0.1); }
-        .notif-card { background: white; padding: 1.25rem; border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 1rem; border-left: 4px solid var(--border-color); cursor: pointer; transition: transform 0.2s; position: relative; }
-        body.dark-mode .notif-card { background: var(--card-bg); border-color: var(--border-color); color: var(--text-color); }
-        .notif-card:hover { transform: translateX(5px); }
-        .notif-unread { border-left-color: var(--primary-color); background: #f0f7ff; }
-        body.dark-mode .notif-unread { background: rgba(37, 99, 235, 0.1); border-left-color: var(--primary-color); }
-        .notif-title { font-weight: 700; margin-bottom: 0.25rem; }
-        .notif-meta { font-size: 0.75rem; color: var(--text-muted); margin-top: 0.5rem; }
-        .theme-toggle { cursor: pointer; font-size: 1.25rem; background: none; border: none; padding: 0.5rem; }
+        .notif-card { background: var(--card-bg); padding: 1.25rem; border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 0.75rem; border-left: 5px solid var(--border-color); cursor: pointer; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); position: relative; display: flex; align-items: flex-start; gap: 1rem; animation: slideIn 0.3s ease-out; }
+        @keyframes slideIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        
+        .notif-card:hover { transform: translateX(8px); border-left-color: var(--primary-color); background: var(--bg-color); }
+        .notif-unread { border-left-color: var(--primary-color); background: rgba(37, 99, 235, 0.05); }
+        .notif-unread::after { content: ''; position: absolute; top: 1.25rem; right: 1.25rem; width: 10px; height: 10px; background: var(--primary-color); border-radius: 50%; box-shadow: 0 0 10px var(--primary-color); animation: pulseUnread 2s infinite; }
+        @keyframes pulseUnread { 0% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.5); opacity: 0.5; } 100% { transform: scale(1); opacity: 1; } }
+        
+        .date-group-header { font-size: 0.75rem; font-weight: 800; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.1em; margin: 2.5rem 0 1rem; display: flex; align-items: center; gap: 1rem; opacity: 0.8; }
+        .date-group-header::before { content: '📅'; font-size: 1rem; }
+        .date-group-header::after { content: ''; flex: 1; height: 1px; background: linear-gradient(to right, var(--border-color), transparent); }
+        
+        .notif-title { font-weight: 700; margin-bottom: 0.25rem; color: var(--text-color); font-size: 1rem; }
+        .notif-message { font-size: 0.9375rem; color: var(--text-muted); line-height: 1.5; }
+        .notif-meta { font-size: 0.75rem; color: var(--text-muted); margin-top: 0.75rem; display: flex; align-items: center; gap: 1rem; }
+        
+        .notif-icon { width: 44px; height: 44px; border-radius: 12px; background: var(--bg-color); display: flex; align-items: center; justify-content: center; font-size: 1.5rem; flex-shrink: 0; box-shadow: var(--shadow-sm); border: 1px solid var(--border-color); }
+        
+        /* Mark as read animation */
+        .notif-card.marking-read { animation: markReadAnim 0.6s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
+        @keyframes markReadAnim {
+            0% { background: rgba(37, 99, 235, 0.1); }
+            50% { transform: scale(1.02); }
+            100% { background: var(--card-bg); border-left-color: var(--border-color); transform: scale(1); }
+        }
+        .notif-card.marking-read::after { animation: fadeOut 0.3s forwards; }
+        @keyframes fadeOut { to { opacity: 0; transform: scale(0); } }
+
+        @media (max-width: 600px) {
+            .navbar { flex-direction: column; gap: 1rem; padding: 1rem; height: auto; }
+            .container { padding: 0 1rem; }
+            .notif-card { padding: 1rem; }
+            #read-all-btn { width: 100% !important; }
+        }
     </style>
     <script>
         const savedTheme = localStorage.getItem('pdrs_theme');
@@ -24,42 +51,40 @@
 </head>
 <body class="animate-up">
     <nav class="navbar">
-        <div style="display: flex; align-items: center; gap: 2rem;">
-            <h1 style="color: var(--primary-color); font-weight: 800; cursor: pointer;" onclick="window.location.href='/'">PDRS</h1>
+        <div style="display:flex; align-items:center; gap:1rem;">
+            <button class="btn-icon" onclick="window.history.back()" aria-label="Back">←</button>
+            <h1 style="color: var(--primary-color); font-size: 1.5rem; cursor: pointer;" onclick="window.location.href='/'">Notifications</h1>
         </div>
-        <div style="display: flex; align-items: center; gap: 1.5rem;">
+        <div style="display: flex; align-items: center; gap: 1rem;">
             <button onclick="toggleTheme()" class="theme-toggle">🌙</button>
-            <button onclick="window.history.back()" class="btn btn-secondary" style="width: auto; padding: 0.5rem 1rem;">Back</button>
+            <button class="btn btn-secondary" style="width:auto; padding:0.5rem 1rem;" onclick="window.location.href='/notifications-settings.html'">⚙️ Settings</button>
         </div>
     </nav>
 
     <div class="container" style="max-width: 800px;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
-            <h2>Notifications</h2>
-            <div style="display:flex; gap:0.5rem; align-items:center;">
-                <select id="type-filter" style="padding:0.45rem;">
-                    <option value="">All types</option>
-                    <option value="badge">Badge</option>
-                    <option value="defense">Defense</option>
-                    <option value="weekly_report">Weekly report</option>
-                    <option value="at_risk">At-risk alert</option>
-                    <option value="session_request_accepted">Accepted</option>
-                    <option value="session_request_declined">Declined</option>
-                    <option value="panel">Panel</option>
+            <div style="display:flex; gap:0.75rem; align-items:center; flex-wrap: wrap;">
+                <select id="type-filter" class="form-select" style="width: auto; min-width: 150px;">
+                    <option value="">All Notifications</option>
+                    <option value="badge">🏆 Badges</option>
+                    <option value="defense">📅 Defenses</option>
+                    <option value="weekly_report">📊 Reports</option>
+                    <option value="at_risk">⚠️ Alerts</option>
+                    <option value="session_request_accepted">✅ Accepted</option>
+                    <option value="session_request_declined">❌ Declined</option>
+                    <option value="panel">🎙 Panel</option>
                 </select>
-                <button id="read-all-btn" class="btn" style="width: auto; padding: 0.5rem 1rem; font-size: 0.875rem;">Mark all as read</button>
-                <button class="btn btn-secondary" style="width:auto; padding:0.5rem 1rem;" onclick="window.location.href='/notifications-settings.html'">Settings</button>
+                <button id="read-all-btn" class="btn" style="width: auto; padding: 0.5rem 1.25rem; font-size: 0.875rem;">Mark all as read</button>
             </div>
         </div>
 
-        <div id="notif-loading">
-            <div class="skeleton" style="height: 80px; width: 100%; margin-bottom: 1rem;"></div>
-            <div class="skeleton" style="height: 80px; width: 100%; margin-bottom: 1rem;"></div>
-        </div>
-
-        <div id="notif-list"></div>
-        <div id="notif-empty" class="empty-state" style="display: none;">
-            <p>You're all caught up!</p>
+        <div id="notif-container">
+            <div id="notif-loading">
+                <div class="skeleton" style="height: 80px; width: 100%; margin-bottom: 1rem; border-radius: 12px;"></div>
+                <div class="skeleton" style="height: 80px; width: 100%; margin-bottom: 1rem; border-radius: 12px;"></div>
+                <div class="skeleton" style="height: 80px; width: 100%; margin-bottom: 1rem; border-radius: 12px;"></div>
+            </div>
+            <div id="notif-list"></div>
         </div>
     </div>
 
@@ -79,8 +104,21 @@
             default: '🔔'
         };
 
+        function getRelativeDate(dateStr) {
+            const date = new Date(dateStr);
+            const now = new Date();
+            const diffDays = Math.floor((now - date) / (1000 * 60 * 60 * 24));
+            
+            if (diffDays === 0) return 'Today';
+            if (diffDays === 1) return 'Yesterday';
+            if (diffDays < 7) return 'This Week';
+            if (diffDays < 30) return 'This Month';
+            return 'Older';
+        }
+
         async function loadNotifications() {
             try {
+                ui.showSkeleton('notif-list', 4, 'card');
                 const token = auth.getToken();
                 const res = await fetch('/api/notifications', {
                     headers: { 'Authorization': `Bearer ${token}` }
@@ -88,7 +126,6 @@
                 const notifs = await res.json();
                 allNotifications = Array.isArray(notifs) ? notifs : [];
                 renderNotifications(allNotifications);
-                document.getElementById('notif-loading').style.display = 'none';
             } catch (err) {
                 showToast('Failed to load notifications', 'error');
             }
@@ -96,66 +133,97 @@
 
         function renderNotifications(notifs) {
             const list = document.getElementById('notif-list');
-            const empty = document.getElementById('notif-empty');
             const filter = document.getElementById('type-filter').value;
             const filtered = filter ? notifs.filter((n) => n.type === filter) : notifs;
 
             if (filtered.length === 0) {
-                list.innerHTML = '';
-                empty.style.display = 'block';
+                ui.showEmptyState('notif-list', '🎉', "You're all caught up!", 
+                    "No notifications found. We'll let you know when something important happens.",
+                    "Go to Dashboard", "/student.html");
                 return;
             }
 
-            empty.style.display = 'none';
-            list.innerHTML = filtered.map(n => `
-                <div class="notif-card ${n.is_read ? '' : 'notif-unread'}" onclick="markRead(${n.id})">
-                    <div style="display: flex; align-items: flex-start; gap: 1rem;">
-                        <span style="font-size: 1.5rem;">${typeIcons[n.type] || typeIcons.default}</span>
-                        <div style="flex-grow: 1;">
-                            <div class="notif-title">${n.title}</div>
-                            <div class="notif-message">${n.message}</div>
-                            <div class="notif-meta">${new Date(n.created_at).toLocaleString()}</div>
-                        </div>
-                        ${!n.is_read ? '<div style="width: 8px; height: 8px; background: var(--primary-color); border-radius: 50%;"></div>' : ''}
+            // Group by date
+            const groups = {};
+            filtered.forEach(n => {
+                const group = getRelativeDate(n.created_at);
+                if (!groups[group]) groups[group] = [];
+                groups[group].push(n);
+            });
+
+            const groupOrder = ['Today', 'Yesterday', 'This Week', 'This Month', 'Older'];
+            
+            list.innerHTML = groupOrder
+                .filter(g => groups[g] && groups[g].length > 0)
+                .map(group => `
+                    <div class="date-group">
+                        <div class="date-group-header">${group}</div>
+                        ${groups[group].map(n => `
+                            <div class="notif-card ${n.is_read ? '' : 'notif-unread'}" id="notif-${n.id}" onclick="markRead(${n.id})">
+                                <div class="notif-icon">${typeIcons[n.type] || typeIcons.default}</div>
+                                <div style="flex-grow: 1;">
+                                    <div class="notif-title">${n.title}</div>
+                                    <div class="notif-message">${n.message}</div>
+                                    <div class="notif-meta">
+                                        <span>🕒 ${new Date(n.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                                        ${n.is_read ? '' : '<span style="color:var(--primary-color); font-weight:700;">• New</span>'}
+                                    </div>
+                                </div>
+                            </div>
+                        `).join('')}
                     </div>
-                </div>
-            `).join('');
+                `).join('');
+            
             updateUnreadBadge(notifs);
         }
 
         async function markRead(id) {
+            const el = document.getElementById(`notif-${id}`);
+            if (!el || !el.classList.contains('notif-unread')) return;
+
             try {
+                el.classList.add('marking-read');
                 const token = auth.getToken();
+                
+                // Fire and forget local update for snappy UI
+                const notif = allNotifications.find(n => n.id === id);
+                if (notif) notif.is_read = true;
+                updateUnreadBadge(allNotifications);
+
                 await fetch(`/api/notifications/${id}/read`, {
                     method: 'PATCH',
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
-                loadNotifications();
-            } catch (err) {}
+                
+                // Re-render after animation completes
+                setTimeout(() => renderNotifications(allNotifications), 600);
+            } catch (err) {
+                el.classList.remove('marking-read');
+                // Revert local state if failed
+                const notif = allNotifications.find(n => n.id === id);
+                if (notif) notif.is_read = false;
+                updateUnreadBadge(allNotifications);
+                showToast('Failed to mark as read', 'error');
+            }
         }
 
-        function toggleTheme() {
-            const isDark = document.documentElement.classList.toggle('dark-mode');
-            localStorage.setItem('pdrs_theme', isDark ? 'dark' : 'light');
-            document.querySelectorAll('.theme-toggle').forEach(btn => {
-                btn.textContent = isDark ? '☀️' : '🌙';
-            });
-        }
-        
-        if (localStorage.getItem('pdrs_theme') === 'dark') {
-            document.querySelectorAll('.theme-toggle').forEach(btn => btn.textContent = '☀️');
-        }
-
-        document.getElementById('read-all-btn').addEventListener('click', async () => {
+        document.getElementById('read-all-btn').addEventListener('click', async (e) => {
+            const btn = e.target;
             try {
+                ui.setLoading(btn, true);
                 const token = auth.getToken();
                 await fetch('/api/notifications/read-all', {
                     method: 'PATCH',
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
-                showToast('All marked as read', 'success');
-                loadNotifications();
-            } catch (err) {}
+                showToast('All marked as read ✅', 'success');
+                allNotifications.forEach(n => n.is_read = true);
+                renderNotifications(allNotifications);
+            } catch (err) {
+                showToast('Failed to mark all as read', 'error');
+            } finally {
+                ui.setLoading(btn, false);
+            }
         });
 
         document.getElementById('type-filter').addEventListener('change', () => renderNotifications(allNotifications));
@@ -164,6 +232,21 @@
             const unread = (notifs || []).filter((n) => !n.is_read).length;
             document.title = unread > 0 ? `(${unread}) Notifications - PDRS` : 'Notifications - PDRS';
         }
+
+        function toggleTheme() {
+            const isDark = document.documentElement.classList.toggle('dark-mode');
+            localStorage.setItem('pdrs_theme', isDark ? 'dark' : 'light');
+            const btn = document.querySelector('.theme-toggle');
+            if (btn) btn.textContent = isDark ? '☀️' : '🌙';
+        }
+
+        // Initialize theme button icon
+        window.addEventListener('DOMContentLoaded', () => {
+            const btn = document.querySelector('.theme-toggle');
+            if (btn && document.documentElement.classList.contains('dark-mode')) {
+                btn.textContent = '☀️';
+            }
+        });
 
         function connectRealtime() {
             const token = auth.getToken();
@@ -176,6 +259,7 @@
                     if (msg.type === 'notification' && msg.payload) {
                         allNotifications.unshift(msg.payload);
                         renderNotifications(allNotifications);
+                        showToast(`New Notification: ${msg.payload.title}`, 'info');
                     }
                 } catch (_) {}
             };

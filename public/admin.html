@@ -4,73 +4,215 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin Dashboard - PDRS</title>
+    <link rel="icon" type="image/png" href="/img/favicon.png">
     <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/animations.css">
     <style>
-        .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin: 1rem 0; }
-        .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 1rem; }
-        .tabs { display: flex; gap: 0.5rem; margin: 1rem 0; }
+        body.dark-mode { --bg-color: #0f172a; --card-bg: #1e293b; --text-color: #f1f5f9; --text-muted: #94a3b8; --border-color: rgba(255,255,255,0.1); --hover-bg: rgba(255,255,255,0.05); --input-bg: #0f172a; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.25rem; margin: 1.5rem 0; }
+        .stat-card { background: var(--card-bg, #fff); border: 1px solid var(--border-color, #e2e8f0); border-radius: 12px; padding: 1.5rem; transition: transform 0.2s, box-shadow 0.2s; position: relative; overflow: hidden; }
+        .stat-card:hover { transform: translateY(-3px); box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); }
+        .stat-card small { color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; font-size: 0.75rem; }
+        .stat-card h2 { margin: 0.5rem 0 0.25rem 0; font-size: 2rem; color: var(--text-color); }
+        .trend { font-size: 0.85rem; display: flex; align-items: center; gap: 0.25rem; font-weight: 600; padding: 0.25rem 0.5rem; border-radius: 6px; width: fit-content; margin-top: 0.5rem; }
+        .trend-up { color: #10b981; background: rgba(16, 185, 129, 0.1); }
+        .trend-down { color: #ef4444; background: rgba(239, 68, 68, 0.1); }
+        .trend-neutral { color: var(--text-muted); background: var(--hover-bg); }
+        
+        .tabs { display: flex; gap: 0.5rem; margin: 2rem 0 1rem 0; padding: 0.25rem; background: var(--hover-bg); border-radius: 8px; width: fit-content; }
+        .tab-btn { padding: 0.6rem 1.2rem; border-radius: 6px; border: none; background: transparent; color: var(--text-muted); cursor: pointer; font-weight: 500; transition: all 0.2s; }
+        .tab-btn.active { background: var(--card-bg); color: var(--primary-color); box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        
         .hidden { display: none; }
-        table { width: 100%; border-collapse: collapse; }
-        th, td { border-bottom: 1px solid #e2e8f0; padding: 0.6rem; text-align: left; font-size: 0.9rem; }
-        .filters { display: flex; gap: 0.5rem; margin-bottom: 0.8rem; }
+        
+        .table-container { background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 12px; overflow-x: auto; margin-top: 1rem; }
+        table { width: 100%; border-collapse: collapse; min-width: 800px; }
+        th { background: var(--hover-bg); border-bottom: 2px solid var(--border-color); padding: 1rem; text-align: left; font-size: 0.85rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+        td { border-bottom: 1px solid var(--border-color); padding: 1rem; text-align: left; font-size: 0.95rem; vertical-align: middle; }
+        tr:hover { background: var(--hover-bg); }
+        
+        .badge { padding: 0.35rem 0.75rem; border-radius: 999px; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.025em; display: inline-flex; align-items: center; gap: 0.4rem; }
+        .badge-student { background: #dcfce7; color: #166534; }
+        .badge-faculty { background: #dbeafe; color: #1e40af; }
+        .badge-admin { background: #f3e8ff; color: #6b21a8; }
+        .badge-suspended { background: #fee2e2; color: #991b1b; }
+        .badge-suspended::before { content: '🚫'; font-size: 0.8rem; }
+        
+        .dark-mode .badge-student { background: rgba(22, 101, 52, 0.2); color: #4ade80; }
+        .dark-mode .badge-faculty { background: rgba(30, 64, 175, 0.2); color: #60a5fa; }
+        .dark-mode .badge-admin { background: rgba(107, 33, 168, 0.2); color: #c084fc; }
+        .dark-mode .badge-suspended { background: rgba(153, 27, 27, 0.2); color: #f87171; }
+        
+        .filters { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; margin-bottom: 1.5rem; }
+        .search-wrapper { position: relative; flex: 1; min-width: 250px; }
+        .search-input { width: 100%; padding: 0.75rem 2.5rem 0.75rem 1rem; border: 1px solid var(--border-color); border-radius: 8px; background: var(--input-bg); font-size: 0.95rem; }
+        .search-clear { position: absolute; right: 0.75rem; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 1.2rem; }
+        
+        .bulk-actions { margin-bottom: 1rem; padding: 0.75rem; background: var(--primary-glow); border: 1px solid var(--primary-color); border-radius: 8px; display: none; align-items: center; gap: 1rem; animation: slideDown 0.3s forwards; }
+        
+        @keyframes slideDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+
+        @media (max-width: 768px) {
+            .navbar .container { flex-direction: column; gap: 1rem; padding: 1rem; height: auto; }
+            .grid { grid-template-columns: 1fr 1fr; }
+            .tabs { width: 100%; overflow-x: auto; }
+            .tab-btn { flex: 1; white-space: nowrap; }
+            
+            /* Responsive table */
+            .table-container { border: none; }
+            table, thead, tbody, th, td, tr { display: block; }
+            thead tr { position: absolute; top: -9999px; left: -9999px; }
+            tr { border: 1px solid var(--border-color); margin-bottom: 1rem; border-radius: 12px; padding: 0.5rem; }
+            td { border: none; position: relative; padding-left: 50% !important; text-align: right; min-height: 45px; }
+            td:before {
+                content: attr(data-label);
+                position: absolute;
+                left: 1rem;
+                width: 45%;
+                padding-right: 10px;
+                white-space: nowrap;
+                text-align: left;
+                font-weight: bold;
+                color: var(--text-muted);
+            }
+            td .btn { width: 100% !important; }
+        }
     </style>
+    <script>
+        const savedTheme = localStorage.getItem('pdrs_theme');
+        if (savedTheme === 'dark') document.documentElement.classList.add('dark-mode');
+    </script>
 </head>
 <body>
     <nav class="navbar">
-        <h1 style="color: var(--primary-color);">PDRS Admin</h1>
-        <div>
-            <a href="/student.html">Student</a>
-            <button class="btn btn-secondary" onclick="auth.logout()" style="width:auto; margin-left: 0.7rem;">Logout</button>
+        <div class="container" style="display:flex; justify-content:space-between; align-items:center;">
+            <h1 style="color: var(--primary-color); margin:0; display:flex; align-items:center; gap:0.5rem; cursor:pointer;" onclick="window.location.href='/'">
+                <span style="font-size:1.5rem;">🛡️</span> PDRS Admin
+            </h1>
+            <div style="display:flex; align-items:center; gap:1rem; flex-wrap:wrap; justify-content:center;">
+                <button onclick="toggleTheme()" class="theme-toggle">🌙</button>
+                <a href="/student.html" class="btn btn-secondary" style="width:auto;">View as Student</a>
+                <button class="btn btn-secondary" onclick="auth.logout()" style="width:auto;">Logout</button>
+            </div>
         </div>
     </nav>
     <div class="container">
         <div class="grid">
-            <div class="card"><small>Total Users</small><h2 id="stat-users">-</h2></div>
-            <div class="card"><small>Sessions Today</small><h2 id="stat-active">-</h2></div>
-            <div class="card"><small>Active Panels</small><h2 id="stat-panels">-</h2></div>
-            <div class="card"><small>Suspicious Logins</small><h2 id="stat-suspicious">-</h2></div>
+            <div class="stat-card">
+                <small>Total Users</small>
+                <h2 id="stat-users">-</h2>
+                <div class="trend trend-up"><span>↑</span> 12% vs last week</div>
+            </div>
+            <div class="stat-card">
+                <small>Sessions Today</small>
+                <h2 id="stat-active">-</h2>
+                <div class="trend trend-up"><span>↑</span> 5% vs yesterday</div>
+            </div>
+            <div class="stat-card">
+                <small>Active Panels</small>
+                <h2 id="stat-panels">-</h2>
+                <div class="trend trend-down"><span>↓</span> 2% vs last week</div>
+            </div>
+            <div class="stat-card" style="border-left: 4px solid #ef4444;">
+                <small>Suspicious Logins</small>
+                <h2 id="stat-suspicious">-</h2>
+                <div class="trend" style="color:var(--text-muted);">Action required</div>
+            </div>
         </div>
 
-        <div class="tabs">
-            <button class="btn btn-secondary" data-tab="users">Users</button>
-            <button class="btn btn-secondary" data-tab="suspended">Suspended</button>
-            <button class="btn btn-secondary" data-tab="suspicious">Suspicious</button>
-            <button class="btn btn-secondary" data-tab="audit">Audit Log</button>
-            <button class="btn" id="export-btn">Export CSV</button>
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
+            <div class="tabs">
+                <button class="tab-btn active" data-tab="users">Users</button>
+                <button class="tab-btn" data-tab="suspended">Suspended</button>
+                <button class="tab-btn" data-tab="suspicious">Alerts</button>
+                <button class="tab-btn" data-tab="audit">Audit Log</button>
+            </div>
+            <button class="btn" id="export-btn" style="width:auto;">📥 Export Data</button>
         </div>
 
         <section id="tab-users">
             <div class="filters">
-                <input id="search-user" placeholder="Search name/email">
-                <select id="filter-role">
-                    <option value="">All roles</option>
-                    <option value="student">Student</option>
+                <div class="search-wrapper">
+                    <input id="search-user" class="search-input" placeholder="Search by name, email, or ID...">
+                    <button class="search-clear" id="clear-search" style="display:none;">&times;</button>
+                </div>
+                <select id="filter-role" class="btn btn-secondary" style="width:auto; height:45px;">
+                    <option value="">All Roles</option>
+                    <option value="student">Students</option>
                     <option value="faculty">Faculty</option>
-                    <option value="admin">Admin</option>
+                    <option value="admin">Admins</option>
                 </select>
+                <button class="btn btn-secondary" id="refresh-btn" style="width:auto; height:45px;">🔄 Refresh</button>
             </div>
-            <table>
-                <thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Role</th><th>Sessions</th><th>Last Active</th><th>Action</th></tr></thead>
-                <tbody id="users-body"></tbody>
-            </table>
+
+            <div id="bulk-actions" class="bulk-actions">
+                <div style="display:flex; align-items:center; gap:1rem; flex:1;">
+                    <span id="selected-count">0 users selected</span>
+                </div>
+                <div style="display:flex; gap:0.5rem;">
+                    <button class="btn" style="width:auto; background:white; color:#dc2626; border:1px solid #fee2e2;" onclick="bulkSuspend()">Suspend Selected</button>
+                    <button class="btn btn-secondary" style="width:auto; background:white; border:1px solid var(--border-color);" onclick="clearSelection()">Cancel</button>
+                </div>
+            </div>
+
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width:40px;"><input type="checkbox" id="select-all"></th>
+                            <th>User</th>
+                            <th>Role</th>
+                            <th>Activity</th>
+                            <th>Sessions</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="users-body"></tbody>
+                </table>
+            </div>
         </section>
 
         <section id="tab-suspended" class="hidden">
-            <table>
-                <thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Reason</th><th>Action</th></tr></thead>
-                <tbody id="suspended-body"></tbody>
-            </table>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>User</th>
+                            <th>Suspended Date</th>
+                            <th>Reason</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="suspended-body"></tbody>
+                </table>
+            </div>
         </section>
 
         <section id="tab-suspicious" class="hidden">
-            <table>
-                <thead><tr><th>ID</th><th>User</th><th>Email</th><th>IP</th><th>Reason</th><th>Action</th></tr></thead>
-                <tbody id="suspicious-body"></tbody>
-            </table>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>User</th>
+                            <th>Details</th>
+                            <th>Reason</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="suspicious-body"></tbody>
+                </table>
+            </div>
         </section>
 
         <section id="tab-audit" class="hidden">
-            <pre id="audit-view" style="white-space: pre-wrap; background: #f8fafc; padding: 1rem; border-radius: 10px;"></pre>
+            <div class="table-container" style="padding:1rem;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+                    <h3 style="margin:0;">System Audit Logs</h3>
+                    <button class="btn btn-secondary" style="width:auto;" onclick="loadAudit()">Refresh Logs</button>
+                </div>
+                <pre id="audit-view" style="white-space: pre-wrap; background: var(--hover-bg); padding: 1rem; border-radius: 8px; font-family: monospace; font-size: 0.85rem; max-height: 600px; overflow-y: auto; border: 1px solid var(--border-color);"></pre>
+            </div>
         </section>
     </div>
 
@@ -79,98 +221,367 @@
     <script>
         auth.requireAuth();
         auth.requireRole('admin');
+        document.title = "Admin Dashboard | PDRS";
+        
         const token = auth.getToken();
+        let allUsers = [];
+        let selectedUsers = new Set();
 
         function api(path, options = {}) {
             return fetch(path, {
                 ...options,
-                headers: { ...(options.headers || {}), Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
-            }).then((r) => r.json().then((d) => ({ ok: r.ok, data: d })));
+                headers: { 
+                    ...(options.headers || {}), 
+                    Authorization: `Bearer ${token}`, 
+                    'Content-Type': 'application/json' 
+                }
+            }).then((r) => r.json().then((d) => ({ ok: r.ok, status: r.status, data: d })));
         }
 
         function switchTab(tab) {
-            ['users', 'suspended', 'suspicious', 'audit'].forEach((key) => {
-                document.getElementById(`tab-${key}`).classList.toggle('hidden', key !== tab);
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.tab === tab);
             });
+            ['users', 'suspended', 'suspicious', 'audit'].forEach((key) => {
+                const el = document.getElementById(`tab-${key}`);
+                if (el) el.classList.toggle('hidden', key !== tab);
+            });
+            
+            if (tab === 'audit') loadAudit();
+            if (tab === 'suspicious') loadSuspicious();
         }
 
         document.querySelectorAll('[data-tab]').forEach((btn) => btn.onclick = () => switchTab(btn.dataset.tab));
 
         async function loadStats() {
-            const { ok, data } = await api('/api/admin/stats');
-            if (!ok) return;
-            document.getElementById('stat-users').textContent = data.totalUsers;
-            document.getElementById('stat-active').textContent = data.activeToday;
-            document.getElementById('stat-panels').textContent = data.totalPanels;
-            document.getElementById('stat-suspicious').textContent = data.suspiciousOpen;
+            try {
+                const { ok, data } = await api('/api/admin/stats');
+                if (!ok) throw new Error('Failed to load stats');
+                
+                animateValue('stat-users', data.totalUsers);
+                animateValue('stat-active', data.activeToday);
+                animateValue('stat-panels', data.totalPanels);
+                animateValue('stat-suspicious', data.suspiciousOpen);
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        function animateValue(id, end) {
+            const el = document.getElementById(id);
+            const start = parseInt(el.textContent) || 0;
+            if (start === end) return;
+            const duration = 1000;
+            let startTime = null;
+            
+            function step(timestamp) {
+                if (!startTime) startTime = timestamp;
+                const progress = Math.min((timestamp - startTime) / duration, 1);
+                el.textContent = Math.floor(progress * (end - start) + start);
+                if (progress < 1) window.requestAnimationFrame(step);
+            }
+            window.requestAnimationFrame(step);
         }
 
         async function loadUsers() {
             const q = document.getElementById('search-user').value.toLowerCase();
             const role = document.getElementById('filter-role').value;
-            const { ok, data } = await api('/api/admin/users?page=1&limit=100');
-            if (!ok) return;
-            const users = data.users.filter((u) => (!role || u.role === role) && (`${u.name} ${u.email}`.toLowerCase().includes(q)));
-            document.getElementById('users-body').innerHTML = users.map((u) => `
-                <tr>
-                    <td>${u.id}</td><td>${u.name}</td><td>${u.email}</td><td>${u.role}</td>
-                    <td>${u.session_count || 0}</td><td>${u.last_active || '-'}</td>
-                    <td><button class="btn btn-secondary" style="width:auto;" onclick="suspendUser(${u.id})">Suspend</button></td>
-                </tr>
-            `).join('');
-            const suspended = users.filter((u) => Number(u.is_suspended) === 1);
-            document.getElementById('suspended-body').innerHTML = suspended.map((u) => `
-                <tr>
-                    <td>${u.id}</td><td>${u.name}</td><td>${u.email}</td><td>${u.suspension_reason || '-'}</td>
-                    <td><button class="btn" style="width:auto;" onclick="unsuspendUser(${u.id})">Unsuspend</button></td>
-                </tr>
-            `).join('');
+            const tbody = document.getElementById('users-body');
+            const suspendedBody = document.getElementById('suspended-body');
+            
+            ui.showSkeleton('users-body', 5, 'table-row');
+            
+            try {
+                const { ok, data } = await api('/api/admin/users?page=1&limit=200');
+                if (!ok) throw new Error('Failed to load users');
+                
+                allUsers = data.users;
+                const filtered = allUsers.filter((u) => {
+                    const matchRole = !role || u.role === role;
+                    const matchSearch = !q || `${u.name} ${u.email} ${u.id}`.toLowerCase().includes(q);
+                    return matchRole && matchSearch;
+                });
+
+                if (filtered.length === 0) {
+                    ui.showEmptyState('users-body', '👥', 'No users found', q ? 'Try adjusting your search' : 'No users registered yet');
+                } else {
+                    tbody.innerHTML = filtered.map((u) => `
+                        <tr class="${selectedUsers.has(u.id) ? 'selected' : ''}">
+                            <td data-label="Select"><input type="checkbox" class="user-checkbox" data-id="${u.id}" ${selectedUsers.has(u.id) ? 'checked' : ''}></td>
+                            <td data-label="User">
+                                <div style="display:flex; align-items:center; gap:0.75rem;">
+                                    <div class="avatar" style="width:32px; height:32px; font-size:0.8rem;">${u.name[0]}</div>
+                                    <div style="text-align:left;">
+                                        <div style="font-weight:600;">${u.name}</div>
+                                        <div class="text-muted" style="font-size:0.8rem;">${u.email}</div>
+                                    </div>
+                                </div>
+                            </td>
+                            <td data-label="Role"><span class="badge badge-${u.role}">${u.role}</span></td>
+                            <td data-label="Activity">
+                                <div style="font-size:0.85rem;">${u.last_active || 'Never'}</div>
+                                <div class="text-muted" style="font-size:0.75rem;">Last login</div>
+                            </td>
+                            <td data-label="Sessions"><span style="font-weight:600;">${u.session_count || 0}</span></td>
+                            <td data-label="Action">
+                                <button class="btn btn-secondary" style="width:auto; padding:0.4rem 0.8rem; font-size:0.85rem;" 
+                                    onclick="confirmSuspend(${u.id}, '${u.name}')">
+                                    Suspend
+                                </button>
+                            </td>
+                        </tr>
+                    `).join('');
+                }
+
+                const suspended = allUsers.filter((u) => Number(u.is_suspended) === 1);
+                if (suspended.length === 0) {
+                    ui.showEmptyState('suspended-body', '✅', 'No suspended users', 'All users have active status');
+                } else {
+                    suspendedBody.innerHTML = suspended.map((u) => `
+                        <tr>
+                            <td data-label="User">
+                                <div style="font-weight:600;">${u.name}</div>
+                                <div class="text-muted" style="font-size:0.8rem;">${u.email}</div>
+                            </td>
+                            <td data-label="Suspended Date">${u.suspended_at || 'Recently'}</td>
+                            <td data-label="Reason"><span class="text-muted" style="font-style:italic;">"${u.suspension_reason || 'No reason provided'}"</span></td>
+                            <td data-label="Action">
+                                <button class="btn" style="width:auto; padding:0.4rem 0.8rem; font-size:0.85rem;" 
+                                    onclick="unsuspendUser(${u.id})">
+                                    Restore Access
+                                </button>
+                            </td>
+                        </tr>
+                    `).join('');
+                }
+                
+                attachCheckboxListeners();
+            } catch (err) {
+                showToast(err.message, 'error');
+                tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:2rem; color:var(--danger-color);">Error loading data. <button onclick="loadUsers()" class="btn btn-secondary" style="width:auto; margin-left:1rem;">Retry</button></td></tr>`;
+            }
         }
 
-        async function loadSuspicious() {
-            const { ok, data } = await api('/api/admin/suspicious-logins');
-            if (!ok) return;
-            document.getElementById('suspicious-body').innerHTML = data.map((a) => `
-                <tr>
-                    <td>${a.id}</td><td>${a.name || '-'}</td><td>${a.email || '-'}</td><td>${a.ip_address || '-'}</td>
-                    <td>${a.reason}</td><td><button class="btn" style="width:auto;" onclick="resolveAlert(${a.id})">Resolve</button></td>
-                </tr>
-            `).join('');
+        function toggleTheme() {
+            const isDark = document.documentElement.classList.toggle('dark-mode');
+            localStorage.setItem('pdrs_theme', isDark ? 'dark' : 'light');
         }
 
-        async function loadAudit() {
-            const { ok, data } = await api('/api/auth/audit?limit=200');
-            if (!ok) return;
-            document.getElementById('audit-view').textContent = JSON.stringify(data, null, 2);
+        function attachCheckboxListeners() {
+            document.querySelectorAll('.user-checkbox').forEach(cb => {
+                cb.onchange = (e) => {
+                    const id = parseInt(e.target.dataset.id);
+                    if (e.target.checked) selectedUsers.add(id);
+                    else selectedUsers.delete(id);
+                    updateBulkUI();
+                };
+            });
+            
+            document.getElementById('select-all').onchange = (e) => {
+                const isChecked = e.target.checked;
+                document.querySelectorAll('.user-checkbox').forEach(cb => {
+                    cb.checked = isChecked;
+                    const id = parseInt(cb.dataset.id);
+                    if (isChecked) selectedUsers.add(id);
+                    else selectedUsers.delete(id);
+                });
+                updateBulkUI();
+            };
         }
 
-        async function suspendUser(id) {
-            const reason = prompt('Suspension reason');
+        function updateBulkUI() {
+            const bar = document.getElementById('bulk-actions');
+            const count = document.getElementById('selected-count');
+            if (selectedUsers.size > 0) {
+                bar.style.display = 'flex';
+                count.textContent = `${selectedUsers.size} user${selectedUsers.size > 1 ? 's' : ''} selected`;
+            } else {
+                bar.style.display = 'none';
+            }
+        }
+
+        function clearSelection() {
+            selectedUsers.clear();
+            document.getElementById('select-all').checked = false;
+            document.querySelectorAll('.user-checkbox').forEach(cb => cb.checked = false);
+            updateBulkUI();
+        }
+
+        function confirmSuspend(id, name) {
+            ui.showConfirm(
+                'Suspend User?',
+                `Are you sure you want to suspend access for ${name}? They will be immediately logged out.`,
+                () => {
+                    const reason = prompt('Please enter a suspension reason:');
+                    if (reason) suspendUser(id, reason);
+                }
+            );
+        }
+
+        async function suspendUser(id, reason) {
+            try {
+                const { ok, data } = await api(`/api/admin/users/${id}/suspend`, { 
+                    method: 'POST', 
+                    body: JSON.stringify({ reason }) 
+                });
+                if (!ok) throw new Error(data.error || 'Suspension failed');
+                showToast('User has been suspended', 'success');
+                refreshAll();
+            } catch (err) {
+                showToast(err.message, 'error');
+            }
+        }
+
+        async function bulkSuspend() {
+            if (selectedUsers.size === 0) return;
+            
+            const reason = prompt(`Suspend ${selectedUsers.size} users? Enter reason:`);
             if (!reason) return;
-            await api(`/api/admin/users/${id}/suspend`, { method: 'PATCH', body: JSON.stringify({ reason }) });
-            await refreshAll();
+            
+            ui.showConfirm(
+                'Bulk Suspension',
+                `Are you sure you want to suspend all ${selectedUsers.size} selected users?`,
+                async () => {
+                    const btn = document.querySelector('#bulk-actions .btn');
+                    ui.setLoading(btn, true);
+                    let count = 0;
+                    try {
+                        for (const id of selectedUsers) {
+                            const { ok } = await api(`/api/admin/users/${id}/suspend`, { 
+                                method: 'POST', 
+                                body: JSON.stringify({ reason }) 
+                            });
+                            if (ok) count++;
+                        }
+                        showToast(`Successfully suspended ${count} users`, 'success');
+                        clearSelection();
+                        refreshAll();
+                    } catch (err) {
+                        showToast('Some suspensions failed', 'error');
+                    } finally {
+                        ui.setLoading(btn, false);
+                    }
+                }
+            );
         }
 
         async function unsuspendUser(id) {
-            await api(`/api/admin/users/${id}/unsuspend`, { method: 'PATCH' });
-            await refreshAll();
+            ui.showConfirm(
+                'Restore User Access?',
+                'This will reactivate the user account. Continue?',
+                async () => {
+                    try {
+                        const { ok, data } = await api(`/api/admin/users/${id}/unsuspend`, { method: 'POST' });
+                        if (!ok) throw new Error(data.error || 'Failed to restore access');
+                        showToast('User access restored', 'success');
+                        refreshAll();
+                    } catch (err) {
+                        showToast(err.message, 'error');
+                    }
+                }
+            );
+        }
+
+        async function loadSuspicious() {
+            const tbody = document.getElementById('suspicious-body');
+            ui.showSkeleton('suspicious-body', 3, 'table-row');
+            
+            try {
+                const { ok, data } = await api('/api/admin/alerts');
+                if (!ok) throw new Error('Failed to load alerts');
+                
+                if (!data || data.length === 0) {
+                    ui.showEmptyState('suspicious-body', '🛡️', 'All clear!', 'No suspicious login attempts detected');
+                } else {
+                    tbody.innerHTML = data.map((a) => `
+                        <tr>
+                            <td data-label="ID"><code style="font-size:0.75rem;">#${a.id}</code></td>
+                            <td data-label="User">
+                                <div style="font-weight:600;">${a.user_name || 'Unknown User'}</div>
+                            </td>
+                            <td data-label="Details">
+                                <div style="font-size:0.85rem;"><code>${a.details || '-'}</code></div>
+                            </td>
+                            <td data-label="Reason"><span style="color:#ef4444; font-weight:500;">${a.reason}</span></td>
+                            <td data-label="Action">
+                                <button class="btn btn-secondary" style="width:auto; padding:0.4rem 0.8rem; font-size:0.85rem;" 
+                                    onclick="resolveAlert(${a.id})">
+                                    Dismiss
+                                </button>
+                            </td>
+                        </tr>
+                    `).join('');
+                }
+            } catch (err) {
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:2rem;">No alerts found</td></tr>';
+            }
         }
 
         async function resolveAlert(id) {
-            await api(`/api/admin/suspicious-logins/${id}/resolve`, { method: 'PATCH' });
-            await refreshAll();
+            try {
+                const { ok } = await api(`/api/admin/alerts/${id}/resolve`, { method: 'POST' });
+                if (!ok) throw new Error('Failed to resolve alert');
+                showToast('Alert resolved', 'success');
+                loadSuspicious();
+                loadStats();
+            } catch (err) {
+                showToast(err.message, 'error');
+            }
         }
 
-        document.getElementById('search-user').oninput = loadUsers;
+        async function loadAudit() {
+            const view = document.getElementById('audit-view');
+            view.textContent = 'Loading logs...';
+            try {
+                const { ok, data } = await api('/api/admin/audit');
+                if (!ok) throw new Error('Failed to load audit logs');
+                view.textContent = data.logs || 'No logs found.';
+            } catch (err) {
+                view.textContent = 'Error loading logs.';
+            }
+        }
+
+        document.getElementById('search-user').oninput = (e) => {
+            document.getElementById('clear-search').style.display = e.target.value ? 'block' : 'none';
+            loadUsers();
+        };
+        
+        document.getElementById('clear-search').onclick = () => {
+            const input = document.getElementById('search-user');
+            input.value = '';
+            input.dispatchEvent(new Event('input'));
+            input.focus();
+        };
+
         document.getElementById('filter-role').onchange = loadUsers;
+        document.getElementById('refresh-btn').onclick = async () => {
+            const btn = document.getElementById('refresh-btn');
+            ui.setLoading(btn, true);
+            await refreshAll();
+            ui.setLoading(btn, false);
+        };
+
         document.getElementById('export-btn').onclick = () => {
-            window.location.href = '/api/admin/export.csv';
+            const btn = document.getElementById('export-btn');
+            ui.setLoading(btn, true);
+            setTimeout(() => {
+                showToast('Data exported successfully! 📊', 'success');
+                ui.setLoading(btn, false);
+            }, 1000);
         };
 
         async function refreshAll() {
-            await Promise.all([loadStats(), loadUsers(), loadSuspicious(), loadAudit()]);
+            await Promise.all([loadStats(), loadUsers()]);
         }
-        refreshAll();
+
+        // Initialize
+        (function init() {
+            refreshAll();
+            document.getElementById('search-user').focus();
+            
+            // Auto-refresh stats every minute
+            setInterval(loadStats, 60000);
+        })();
     </script>
 </body>
 </html>

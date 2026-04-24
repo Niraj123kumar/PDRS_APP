@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login - PDRS</title>
+    <link rel="icon" type="image/png" href="/img/favicon.png">
     <link rel="stylesheet" href="/css/style.css">
     <link rel="stylesheet" href="/css/animations.css">
     <style>
@@ -13,20 +14,12 @@
         body.dark-mode .auth-card { background: var(--card-bg); border: 1px solid var(--border-color); color: var(--text-color); }
         .auth-header { text-align: center; margin-bottom: 2rem; }
         .auth-header h1 { color: var(--primary-color); font-weight: 800; font-size: 2rem; }
-        .theme-toggle-fixed { position: fixed; bottom: 2rem; right: 2rem; background: var(--card-bg, white); box-shadow: var(--shadow); border-radius: 50%; width: 50px; height: 50px; display: flex; align-items: center; justify-content: center; z-index: 1000; border: 1px solid var(--border-color, #e2e8f0); cursor: pointer; font-size: 1.25rem; }
         .hidden-step { display: none; }
         .otp-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 0.5rem; margin: 1rem 0; }
         .otp-cell { text-align: center; font-size: 1.25rem; font-weight: 700; }
-        .shake { animation: shake 0.25s linear 2; }
         .auth-divider { text-align: center; color: var(--text-muted); margin: 1rem 0; font-weight: 700; }
         .google-btn { display: flex; align-items: center; justify-content: center; gap: 0.65rem; background: #fff; color: #111827; border: 1px solid #d1d5db; }
         .google-btn svg { width: 18px; height: 18px; }
-        @keyframes shake {
-            0% { transform: translateX(0); }
-            25% { transform: translateX(-6px); }
-            50% { transform: translateX(6px); }
-            100% { transform: translateX(0); }
-        }
     </style>
     <script>
         const savedTheme = localStorage.getItem('pdrs_theme');
@@ -51,7 +44,7 @@
             <div class="form-group">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                     <label for="password">Password</label>
-                    <a href="#" class="text-muted" style="font-size: 0.85rem; text-decoration: none;">Forgot Password?</a>
+                    <a href="#" id="forgot-password" class="text-muted" style="font-size: 0.85rem; text-decoration: none;">Forgot Password?</a>
                 </div>
                 <div style="position: relative;">
                     <input type="password" id="password" required placeholder="••••••••" style="padding-right: 2.5rem; width: 100%;">
@@ -111,6 +104,9 @@
             document.getElementById('login-form').style.display = step === 'login' ? 'block' : 'none';
             document.getElementById('otp-step').style.display = step === 'otp' ? 'block' : 'none';
             document.getElementById('totp-step').style.display = step === 'totp' ? 'block' : 'none';
+            
+            if (step === 'otp') document.querySelector('.otp-cell').focus();
+            if (step === 'totp') document.getElementById('totp-input').focus();
         }
 
         function startResendTimer(seconds = 60) {
@@ -139,10 +135,16 @@
             this.textContent = type === 'password' ? '👁' : '🙈';
         });
 
+        document.getElementById('forgot-password').addEventListener('click', (e) => {
+            e.preventDefault();
+            showToast('Password reset functionality is coming soon! 🚧', 'info');
+        });
+
         document.getElementById('login-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             const email = document.getElementById('email').value;
             const password = document.getElementById('password').value;
+            const remember = document.getElementById('remember').checked;
             const loginBtn = document.getElementById('login-btn');
             const authCard = document.querySelector('.auth-card');
             
@@ -152,7 +154,7 @@
                 const response = await fetch('/api/auth/login', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email, password })
+                    body: JSON.stringify({ email, password, remember })
                 });
 
                 const data = await response.json();
@@ -188,7 +190,8 @@
             }
         });
 
-        document.getElementById('google-login-btn').addEventListener('click', () => {
+        document.getElementById('google-login-btn').addEventListener('click', function() {
+            ui.setLoading(this, true, '<svg viewBox="0 0 24 24" aria-hidden="true" style="width:18px;height:18px;"><path fill="#EA4335" d="M12 10.2v3.9h5.5c-.2 1.3-1.5 3.9-5.5 3.9-3.3 0-6-2.7-6-6s2.7-6 6-6c1.9 0 3.2.8 3.9 1.5l2.7-2.6C16.8 3.2 14.6 2.2 12 2.2 6.6 2.2 2.2 6.6 2.2 12s4.4 9.8 9.8 9.8c5.6 0 9.3-4 9.3-9.6 0-.6-.1-1.1-.2-1.6H12z"/></svg> Continue with Google');
             window.location.href = '/api/auth/google';
         });
 
@@ -232,39 +235,53 @@
             }
         }
 
-        document.getElementById('resend-otp-btn').addEventListener('click', async () => {
-            const response = await fetch('/api/auth/resend-otp', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email: pendingEmail })
-            });
-            const data = await response.json();
-            if (!response.ok) {
-                if (response.status === 429 && data.secondsRemaining) {
-                    startResendTimer(data.secondsRemaining);
+        document.getElementById('resend-otp-btn').addEventListener('click', async function() {
+            ui.setLoading(this, true);
+            try {
+                const response = await fetch('/api/auth/resend-otp', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: pendingEmail })
+                });
+                const data = await response.json();
+                if (!response.ok) {
+                    if (response.status === 429 && data.secondsRemaining) {
+                        startResendTimer(data.secondsRemaining);
+                    }
+                    return;
                 }
-                return;
+                startResendTimer(60);
+                showToast('OTP resent ✅', 'success');
+            } finally {
+                ui.setLoading(this, false, 'Resend OTP');
             }
-            startResendTimer(60);
-            showToast('OTP resent', 'success');
         });
 
-        document.getElementById('totp-submit').addEventListener('click', async () => {
+        document.getElementById('totp-submit').addEventListener('click', async function() {
             const token = document.getElementById('totp-input').value.trim();
-            const response = await fetch('/api/auth/verify-totp', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email: pendingEmail, token })
-            });
-            const data = await response.json();
-            if (!response.ok) {
-                document.getElementById('error-box').textContent = data.error || 'Invalid authenticator code';
-                document.getElementById('error-box').style.display = 'block';
+            if (!token) {
+                ui.showError(document.getElementById('totp-input'), 'Please enter the code');
                 return;
             }
-            auth.saveToken(data.token, data.user);
-            auth.setDeviceId(data.deviceId);
-            window.location.href = data.user.role === 'admin' ? '/admin.html' : (data.user.role === 'faculty' ? '/faculty.html' : '/student.html');
+            ui.setLoading(this, true);
+            try {
+                const response = await fetch('/api/auth/verify-totp', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: pendingEmail, token })
+                });
+                const data = await response.json();
+                if (!response.ok) {
+                    document.getElementById('error-box').textContent = data.error || 'Invalid authenticator code';
+                    document.getElementById('error-box').style.display = 'block';
+                    return;
+                }
+                auth.saveToken(data.token, data.user);
+                auth.setDeviceId(data.deviceId);
+                window.location.href = data.user.role === 'admin' ? '/admin.html' : (data.user.role === 'faculty' ? '/faculty.html' : '/student.html');
+            } finally {
+                ui.setLoading(this, false);
+            }
         });
 
         document.getElementById('use-email-otp').addEventListener('click', async () => {
