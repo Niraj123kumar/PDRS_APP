@@ -23,8 +23,9 @@ async function syncMoodleStudents(moodleUrl, token, courseId) {
             email: u.email
         }));
     } catch (error) {
-        console.error('Moodle sync error:', error.message);
-        throw new Error('Failed to sync from Moodle');
+        const details = error.response?.data?.error || error.response?.data?.message || error.message;
+        console.error('Moodle sync error:', details);
+        throw new Error(`Failed to sync from Moodle: ${details}`);
     }
 }
 
@@ -44,8 +45,9 @@ async function syncCanvasStudents(canvasUrl, token, courseId) {
                 email: e.user.email
             }));
     } catch (error) {
-        console.error('Canvas sync error:', error.message);
-        throw new Error('Failed to sync from Canvas');
+        const details = error.response?.data?.errors?.[0]?.message || error.response?.data?.message || error.message;
+        console.error('Canvas sync error:', details);
+        throw new Error(`Failed to sync from Canvas: ${details}`);
     }
 }
 
@@ -55,8 +57,14 @@ async function syncCanvasStudents(canvasUrl, token, courseId) {
 async function importStudents(students, facultyId) {
     let imported = 0;
     let existing = 0;
+    let failed = 0;
 
     for (const s of students) {
+        if (!s.email || !s.name) {
+            failed++;
+            continue;
+        }
+
         const check = db.prepare('SELECT id FROM users WHERE email = ?').get(s.email);
         if (check) {
             existing++;
@@ -73,7 +81,7 @@ async function importStudents(students, facultyId) {
             `).run(s.name, s.email, hash);
 
             // Send welcome email with temp password
-            await emailService.sendEmail({
+            emailService.sendEmail({
                 to: s.email,
                 subject: 'Welcome to PDRS - Your Account is Ready',
                 html: `
@@ -82,14 +90,16 @@ async function importStudents(students, facultyId) {
                     <p><strong>Temporary Password:</strong> ${tempPassword}</p>
                     <p>Please log in and change your password immediately: <a href="${process.env.APP_URL || 'http://localhost:3000'}/login.html">Login here</a></p>
                 `
-            });
+            }).catch(e => console.error(`Email delivery failed for ${s.email}:`, e.message));
+            
             imported++;
         } catch (err) {
             console.error(`Failed to import student ${s.email}:`, err.message);
+            failed++;
         }
     }
 
-    return { imported, existing };
+    return { imported, existing, failed };
 }
 
 module.exports = {

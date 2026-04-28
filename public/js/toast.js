@@ -61,8 +61,24 @@ function showToast(message, type = 'info', retryFn = null) {
     }, 5000);
 }
 
+function createToastContainer() {
+    const container = document.createElement('div');
+    container.id = 'toast-container';
+    container.style.cssText = `
+        position: fixed;
+        top: 1rem;
+        right: 1rem;
+        z-index: 10000;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+    `;
+    document.body.appendChild(container);
+    return container;
+}
+
 // Global UI Helpers
-const ui = {
+window.ui = Object.assign(window.ui || {}, {
     setLoading(btn, isLoading, originalText = null) {
         if (!btn) return;
         if (isLoading) {
@@ -98,122 +114,16 @@ const ui = {
 
         modal.querySelector('.modal-close').onclick = close;
         modal.querySelector('#confirm-cancel').onclick = close;
+
         modal.querySelector('#confirm-ok').onclick = () => {
-            close();
             onConfirm();
+            close();
         };
-        modal.onclick = (e) => { if (e.target === modal) close(); };
-        window.onkeydown = (e) => { if (e.key === 'Escape') close(); };
-    },
 
-    initFormValidation(formId) {
-        const form = document.getElementById(formId);
-        if (!form) return;
-        
-        form.querySelectorAll('input, textarea').forEach(input => {
-            input.oninput = () => {
-                input.classList.remove('invalid', 'valid');
-                const error = input.parentElement.querySelector('.error-msg');
-                if (error) error.remove();
-            };
-
-            input.onblur = () => {
-                if (input.required && !input.value) {
-                    this.showError(input, 'This field is required');
-                } else if (input.type === 'email' && input.value && !input.value.includes('@')) {
-                    this.showError(input, 'Please enter a valid email');
-                } else if (input.value) {
-                    input.classList.add('valid');
-                }
-            };
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) close();
         });
-    },
 
-    showError(input, msg) {
-        input.classList.add('invalid');
-        let error = input.parentElement.querySelector('.error-msg');
-        if (!error) {
-            error = document.createElement('div');
-            error.className = 'error-msg';
-            input.parentElement.appendChild(error);
-        }
-        error.textContent = msg;
-    },
-
-    initCharCounter(id, max) {
-        const el = document.getElementById(id);
-        if (!el) return;
-        const counter = document.createElement('div');
-        counter.className = 'char-counter';
-        el.parentElement.style.position = 'relative';
-        el.parentElement.appendChild(counter);
-
-        const update = () => {
-            const len = el.value.length;
-            counter.textContent = `${len} / ${max}`;
-            counter.classList.toggle('warning', len > max * 0.8);
-            counter.classList.toggle('danger', len > max * 0.95);
-        };
-        el.oninput = update;
-        update();
-    },
-
-    showSkeleton(containerId, count = 3, type = 'card') {
-        const container = document.getElementById(containerId);
-        if (!container) return;
-        container.innerHTML = Array(count).fill(0).map(() => `
-            <div class="skeleton" style="height: ${type === 'card' ? '150px' : '40px'}; width: 100%; margin-bottom: 1rem; border-radius: 12px;"></div>
-        `).join('');
-    },
-
-    showEmptyState(containerId, icon, title, msg, btnText = null, btnLink = null) {
-        const container = document.getElementById(containerId);
-        if (!container) return;
-        container.innerHTML = `
-            <div class="empty-state animate-up">
-                <span class="empty-state-icon">${icon}</span>
-                <h3>${title}</h3>
-                <p>${msg}</p>
-                ${btnText ? `<button class="btn" style="width: auto;" onclick="window.location.href='${btnLink}'">${btnText}</button>` : ''}
-            </div>
-        `;
+        window.onkeydown = (e) => { if (e.key === 'Escape') close(); };
     }
-};
-
-window.ui = ui;
-window.showToast = showToast;
-
-
-function createToastContainer() {
-    const container = document.createElement('div');
-    container.id = 'toast-container';
-    container.style.cssText = `
-        position: fixed;
-        bottom: 2rem;
-        right: 2rem;
-        z-index: 9999;
-        display: flex;
-        flex-direction: column;
-        align-items: flex-end;
-    `;
-    document.body.appendChild(container);
-    return container;
-}
-
-// Global error handler for fetch
-const originalFetch = window.fetch;
-window.fetch = async (...args) => {
-    try {
-        const response = await originalFetch(...args);
-        if (!response.ok) {
-            const data = await response.clone().json().catch(() => ({}));
-            if (data.error) showToast(data.error, 'error');
-        }
-        return response;
-    } catch (err) {
-        showToast('Network error or server unavailable', 'error');
-        throw err;
-    }
-};
-
-window.showToast = showToast;
+});

@@ -217,6 +217,7 @@
     </div>
 
     <script src="/js/auth.js"></script>
+    <script src="/js/api.js"></script>
     <script src="/js/toast.js"></script>
     <script>
         auth.requireAuth();
@@ -226,17 +227,6 @@
         const token = auth.getToken();
         let allUsers = [];
         let selectedUsers = new Set();
-
-        function api(path, options = {}) {
-            return fetch(path, {
-                ...options,
-                headers: { 
-                    ...(options.headers || {}), 
-                    Authorization: `Bearer ${token}`, 
-                    'Content-Type': 'application/json' 
-                }
-            }).then((r) => r.json().then((d) => ({ ok: r.ok, status: r.status, data: d })));
-        }
 
         function switchTab(tab) {
             document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -255,8 +245,7 @@
 
         async function loadStats() {
             try {
-                const { ok, data } = await api('/api/admin/stats');
-                if (!ok) throw new Error('Failed to load stats');
+                const data = await apiFetch('/api/admin/stats');
                 
                 animateValue('stat-users', data.totalUsers);
                 animateValue('stat-active', data.activeToday);
@@ -292,8 +281,7 @@
             ui.showSkeleton('users-body', 5, 'table-row');
             
             try {
-                const { ok, data } = await api('/api/admin/users?page=1&limit=200');
-                if (!ok) throw new Error('Failed to load users');
+                const data = await apiFetch('/api/admin/users?page=1&limit=200');
                 
                 allUsers = data.users;
                 const filtered = allUsers.filter((u) => {
@@ -420,11 +408,10 @@
 
         async function suspendUser(id, reason) {
             try {
-                const { ok, data } = await api(`/api/admin/users/${id}/suspend`, { 
+                await apiFetch(`/api/admin/users/${id}/suspend`, { 
                     method: 'POST', 
                     body: JSON.stringify({ reason }) 
                 });
-                if (!ok) throw new Error(data.error || 'Suspension failed');
                 showToast('User has been suspended', 'success');
                 refreshAll();
             } catch (err) {
@@ -447,11 +434,15 @@
                     let count = 0;
                     try {
                         for (const id of selectedUsers) {
-                            const { ok } = await api(`/api/admin/users/${id}/suspend`, { 
-                                method: 'POST', 
-                                body: JSON.stringify({ reason }) 
-                            });
-                            if (ok) count++;
+                            try {
+                                await apiFetch(`/api/admin/users/${id}/suspend`, { 
+                                    method: 'POST', 
+                                    body: JSON.stringify({ reason }) 
+                                });
+                                count++;
+                            } catch (e) {
+                                console.error(`Failed to suspend user ${id}`, e);
+                            }
                         }
                         showToast(`Successfully suspended ${count} users`, 'success');
                         clearSelection();
@@ -471,8 +462,7 @@
                 'This will reactivate the user account. Continue?',
                 async () => {
                     try {
-                        const { ok, data } = await api(`/api/admin/users/${id}/unsuspend`, { method: 'POST' });
-                        if (!ok) throw new Error(data.error || 'Failed to restore access');
+                        await apiFetch(`/api/admin/users/${id}/unsuspend`, { method: 'POST' });
                         showToast('User access restored', 'success');
                         refreshAll();
                     } catch (err) {
@@ -487,8 +477,7 @@
             ui.showSkeleton('suspicious-body', 3, 'table-row');
             
             try {
-                const { ok, data } = await api('/api/admin/alerts');
-                if (!ok) throw new Error('Failed to load alerts');
+                const data = await apiFetch('/api/admin/alerts');
                 
                 if (!data || data.length === 0) {
                     ui.showEmptyState('suspicious-body', '🛡️', 'All clear!', 'No suspicious login attempts detected');
@@ -519,8 +508,7 @@
 
         async function resolveAlert(id) {
             try {
-                const { ok } = await api(`/api/admin/alerts/${id}/resolve`, { method: 'POST' });
-                if (!ok) throw new Error('Failed to resolve alert');
+                await apiFetch(`/api/admin/alerts/${id}/resolve`, { method: 'POST' });
                 showToast('Alert resolved', 'success');
                 loadSuspicious();
                 loadStats();
@@ -533,8 +521,7 @@
             const view = document.getElementById('audit-view');
             view.textContent = 'Loading logs...';
             try {
-                const { ok, data } = await api('/api/admin/audit');
-                if (!ok) throw new Error('Failed to load audit logs');
+                const data = await apiFetch('/api/admin/audit');
                 view.textContent = data.logs || 'No logs found.';
             } catch (err) {
                 view.textContent = 'Error loading logs.';

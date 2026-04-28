@@ -41,6 +41,10 @@ function parseAIResponse(raw) {
 router.post('/generate-questions', verifyToken, requireRole('student'), async (req, res) => {
     const { title, description, tech_stack, sessionId } = req.body;
     
+    if (!title || !description) {
+        return res.status(400).json({ success: false, error: 'Project title and description are required' });
+    }
+    
     // Create cache key based on project info
     const projectHash = crypto.createHash('md5').update(`${title}${description}${tech_stack}`).digest('hex');
     const cacheKey = `ai:questions:${projectHash}`;
@@ -52,7 +56,7 @@ router.post('/generate-questions', verifyToken, requireRole('student'), async (r
                 db.prepare('UPDATE sessions SET questions_json = ? WHERE id = ? AND user_id = ?')
                     .run(JSON.stringify(cached), sessionId, req.user.id);
             }
-            return res.json(cached);
+            return res.json({ success: true, data: cached });
         }
 
         const systemPrompt = "You are a technical interview expert. Return ONLY raw JSON. No markdown. No explanation. No backticks.";
@@ -89,15 +93,19 @@ router.post('/generate-questions', verifyToken, requireRole('student'), async (r
         }
 
         await cacheService.set(cacheKey, enriched, 3600); // 1 hour
-        res.json(enriched);
+        res.json({ success: true, data: enriched });
     } catch (err) {
-        res.status(500).json({ error: "AI service unavailable" });
+        res.status(500).json({ success: false, error: "AI service unavailable" });
     }
 });
 
 // POST /api/ai/score-answer (student auth required)
 router.post('/score-answer', verifyToken, requireRole('student'), async (req, res) => {
     const { question, answer } = req.body;
+
+    if (!question || !answer) {
+        return res.status(400).json({ success: false, error: 'Question and answer are required' });
+    }
 
     const systemPrompt = "You are a strict academic evaluator. Return ONLY raw JSON. No markdown. No explanation.";
     const userPrompt = `Score this answer from 0 to 100 for each dimension. 
@@ -124,15 +132,22 @@ router.post('/score-answer', verifyToken, requireRole('student'), async (req, re
             parsed[dim] = Math.min(100, Math.max(0, score));
         });
 
-        res.json(parsed);
+        res.json({ success: true, data: parsed });
     } catch (err) {
-        res.status(500).json({ error: "AI service unavailable" });
+        res.status(500).json({ success: false, error: "AI service unavailable" });
     }
 });
 
 // POST /api/ai/generate-coaching (student auth required)
 router.post('/generate-coaching', verifyToken, requireRole('student'), async (req, res) => {
     const { weakDimensions = [], projectTitle = '', projectStack = '' } = req.body;
+
+    if (!Array.isArray(weakDimensions) || weakDimensions.length === 0) {
+        return res.status(400).json({ success: false, error: 'weakDimensions array is required' });
+    }
+    if (!projectTitle) {
+        return res.status(400).json({ success: false, error: 'projectTitle is required' });
+    }
 
     const dims = ['clarity', 'reasoning', 'depth', 'confidence'];
     const systemPrompt = "You are a coaching assistant. Return ONLY raw JSON with keys questions, tips, improvementPlan.";
@@ -195,7 +210,7 @@ Return JSON:
             JSON.stringify(response.tips),
             JSON.stringify(response.improvementPlan)
         );
-        res.json(response);
+        res.json({ success: true, data: response });
     } catch (err) {
         const fallback = {
             questions: Object.fromEntries(dims.map((d) => [d, [`Practice ${d} question 1`, `Practice ${d} question 2`, `Practice ${d} question 3`]])),
@@ -212,109 +227,136 @@ Return JSON:
                 week4: 'Full mock defense simulation'
             }
         };
-        res.json(fallback);
+        res.json({ success: true, data: fallback });
     }
 });
 
 // POST /api/ai/analyze-confidence
 router.post('/analyze-confidence', verifyToken, requireRole('student'), (req, res) => {
     const { answer = '', questionText = '' } = req.body;
-    const text = String(answer).toLowerCase();
-    const hedgingLex = ['maybe', 'perhaps', 'i think', 'not sure', 'might'];
-    const assertiveLex = ['definitely', 'clearly', 'the reason is', 'therefore', 'in conclusion'];
-    const fillerLex = ['um', 'uh', 'like', 'you know', 'basically'];
-    const hedgingWords = hedgingLex.filter((w) => text.includes(w));
-    const fillerCount = fillerLex.reduce((acc, w) => acc + (text.match(new RegExp(`\\b${w.replace(/\s+/g, '\\s+')}\\b`, 'g')) || []).length, 0);
-    const assertiveCount = assertiveLex.reduce((acc, w) => acc + (text.match(new RegExp(w.replace(/\s+/g, '\\s+'), 'g')) || []).length, 0);
-    const qComplexity = Math.max(1, String(questionText).split(/\s+/).length / 8);
-    const lengthRatio = Math.min(1.5, String(answer).split(/\s+/).length / (20 * qComplexity));
-    let confidenceScore = 60 + assertiveCount * 5 + Math.round(lengthRatio * 10) - hedgingWords.length * 8 - fillerCount * 2;
-    confidenceScore = Math.max(0, Math.min(100, confidenceScore));
-    res.json({
-        confidenceScore,
-        hedgingWords,
-        fillerCount,
-        assertiveCount,
-        suggestion: hedgingWords.length > 0
-            ? "Try to be more direct. Replace 'I think' with 'The reason is'."
-            : 'Good confidence. Keep concise and assertive.'
-    });
+    if (!answer || !questionText) {
+        return res.status(400).json({ success: false, error: 'answer and questionText are required' });
+    }
+    try {
+        const text = String(answer).toLowerCase();
+        const hedgingLex = ['maybe', 'perhaps', 'i think', 'not sure', 'might'];
+        const assertiveLex = ['definitely', 'clearly', 'the reason is', 'therefore', 'in conclusion'];
+        const fillerLex = ['um', 'uh', 'like', 'you know', 'basically'];
+        const hedgingWords = hedgingLex.filter((w) => text.includes(w));
+        const fillerCount = fillerLex.reduce((acc, w) => acc + (text.match(new RegExp(`\\b${w.replace(/\s+/g, '\\s+')}\\b`, 'g')) || []).length, 0);
+        const assertiveCount = assertiveLex.reduce((acc, w) => acc + (text.match(new RegExp(w.replace(/\s+/g, '\\s+'), 'g')) || []).length, 0);
+        const qComplexity = Math.max(1, String(questionText).split(/\s+/).length / 8);
+        const lengthRatio = Math.min(1.5, String(answer).split(/\s+/).length / (20 * qComplexity));
+        let confidenceScore = 60 + assertiveCount * 5 + Math.round(lengthRatio * 10) - hedgingWords.length * 8 - fillerCount * 2;
+        confidenceScore = Math.max(0, Math.min(100, confidenceScore));
+        res.json({
+            success: true,
+            data: {
+                confidenceScore,
+                hedgingWords,
+                fillerCount,
+                assertiveCount,
+                suggestion: hedgingWords.length > 0
+                    ? "Try to be more direct. Replace 'I think' with 'The reason is'."
+                    : 'Good confidence. Keep concise and assertive.'
+            }
+        });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
 });
 
 // POST /api/ai/analyze-voice-tone
 router.post('/analyze-voice-tone', verifyToken, requireRole('student'), (req, res) => {
     const { transcript = '', wordsPerMinute = 130, pauseCount = 0 } = req.body;
-    const pace = Number(wordsPerMinute) < 100 ? 'too-slow' : (Number(wordsPerMinute) > 180 ? 'too-fast' : 'good');
-    const fillerLex = ['um', 'uh', 'like', 'you know', 'basically'];
-    const lower = String(transcript).toLowerCase();
-    const fillerWords = {};
-    for (const word of fillerLex) {
-        const count = (lower.match(new RegExp(word.replace(/\s+/g, '\\s+'), 'g')) || []).length;
-        if (count > 0) fillerWords[word] = count;
+    if (!transcript) {
+        return res.status(400).json({ success: false, error: 'transcript is required' });
     }
-    const suggestions = [];
-    if (pace === 'too-slow') suggestions.push('Increase pace closer to 130 words per minute.');
-    if (pace === 'too-fast') suggestions.push('Slow down to around 130 words per minute.');
-    if (Number(pauseCount) > 10) suggestions.push('Reduce long pauses and keep thought flow consistent.');
-    Object.entries(fillerWords).forEach(([w, c]) => suggestions.push(`Reduce use of ${w} (used ${c} times)`));
-    res.json({ pace, wordsPerMinute, fillerWords, suggestions });
+    try {
+        const pace = Number(wordsPerMinute) < 100 ? 'too-slow' : (Number(wordsPerMinute) > 180 ? 'too-fast' : 'good');
+        const fillerLex = ['um', 'uh', 'like', 'you know', 'basically'];
+        const lower = String(transcript).toLowerCase();
+        const fillerWords = {};
+        for (const word of fillerLex) {
+            const count = (lower.match(new RegExp(word.replace(/\s+/g, '\\s+'), 'g')) || []).length;
+            if (count > 0) fillerWords[word] = count;
+        }
+        const suggestions = [];
+        if (pace === 'too-slow') suggestions.push('Increase pace closer to 130 words per minute.');
+        if (pace === 'too-fast') suggestions.push('Slow down to around 130 words per minute.');
+        if (Number(pauseCount) > 10) suggestions.push('Reduce long pauses and keep thought flow consistent.');
+        Object.entries(fillerWords).forEach(([w, c]) => suggestions.push(`Reduce use of ${w} (used ${c} times)`));
+        res.json({ success: true, data: { pace, wordsPerMinute, fillerWords, suggestions } });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
 });
 
 // POST /api/ai/predict-score
 router.post('/predict-score', verifyToken, requireRole('student'), (req, res) => {
     const userId = Number(req.body.userId || req.user.id);
-    if (userId !== req.user.id) return res.status(403).json({ error: 'Access denied' });
-    const history = db.prepare(`
-        SELECT * FROM dimension_history
-        WHERE user_id = ?
-        ORDER BY datetime(recorded_at) DESC
-        LIMIT 5
-    `).all(userId).reverse();
-    if (history.length < 2) {
-        return res.json({
-            predictedScore: 0,
-            predictedGrade: 'N/A',
-            confidence: 'low',
-            trendPerDimension: {},
-            recommendation: 'Complete at least 2 sessions to enable score prediction.'
-        });
-    }
+    if (userId !== req.user.id) return res.status(403).json({ success: false, error: 'Access denied' });
+    try {
+        const history = db.prepare(`
+            SELECT * FROM dimension_history
+            WHERE user_id = ?
+            ORDER BY datetime(recorded_at) DESC
+            LIMIT 5
+        `).all(userId).reverse();
+        if (history.length < 2) {
+            return res.json({
+                success: true,
+                data: {
+                    predictedScore: 0,
+                    predictedGrade: 'N/A',
+                    confidence: 'low',
+                    trendPerDimension: {},
+                    recommendation: 'Complete at least 2 sessions to enable score prediction.'
+                }
+            });
+        }
 
-    function trend(current, projected) {
-        const diff = projected - current;
-        if (diff > 0.1) return 'improving';
-        if (diff < -0.1) return 'declining';
-        return 'stable';
+        function trend(current, projected) {
+            const diff = projected - current;
+            if (diff > 0.1) return 'improving';
+            if (diff < -0.1) return 'declining';
+            return 'stable';
+        }
+        function project(key) {
+            const vals = history.map((h) => Number(h[key] || 0));
+            const n = vals.length;
+            const first = vals[0];
+            const last = vals[n - 1];
+            const slope = (last - first) / Math.max(1, n - 1);
+            const projected = Math.max(0, Math.min(100, last + slope * 3));
+            return { current: Number(last.toFixed(1)), projected: Number(projected.toFixed(1)), trend: trend(last, projected) };
+        }
+        const trendPerDimension = {
+            clarity: project('clarity_avg'),
+            reasoning: project('reasoning_avg'),
+            depth: project('depth_avg'),
+            confidence: project('confidence_avg')
+        };
+        const predictedScore = Number(((trendPerDimension.clarity.projected + trendPerDimension.reasoning.projected + trendPerDimension.depth.projected + trendPerDimension.confidence.projected) / 4).toFixed(1));
+        const predictedGrade = predictedScore >= 85 ? 'A' : predictedScore >= 70 ? 'B' : predictedScore >= 55 ? 'C' : predictedScore >= 40 ? 'D' : 'F';
+        res.json({
+            success: true,
+            data: {
+                predictedScore,
+                predictedGrade,
+                confidence: history.length >= 4 ? 'high' : 'medium',
+                trendPerDimension: {
+                    clarity: trendPerDimension.clarity,
+                    reasoning: trendPerDimension.reasoning,
+                    depth: trendPerDimension.depth,
+                    confidence: trendPerDimension.confidence
+                },
+                recommendation: `At this pace you will score ${predictedGrade}. Focus on ${trendPerDimension.reasoning.projected < trendPerDimension.clarity.projected ? 'Reasoning' : 'Depth'} to improve your final grade.`
+            }
+        });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
     }
-    function project(key) {
-        const vals = history.map((h) => Number(h[key] || 0));
-        const n = vals.length;
-        const first = vals[0];
-        const last = vals[n - 1];
-        const slope = (last - first) / Math.max(1, n - 1);
-        const projected = Math.max(0, Math.min(100, last + slope * 3));
-        return { current: Number(last.toFixed(1)), projected: Number(projected.toFixed(1)), trend: trend(last, projected) };
-    }
-    const trendPerDimension = {
-        clarity: project('clarity_avg'),
-        reasoning: project('reasoning_avg'),
-        depth: project('depth_avg'),
-        confidence: project('confidence_avg')
-    };
-    const predictedScore = Number(((trendPerDimension.clarity.projected + trendPerDimension.reasoning.projected + trendPerDimension.depth.projected + trendPerDimension.confidence.projected) / 4).toFixed(1));
-    const predictedGrade = predictedScore >= 85 ? 'A' : predictedScore >= 70 ? 'B' : predictedScore >= 55 ? 'C' : predictedScore >= 40 ? 'D' : 'F';
-    res.json({
-        predictedScore,
-        predictedGrade,
-        confidence: history.length >= 4 ? 'high' : 'medium',
-        trendPerDimension: {
-            clarity: trendPerDimension.clarity,
-            reasoning: trendPerDimension.reasoning,
-            depth: trendPerDimension.depth,
-            confidence: trendPerDimension.confidence
-        },
-        recommendation: `At this pace you will score ${predictedGrade}. Focus on ${trendPerDimension.reasoning.projected < trendPerDimension.clarity.projected ? 'Reasoning' : 'Depth'} to improve your final grade.`
-    });
 });
 
 // POST /api/ai/check-plagiarism (faculty auth)
@@ -325,26 +367,29 @@ router.post('/check-plagiarism', verifyToken, requireRole('faculty'), async (req
     const sa = Number(sessionAId);
     const sb = Number(sessionBId);
     if (!na || !nb || !sa || !sb || na === nb) {
-        return res.status(400).json({ error: 'studentAId, studentBId, sessionAId, sessionBId required (two distinct students)' });
+        return res.status(400).json({ success: false, error: 'studentAId, studentBId, sessionAId, sessionBId required (two distinct students)' });
     }
     if (sa === sb) {
-        return res.status(400).json({ error: 'Sessions must be distinct' });
+        return res.status(400).json({ success: false, error: 'Sessions must be distinct' });
     }
     try {
         const sA = db.prepare('SELECT id, user_id FROM sessions WHERE id = ? AND user_id = ?').get(sa, na);
         const sB = db.prepare('SELECT id, user_id FROM sessions WHERE id = ? AND user_id = ?').get(sb, nb);
         if (!sA || !sB) {
-            return res.status(404).json({ error: 'Session not found for given student' });
+            return res.status(404).json({ success: false, error: 'Session not found for given student' });
         }
         const listA = db.prepare('SELECT question, answer FROM answers WHERE session_id = ? ORDER BY id ASC').all(sa);
         const listB = db.prepare('SELECT question, answer FROM answers WHERE session_id = ? ORDER BY id ASC').all(sb);
         const nQ = Math.min(listA.length, listB.length, 10);
         if (nQ === 0) {
             return res.json({
-                overallSimilarity: 0,
-                suspicious: false,
-                questionBreakdown: [],
-                recommendation: 'No answers to compare for these sessions.'
+                success: true,
+                data: {
+                    overallSimilarity: 0,
+                    suspicious: false,
+                    questionBreakdown: [],
+                    recommendation: 'No answers to compare for these sessions.'
+                }
             });
         }
         const questionBreakdown = [];
@@ -381,14 +426,17 @@ Where similarity is 0-100.`;
             : 'No high-similarity flags; routine monitoring only.';
 
         res.json({
-            overallSimilarity,
-            suspicious: questionBreakdown.some((q) => q.suspicious) || overallSimilarity >= 70,
-            questionBreakdown,
-            recommendation
+            success: true,
+            data: {
+                overallSimilarity,
+                suspicious: questionBreakdown.some((q) => q.suspicious) || overallSimilarity >= 70,
+                questionBreakdown,
+                recommendation
+            }
         });
     } catch (err) {
         console.error('check-plagiarism', err);
-        res.status(500).json({ error: 'Plagiarism check failed' });
+        res.status(500).json({ success: false, error: 'Plagiarism check failed' });
     }
 });
 
@@ -396,15 +444,19 @@ Where similarity is 0-100.`;
 router.post('/panel-question-bank', verifyToken, requireRole('faculty'), async (req, res) => {
     const { title, description, tech_stack } = req.body;
 
+    if (!title || !description) {
+        return res.status(400).json({ success: false, error: 'title and description are required' });
+    }
+
     const systemPrompt = "You are a senior technical interviewer. Return ONLY raw JSON.";
     const userPrompt = `Generate 20 follow-up interview questions for project: ${title} using ${tech_stack}. Return: { "questions": [{ "question": "...", "theme": "..." }] }`;
 
     try {
         const raw = await askAI(systemPrompt, userPrompt);
         const parsed = parseAIResponse(raw);
-        res.json(parsed);
+        res.json({ success: true, data: parsed });
     } catch (err) {
-        res.status(500).json({ error: "AI service unavailable" });
+        res.status(500).json({ success: false, error: "AI service unavailable" });
     }
 });
 

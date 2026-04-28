@@ -1,7 +1,14 @@
+function getCookie(name) {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop().split(';').shift();
+}
+
 async function apiFetch(url, options = {}) {
-    const opts = { ...options, headers: { ...(options.headers || {}) } };
-    const token = auth.getToken();
-    if (token) opts.headers.Authorization = `Bearer ${token}`;
+    const opts = { ...options };
+    
+    // Use centralized auth.getHeaders() which handles both Auth and CSRF tokens
+    opts.headers = auth.getHeaders(options.headers || {});
     opts.credentials = 'include';
 
     let response = await fetch(url, opts);
@@ -29,7 +36,13 @@ async function apiFetch(url, options = {}) {
         if (window.showToast) showToast(msg, 'error');
         throw new Error(msg);
     }
-    return response;
+    
+    // Auto-unwrap standardized response
+    const json = await response.json();
+    if (json.success) {
+        return json.data;
+    }
+    return json;
 }
 
 window.apiFetch = apiFetch;

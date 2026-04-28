@@ -178,8 +178,7 @@
         document.title = "Security Settings | PDRS";
         
         const token = auth.getToken();
-        const headers = () => ({ 
-            Authorization: `Bearer ${token}`, 
+        const headers = () => auth.getHeaders({ 
             'x-device-id': auth.getDeviceId() || '',
             'Content-Type': 'application/json'
         });

@@ -1,10 +1,14 @@
 const auth = {
     saveToken(token, user) {
         window.__pdrsAccessToken = token || null;
-        localStorage.setItem('pdrs_user', JSON.stringify(user));
+        if (token) localStorage.setItem('pdrs_access_token', token);
+        if (user) localStorage.setItem('pdrs_user', JSON.stringify(user));
     },
 
     getToken() {
+        if (!window.__pdrsAccessToken) {
+            window.__pdrsAccessToken = localStorage.getItem('pdrs_access_token');
+        }
         return window.__pdrsAccessToken || null;
     },
 
@@ -14,10 +18,9 @@ const auth = {
     },
 
     logout() {
-        const token = this.getToken();
         fetch('/api/auth/logout', {
             method: 'POST',
-            headers: token ? { Authorization: `Bearer ${token}` } : {},
+            headers: this.getHeaders(),
             credentials: 'include'
         }).finally(() => {
             window.__pdrsAccessToken = null;
@@ -28,21 +31,39 @@ const auth = {
     },
 
     requireAuth() {
+        if (window.__authChecked) return;
+        window.__authChecked = true;
         if (!localStorage.getItem('pdrs_user')) {
-            window.location.href = '/login.html';
+            if (!window.location.pathname.endsWith('/login.html')) {
+                window.location.href = '/login.html';
+            }
         }
     },
 
     requireRole(role) {
         const user = this.getUser();
-        if (!user || user.role !== role) {
-            const redirect = user?.role === 'admin' ? '/admin.html' : (user?.role === 'faculty' ? '/faculty.html' : '/student.html');
-            window.location.href = redirect;
+        if (!user) return; // Let requireAuth handle missing user
+        if (user.role !== role) {
+            const redirect = user.role === 'admin' ? '/admin.html' : (user.role === 'faculty' ? '/faculty.html' : '/student.html');
+            if (!window.location.pathname.endsWith(redirect)) {
+                window.location.href = redirect;
+            }
         }
     },
 
     getDeviceId() {
         return localStorage.getItem('pdrs_device_id');
+    },
+
+    getHeaders(extraHeaders = {}) {
+        const headers = { ...extraHeaders };
+        const token = this.getToken();
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        
+        const csrfToken = document.cookie.split('; ').find(row => row.startsWith('XSRF-TOKEN='))?.split('=')[1];
+        if (csrfToken) headers['X-XSRF-TOKEN'] = csrfToken;
+        
+        return headers;
     },
 
     setDeviceId(deviceId) {
@@ -111,20 +132,31 @@ const auth = {
         document.getElementById('logout-now-btn').onclick = () => this.logout();
     },
 
+    _refreshPromise: null,
+
     async refreshAccessToken() {
-        try {
-            const res = await fetch('/api/auth/refresh', {
-                method: 'POST',
-                credentials: 'include'
-            });
-            if (!res.ok) throw new Error('refresh failed');
-            const data = await res.json();
-            window.__pdrsAccessToken = data.token;
-            return data.token;
-        } catch (err) {
-            this.logout();
-            throw err;
-        }
+        if (this._refreshPromise) return this._refreshPromise;
+
+        this._refreshPromise = (async () => {
+            try {
+                const res = await fetch('/api/auth/refresh', {
+                    method: 'POST',
+                    headers: this.getHeaders(),
+                    credentials: 'include'
+                });
+                if (!res.ok) throw new Error('refresh failed');
+                const data = await res.json();
+                window.__pdrsAccessToken = data.token;
+                return data.token;
+            } catch (err) {
+                this.logout();
+                throw err;
+            } finally {
+                this._refreshPromise = null;
+            }
+        })();
+
+        return this._refreshPromise;
     }
 };
 

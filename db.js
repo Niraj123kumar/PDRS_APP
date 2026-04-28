@@ -48,7 +48,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     user_id INTEGER NOT NULL,
     project_id INTEGER NOT NULL,
     questions_json TEXT,
-    status TEXT CHECK(status IN ('pending', 'active', 'completed')) DEFAULT 'pending',
+    status TEXT CHECK(status IN ('pending', 'active', 'completed', 'abandoned')) DEFAULT 'pending',
     overall_score REAL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
@@ -397,9 +397,26 @@ db.exec(`
     CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_id ON refresh_tokens(user_id);
     CREATE INDEX IF NOT EXISTS idx_flashcards_user_id ON flashcards(user_id);
     CREATE INDEX IF NOT EXISTS idx_badges_user_id ON badges(user_id);
+    CREATE INDEX IF NOT EXISTS idx_projects_user_id ON projects(user_id);
+    CREATE INDEX IF NOT EXISTS idx_session_templates_user_id ON session_templates(user_id);
+    CREATE INDEX IF NOT EXISTS idx_peer_sessions_student_a ON peer_sessions(student_a_id);
+    CREATE INDEX IF NOT EXISTS idx_peer_sessions_student_b ON peer_sessions(student_b_id);
+    CREATE INDEX IF NOT EXISTS idx_defense_schedule_student_id ON defense_schedule(student_id);
 `);
 
 db.exec(`
+CREATE TABLE IF NOT EXISTS lms_sync (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    faculty_id INTEGER NOT NULL,
+    lms_type TEXT NOT NULL,
+    course_id TEXT NOT NULL,
+    last_synced DATETIME DEFAULT CURRENT_TIMESTAMP,
+    student_count INTEGER DEFAULT 0,
+    FOREIGN KEY (faculty_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_lms_sync_faculty_id ON lms_sync(faculty_id);
+
 CREATE TABLE IF NOT EXISTS departments (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT UNIQUE,
@@ -413,7 +430,9 @@ CREATE TABLE IF NOT EXISTS peer_sessions (
     room_code TEXT UNIQUE,
     status TEXT DEFAULT 'waiting',
     questions_json TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (student_a_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (student_b_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS flagged_students (
@@ -422,7 +441,9 @@ CREATE TABLE IF NOT EXISTS flagged_students (
     faculty_id INTEGER,
     reason TEXT,
     resolved INTEGER DEFAULT 0,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (faculty_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS announcements (
@@ -431,7 +452,8 @@ CREATE TABLE IF NOT EXISTS announcements (
     title TEXT,
     message TEXT,
     target_role TEXT DEFAULT 'student',
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (faculty_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS defense_schedule (
@@ -443,7 +465,9 @@ CREATE TABLE IF NOT EXISTS defense_schedule (
     panel_members TEXT,
     status TEXT DEFAULT 'scheduled',
     notes TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (faculty_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS session_templates (
@@ -452,7 +476,9 @@ CREATE TABLE IF NOT EXISTS session_templates (
     name TEXT,
     project_id INTEGER,
     questions_json TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 );
 `);
 
@@ -535,5 +561,43 @@ const seedAdminUser = () => {
 };
 
 seedAdminUser();
+
+const seedDemoData = () => {
+    const student = db.prepare("SELECT id FROM users WHERE email = 'demo_student@pdrs.com'").get();
+    if (!student) return;
+
+    // Seed Project
+    const existingProject = db.prepare('SELECT id FROM projects WHERE user_id = ? LIMIT 1').get(student.id);
+    let projectId;
+    if (!existingProject) {
+        const info = db.prepare(`
+            INSERT INTO projects (user_id, title, description, tech_stack)
+            VALUES (?, ?, ?, ?)
+        `).run(student.id, 'Smart Health Monitor', 'An AI-powered health monitoring system.', 'React, Node.js, TensorFlow.js');
+        projectId = info.lastInsertRowid;
+    } else {
+        projectId = existingProject.id;
+    }
+
+    // Seed Session
+    const existingSession = db.prepare('SELECT id FROM sessions WHERE user_id = ? AND project_id = ? LIMIT 1').get(student.id, projectId);
+    if (!existingSession) {
+        db.prepare(`
+            INSERT INTO sessions (user_id, project_id, questions_json, status, overall_score)
+            VALUES (?, ?, ?, ?, ?)
+        `).run(
+            student.id,
+            projectId,
+            JSON.stringify([
+                { question: 'How does your system handle data privacy?', tier: 'technical' },
+                { question: 'What is the most challenging part of this project?', tier: 'general' }
+            ]),
+            'completed',
+            85.5
+        );
+    }
+};
+
+seedDemoData();
 
 module.exports = db;

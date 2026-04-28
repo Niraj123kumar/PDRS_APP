@@ -9,13 +9,14 @@
     <link rel="stylesheet" href="/css/animations.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
     <style>
-        body.dark-mode { --bg-color: #0f172a; --card-bg: #1e293b; --text-color: #f1f5f9; --text-muted: #94a3b8; --border-color: rgba(255,255,255,0.1); }
         .history-container { max-width: 1000px; margin: 2rem auto; padding: 0 1rem; }
         .chart-card { background: white; padding: 1.5rem; border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 2rem; height: 300px; }
         body.dark-mode .chart-card { background: var(--card-bg); border: 1px solid var(--border-color); color: var(--text-color); }
         
         .session-row { background: white; border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 0.75rem; overflow: hidden; }
+        .session-row:nth-child(even) { background: #f8fafc; }
         body.dark-mode .session-row { background: var(--card-bg); border: 1px solid var(--border-color); color: var(--text-color); }
+        body.dark-mode .session-row:nth-child(even) { background: rgba(255,255,255,0.02); }
         .session-header { padding: 1.25rem; display: flex; justify-content: space-between; align-items: center; cursor: pointer; transition: background 0.2s; }
         .session-header:hover { background: #f8fafc; }
         body.dark-mode .session-header:hover { background: rgba(255,255,255,0.05); }
@@ -38,6 +39,17 @@
         .history-tabs button.active { background: var(--primary-color); color: white; border-color: var(--primary-color); }
         .template-card { background: white; border-radius: var(--radius); box-shadow: var(--shadow); padding: 1.25rem; margin-bottom: 0.75rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem; }
         body.dark-mode .template-card { background: var(--card-bg); border: 1px solid var(--border-color); }
+
+        @media (max-width: 600px) {
+            .session-header { flex-direction: column; align-items: flex-start; gap: 1rem; }
+            .session-header > div:last-child { width: 100%; justify-content: space-between; border-top: 1px solid var(--border-color); padding-top: 0.75rem; }
+            .history-tabs button { flex: 1; text-align: center; padding: 0.5rem; font-size: 0.9rem; }
+            .chart-card { height: 200px; }
+            .navbar { padding: 1rem; }
+            .navbar > div:first-child { gap: 1rem; }
+            .nav-link { display: none; } /* Hide nav links on mobile, show only active or use hamburger? Instruction says 375px responsive. */
+            .nav-link.active { display: block; font-size: 0.8rem; }
+        }
     </style>
     <script>
         const savedTheme = localStorage.getItem('pdrs_theme');
@@ -46,36 +58,62 @@
 </head>
 <body class="animate-up">
     <nav class="navbar">
-        <h1 style="color: var(--primary-color); font-weight: 800; cursor: pointer;" onclick="window.location.href='/'">Defense History</h1>
+        <div style="display: flex; align-items: center; gap: 2rem;">
+            <h1 style="color: var(--primary-color); font-weight: 800; cursor: pointer;" onclick="window.location.href='/'">PDRS</h1>
+            <div style="display: flex; gap: 1.5rem;">
+                <a href="/student.html" class="nav-link">Dashboard</a>
+                <a href="/history.html" class="nav-link active">History</a>
+                <a href="/integrations.html" class="nav-link">Integrations</a>
+            </div>
+        </div>
         <div style="display: flex; align-items: center; gap: 1.5rem;">
-            <button onclick="toggleTheme()" class="theme-toggle">🌙</button>
-            <button onclick="window.location.href='/student.html'" class="btn btn-secondary" style="width: auto; padding: 0.5rem 1rem;">Dashboard</button>
+            <button onclick="toggleTheme()" class="theme-toggle" id="theme-btn" title="Toggle Theme">🌙</button>
+            <div class="bell-icon" onclick="window.location.href='/notifications.html'" title="Notifications" style="position: relative; cursor: pointer; font-size: 1.25rem;">
+                🔔 <span id="unread-count" class="bell-badge" style="display: none; position: absolute; top: -5px; right: -8px; background: var(--error-color); color: white; font-size: 0.7rem; padding: 2px 6px; border-radius: 10px; font-weight: 800;">0</span>
+            </div>
+            <div id="user-avatar" class="avatar-initials" style="width: 35px; height: 35px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 0.9rem; background: var(--primary-color);"></div>
+            <button onclick="auth.logout()" class="btn btn-secondary" style="width: auto; padding: 0.5rem 1rem;">Logout</button>
         </div>
     </nav>
 
     <div class="history-container">
+        <div style="margin-bottom: 2rem;">
+            <a href="/student.html" style="color: var(--text-muted); text-decoration: none; display: flex; align-items: center; gap: 0.5rem; font-weight: 600;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+                Back to Dashboard
+            </a>
+        </div>
         <div class="history-tabs" role="tablist">
             <button type="button" class="active" data-history-tab="sessions" role="tab" aria-selected="true">Sessions</button>
             <button type="button" data-history-tab="templates" role="tab" aria-selected="false">Your templates</button>
         </div>
 
         <div id="history-panel-sessions">
-        <div style="margin-bottom:1.5rem; display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; justify-content: space-between;">
-            <div style="display: flex; gap: 0.5rem; flex: 1; min-width: 300px;">
-                <input type="text" id="session-search" placeholder="Search project title..." style="flex: 1; padding: 0.5rem; border-radius: var(--radius); border: 1px solid var(--border-color);">
-                <select id="status-filter" style="padding: 0.5rem; border-radius: var(--radius); border: 1px solid var(--border-color); background: var(--card-bg); color: var(--text-color);">
-                    <option value="all">All Status</option>
-                    <option value="completed">Completed</option>
-                    <option value="in_progress">In Progress</option>
-                </select>
-                <select id="sort-filter" style="padding: 0.5rem; border-radius: var(--radius); border: 1px solid var(--border-color); background: var(--card-bg); color: var(--text-color);">
-                    <option value="date-desc">Newest First</option>
-                    <option value="date-asc">Oldest First</option>
-                    <option value="score-desc">Highest Score</option>
-                    <option value="score-asc">Lowest Score</option>
-                </select>
+        <div style="margin-bottom:1.5rem; display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-end; justify-content: space-between;">
+            <div style="display: flex; gap: 1rem; flex: 1; min-width: 300px; flex-wrap: wrap;">
+                <div style="flex: 2; min-width: 200px;" class="form-group">
+                    <label for="session-search" style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700; margin-bottom: 0.25rem; display: block;">Search Projects</label>
+                    <input type="text" id="session-search" placeholder="Search project title...">
+                </div>
+                <div style="flex: 1; min-width: 120px;" class="form-group">
+                    <label for="status-filter" style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700; margin-bottom: 0.25rem; display: block;">Status</label>
+                    <select id="status-filter">
+                        <option value="all">All Status</option>
+                        <option value="completed">Completed</option>
+                        <option value="in_progress">In Progress</option>
+                    </select>
+                </div>
+                <div style="flex: 1; min-width: 120px;" class="form-group">
+                    <label for="sort-filter" style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700; margin-bottom: 0.25rem; display: block;">Sort By</label>
+                    <select id="sort-filter">
+                        <option value="date-desc">Newest First</option>
+                        <option value="date-asc">Oldest First</option>
+                        <option value="score-desc">Highest Score</option>
+                        <option value="score-asc">Lowest Score</option>
+                    </select>
+                </div>
             </div>
-            <div style="display: flex; gap: 1rem; align-items: center;">
+            <div style="display: flex; gap: 1rem; align-items: center; margin-bottom: 0.25rem;">
                 <button id="export-progress-btn" class="btn" style="width:auto; padding: 0.5rem 1rem;">Export Report</button>
             </div>
         </div>
@@ -101,6 +139,7 @@
     </div>
 
     <script src="/js/auth.js"></script>
+    <script src="/js/utils.js"></script>
     <script src="/js/charts.js"></script>
     <script src="/js/toast.js"></script>
     <script>

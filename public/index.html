@@ -63,6 +63,7 @@
         .badge-offline .ai-pulse-dot { background: #ef4444; }
 
         .role-badge { background: var(--primary-color); color: white; padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.75rem; font-weight: 800; text-transform: uppercase; }
+        .avatar-initials { width: 35px; height: 35px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 0.9rem; }
 
         @media (max-width: 768px) {
             .role-chooser, .feature-grid, .step-grid { grid-template-columns: 1fr; }
@@ -76,15 +77,23 @@
 </head>
 <body class="animate-up">
     <nav class="navbar">
-        <h1 style="color: var(--primary-color); font-weight: 800; cursor: pointer;" onclick="window.location.href='/'">PDRS</h1>
-        <div style="display: flex; align-items: center; gap: 1.5rem;">
-            <div id="user-nav-info" style="display: none; align-items: center; gap: 1rem;">
-                <span id="nav-role-badge" class="role-badge"></span>
-                <button onclick="switchRole()" class="btn-text" style="background:none; border:none; color:var(--primary-color); cursor:pointer; font-weight:600; font-size:0.85rem;">Switch Role</button>
+        <div class="container" style="display:flex; justify-content:space-between; align-items:center;">
+            <div style="display: flex; align-items: center; gap: 2rem;">
+                <h1 style="color: var(--primary-color); margin:0; display:flex; align-items:center; gap:0.5rem; cursor:pointer; font-weight: 800;" onclick="window.location.href='/'">
+                    <span style="font-size:1.5rem;">🛡️</span> PDRS
+                </h1>
             </div>
-            <button onclick="toggleTheme()" class="theme-toggle">🌙</button>
-            <div id="auth-buttons">
-                <a href="/login.html" class="btn" style="width: auto; background: none; color: var(--primary-color); border: 2px solid var(--primary-color); padding: 0.5rem 1.5rem;">Login</a>
+            <div style="display: flex; align-items: center; gap: 1.5rem;">
+                <div id="user-nav-info" style="display: none; align-items: center; gap: 1rem;">
+                    <div id="nav-avatar" class="avatar-initials" style="width: 30px; height: 30px; font-size: 0.8rem;"></div>
+                    <span id="nav-role-badge" class="role-badge"></span>
+                    <button onclick="switchRole()" class="btn-text" style="background:none; border:none; color:var(--primary-color); cursor:pointer; font-weight:600; font-size:0.85rem;">Switch Role</button>
+                    <button onclick="auth.logout()" class="btn btn-secondary" style="width: auto; padding: 0.5rem 1rem;">Logout</button>
+                </div>
+                <button onclick="toggleTheme()" class="theme-toggle" id="theme-btn" title="Toggle Theme">🌙</button>
+                <div id="auth-buttons">
+                    <a href="/login.html" class="btn" style="width: auto; background: none; color: var(--primary-color); border: 2px solid var(--primary-color); padding: 0.5rem 1.5rem;">Login</a>
+                </div>
             </div>
         </div>
     </nav>
@@ -171,13 +180,14 @@
         </div>
     </section>
 
-    <button onclick="toggleTheme()" class="theme-toggle-fixed">🌙</button>
+
 
     <footer style="text-align: center; padding: 4rem; color: var(--text-muted); border-top: 1px solid var(--border-color);">
         &copy; 2026 Project Defense Rehearsal System (PDRS). All rights reserved.
     </footer>
 
     <script src="/js/auth.js"></script>
+    <script src="/js/utils.js"></script>
     <script src="/js/toast.js"></script>
     <script>
         // Check for access denied
@@ -193,28 +203,32 @@
         const user = auth.getUser();
 
         // Initial loading state
-        document.querySelector('.role-chooser').style.display = 'none';
-        document.getElementById('feature-grid').style.display = 'none';
-        
-        ui.showSkeleton('role-chooser-loading', 2, 'card');
-        document.getElementById('role-chooser-loading').style.display = 'grid';
-        document.getElementById('role-chooser-loading').style.gridTemplateColumns = window.innerWidth > 768 ? 'repeat(2, 1fr)' : '1fr';
-        document.getElementById('role-chooser-loading').style.gap = '2rem';
-
-        ui.showSkeleton('feature-grid-loading', 6, 'card');
-        document.getElementById('feature-grid-loading').style.display = 'grid';
-        document.getElementById('feature-grid-loading').style.gridTemplateColumns = window.innerWidth > 768 ? 'repeat(3, 1fr)' : '1fr';
-        document.getElementById('feature-grid-loading').style.gap = '2rem';
-
-        setTimeout(() => {
-            document.getElementById('role-chooser-loading').style.display = 'none';
-            document.getElementById('feature-grid-loading').style.display = 'none';
+        document.addEventListener('DOMContentLoaded', () => {
+            document.querySelector('.role-chooser').style.display = 'none';
+            document.getElementById('feature-grid').style.display = 'none';
             
-            if (!(token && user)) {
-                document.querySelector('.role-chooser').style.display = 'grid';
-            }
-            document.getElementById('feature-grid').style.display = 'grid';
-        }, 800);
+            ui.showSkeleton('role-chooser-loading', 2, 'card');
+            document.getElementById('role-chooser-loading').style.display = 'grid';
+            document.getElementById('role-chooser-loading').style.gridTemplateColumns = window.innerWidth > 768 ? 'repeat(2, 1fr)' : '1fr';
+            document.getElementById('role-chooser-loading').style.gap = '2rem';
+
+            ui.showSkeleton('feature-grid-loading', 6, 'card');
+            document.getElementById('feature-grid-loading').style.display = 'grid';
+            document.getElementById('feature-grid-loading').style.gridTemplateColumns = window.innerWidth > 768 ? 'repeat(3, 1fr)' : '1fr';
+            document.getElementById('feature-grid-loading').style.gap = '2rem';
+
+            setTimeout(() => {
+                document.getElementById('role-chooser-loading').style.display = 'none';
+                document.getElementById('feature-grid-loading').style.display = 'none';
+                
+                if (!(token && user)) {
+                    document.querySelector('.role-chooser').style.display = 'grid';
+                }
+                document.getElementById('feature-grid').style.display = 'grid';
+            }, 800);
+            
+            checkAIStatus();
+        });
 
         if (token && user) {
             document.getElementById('role-chooser-section').style.display = 'none';
@@ -223,6 +237,14 @@
             document.getElementById('user-nav-info').style.display = 'flex';
             document.getElementById('nav-role-badge').textContent = user.role;
             document.getElementById('auth-buttons').style.display = 'none';
+            
+            // Set Avatar
+            const navAvatar = document.getElementById('nav-avatar');
+            if (navAvatar && user.name) {
+                const initials = user.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+                navAvatar.textContent = initials;
+                navAvatar.style.background = `hsl(${user.name.length * 137.5 % 360}, 70%, 50%)`;
+            }
             
             document.getElementById('continue-btn').onclick = function() {
                 ui.setLoading(this, true, 'Redirecting...');
@@ -256,7 +278,7 @@
                 const name = document.getElementById('ai-provider-name');
                 
                 name.textContent = data.provider === 'claude' ? 'Claude 3.5 Sonnet' : 'Generic Engine';
-                badge.className = `status-badge-ai ${data.provider === 'claude' ? 'badge-claude' : 'badge-other'}`;
+                badge.className = `status-badge-ai ${data.provider ? 'badge-claude' : 'badge-offline'}`;
             } catch (err) {
                 const badge = document.getElementById('ai-status');
                 badge.className = 'status-badge-ai badge-offline';

@@ -30,7 +30,7 @@ class PDRS_WS {
             try {
                 const data = JSON.parse(event.data);
                 const handler = this.handlers.get(data.type);
-                if (handler) handler(data.payload || data);
+                if (handler) handler(data);
             } catch (err) {
                 console.error('WS parse error:', err);
             }
@@ -48,9 +48,14 @@ class PDRS_WS {
     }
 
     attemptReconnect() {
+        if (this.reconnectAttempts >= 10) {
+            console.error('Max reconnection attempts reached');
+            if (window.showToast) window.showToast('Real-time connection lost. Please refresh the page.', 'error');
+            return;
+        }
         const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), this.maxReconnectDelay);
         this.reconnectAttempts++;
-        console.log(`Reconnecting in ${delay/1000}s...`);
+        console.log(`Reconnecting in ${delay/1000}s... (Attempt ${this.reconnectAttempts}/10)`);
         this.updateStatus('amber');
         setTimeout(() => this.connect(), delay);
     }

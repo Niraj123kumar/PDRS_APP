@@ -13,66 +13,72 @@ class PDRS_WebRTC {
         };
     }
 
-    async startLocalStream(video = true, audio = true) {
-        try {
-            this.localStream = await navigator.mediaDevices.getUserMedia({ video, audio });
-            this.localStream.getTracks().forEach(track => this.pc.addTrack(track, this.localStream));
-            return this.localStream;
-        } catch (err) {
-            console.error('WebRTC Media Error:', err);
-            throw err;
-        }
-    }
-
     async startScreenShare() {
         try {
             const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
             const videoTrack = screenStream.getVideoTracks()[0];
-            const sender = this.pc.getSenders().find(s => s.track.kind === 'video');
-            if (sender) sender.replaceTrack(videoTrack);
             
-            videoTrack.onended = () => {
-                const cameraTrack = this.localStream.getVideoTracks()[0];
-                if (sender) sender.replaceTrack(cameraTrack);
-            };
+            // If we already have a video sender, replace its track
+            const sender = this.pc.getSenders().find(s => s.track && s.track.kind === 'video');
+            if (sender) {
+                sender.replaceTrack(videoTrack);
+            } else {
+                this.pc.addTrack(videoTrack, screenStream);
+            }
+            
             return screenStream;
         } catch (err) {
             console.error('Screen Share Error:', err);
+            if (err.name !== 'NotAllowedError' && window.showToast) {
+                window.showToast('Screen share failed', 'error');
+            }
             throw err;
         }
     }
 
-    toggleCamera(enabled) {
-        if (this.localStream) {
-            this.localStream.getVideoTracks().forEach(t => t.enabled = enabled);
-        }
-    }
-
-    toggleMic(enabled) {
-        if (this.localStream) {
-            this.localStream.getAudioTracks().forEach(t => t.enabled = enabled);
-        }
-    }
-
     async createOffer() {
-        const offer = await this.pc.createOffer();
-        await this.pc.setLocalDescription(offer);
-        return offer;
+        try {
+            const offer = await this.pc.createOffer();
+            await this.pc.setLocalDescription(offer);
+            return offer;
+        } catch (err) {
+            console.error('WebRTC Offer Error:', err);
+            if (window.showToast) window.showToast('Failed to create connection offer', 'error');
+            throw err;
+        }
     }
 
     async handleOffer(offer) {
-        await this.pc.setRemoteDescription(new RTCSessionDescription(offer));
-        const answer = await this.pc.createAnswer();
-        await this.pc.setLocalDescription(answer);
-        return answer;
+        try {
+            await this.pc.setRemoteDescription(new RTCSessionDescription(offer));
+            const answer = await this.pc.createAnswer();
+            await this.pc.setLocalDescription(answer);
+            return answer;
+        } catch (err) {
+            console.error('WebRTC Handle Offer Error:', err);
+            if (window.showToast) window.showToast('Failed to handle connection offer', 'error');
+            throw err;
+        }
     }
 
     async handleAnswer(answer) {
-        await this.pc.setRemoteDescription(new RTCSessionDescription(answer));
+        try {
+            await this.pc.setRemoteDescription(new RTCSessionDescription(answer));
+        } catch (err) {
+            console.error('WebRTC Handle Answer Error:', err);
+            if (window.showToast) window.showToast('Failed to handle connection answer', 'error');
+            throw err;
+        }
     }
 
     async handleCandidate(candidate) {
-        await this.pc.addIceCandidate(new RTCIceCandidate(candidate));
+        try {
+            await this.pc.addIceCandidate(new RTCIceCandidate(candidate));
+        } catch (err) {
+            console.error('WebRTC ICE Candidate Error:', err);
+            // Don't toast for every candidate error as it might be noisy
+            throw err;
+        }
     }
 }
 

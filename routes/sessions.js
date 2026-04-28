@@ -3,6 +3,7 @@ const router = express.Router();
 const Anthropic = require('@anthropic-ai/sdk');
 const db = require('../db');
 const { verifyToken } = require('../middleware/auth');
+const { requireRole } = require('../middleware/roles');
 const auditService = require('../services/auditService');
 const badgeService = require('../services/badgeService');
 const pdfService = require('../services/pdfService');
@@ -26,18 +27,21 @@ async function claudeAsk(system, user) {
     return r.content[0].text;
 }
 
-// POST /api/sessions (auth required)
-router.post('/', verifyToken, (req, res) => {
+// All session routes require student role
+router.use(verifyToken, requireRole('student'));
+
+// POST /api/sessions
+router.post('/', (req, res) => {
     const { project_id } = req.body;
     const user_id = req.user.id;
 
     if (!project_id) {
-        return res.status(400).json({ error: 'Project ID is required' });
+        return res.status(400).json({ success: false, error: 'Project ID is required' });
     }
 
     try {
         const project = db.prepare('SELECT id FROM projects WHERE id = ? AND user_id = ?').get(project_id, user_id);
-        if (!project) return res.status(403).json({ error: "Project not yours" });
+        if (!project) return res.status(403).json({ success: false, error: "Project not yours" });
 
         const info = db.prepare("INSERT INTO sessions (user_id, project_id, status) VALUES (?, ?, 'active')").run(user_id, project_id);
         auditService.logAction(req.user.id, req.user.email, 'CREATE_SESSION', 'session', info.lastInsertRowid, req, { project_id });
@@ -46,14 +50,17 @@ router.post('/', verifyToken, (req, res) => {
         cacheService.invalidatePattern('faculty:stats:*');
         cacheService.invalidatePattern('cohort:chart:*');
         
-        res.status(201).json({ id: info.lastInsertRowid, user_id, project_id, status: 'active' });
+        res.status(201).json({
+            success: true,
+            data: { id: info.lastInsertRowid, user_id, project_id, status: 'active' }
+        });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
-// GET /api/sessions (auth required)
-router.get('/', verifyToken, (req, res) => {
+// GET /api/sessions
+router.get('/', (req, res) => {
     const user_id = req.user.id;
     try {
         const sessions = db.prepare(`
@@ -64,17 +71,17 @@ router.get('/', verifyToken, (req, res) => {
             ORDER BY s.created_at DESC
         `).all(user_id);
         auditService.logAction(req.user.id, req.user.email, 'VIEW_SESSION', 'session', null, req, { list: true });
-        res.json(sessions);
+        res.json({ success: true, data: sessions });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
 // POST /api/sessions/from-template/:templateId
-router.post('/from-template/:templateId', verifyToken, (req, res) => {
+router.post('/from-template/:templateId', (req, res) => {
     try {
         const t = db.prepare('SELECT * FROM session_templates WHERE id = ? AND user_id = ?').get(req.params.templateId, req.user.id);
-        if (!t) return res.status(404).json({ error: 'Template not found' });
+        if (!t) return res.status(404).json({ success: false, error: 'Template not found' });
         const info = db.prepare(`
             INSERT INTO sessions (user_id, project_id, status, questions_json)
             VALUES (?, ?, 'active', ?)
@@ -84,37 +91,43 @@ router.post('/from-template/:templateId', verifyToken, (req, res) => {
             questions = JSON.parse(t.questions_json || '[]');
         } catch (e) { /* */ }
         res.status(201).json({
-            id: info.lastInsertRowid,
-            user_id: req.user.id,
-            project_id: t.project_id,
-            status: 'active',
-            questions
+            success: true,
+            data: {
+                id: info.lastInsertRowid,
+                user_id: req.user.id,
+                project_id: t.project_id,
+                status: 'active',
+                questions
+            }
         });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
 // POST /api/sessions/:id/save-replay
-router.post('/:id/save-replay', verifyToken, (req, res) => {
+router.post('/:id/save-replay', (req, res) => {
     const session_id = req.params.id;
     const { replayData, timeStamps } = req.body;
+    if (!replayData || !timeStamps) {
+        return res.status(400).json({ success: false, error: 'replayData and timeStamps are required' });
+    }
     try {
         const session = db.prepare('SELECT id FROM sessions WHERE id = ? AND user_id = ?').get(session_id, req.user.id);
-        if (!session) return res.status(404).json({ error: 'Session not found' });
+        if (!session) return res.status(404).json({ success: false, error: 'Session not found' });
         db.prepare('UPDATE sessions SET replay_data_json = ?, time_stamps_json = ? WHERE id = ?').run(
-            JSON.stringify(replayData != null ? replayData : []),
-            JSON.stringify(timeStamps != null ? timeStamps : []),
+            JSON.stringify(replayData),
+            JSON.stringify(timeStamps),
             session_id
         );
-        res.json({ success: true });
+        res.json({ success: true, data: null });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
 // GET /api/sessions/:id/replay
-router.get('/:id/replay', verifyToken, (req, res) => {
+router.get('/:id/replay', (req, res) => {
     const session_id = req.params.id;
     try {
         const session = db.prepare(`
@@ -122,7 +135,7 @@ router.get('/:id/replay', verifyToken, (req, res) => {
             FROM sessions s JOIN projects p ON p.id = s.project_id
             WHERE s.id = ? AND s.user_id = ?
         `).get(session_id, req.user.id);
-        if (!session) return res.status(404).json({ error: 'Session not found' });
+        if (!session) return res.status(404).json({ success: false, error: 'Session not found' });
         let replay = [];
         let timeStamps = [];
         try {
@@ -132,29 +145,32 @@ router.get('/:id/replay', verifyToken, (req, res) => {
             timeStamps = session.time_stamps_json ? JSON.parse(session.time_stamps_json) : [];
         } catch (e) { /* */ }
         res.json({
-            session: {
-                id: session.id,
-                project_title: session.project_title,
-                status: session.status,
-                overall_score: session.overall_score,
-                created_at: session.created_at,
-                summary_pdf_url: session.summary_pdf_url || null
-            },
-            replay,
-            timeStamps
+            success: true,
+            data: {
+                session: {
+                    id: session.id,
+                    project_title: session.project_title,
+                    status: session.status,
+                    overall_score: session.overall_score,
+                    created_at: session.created_at,
+                    summary_pdf_url: session.summary_pdf_url || null
+                },
+                replay,
+                timeStamps
+            }
         });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
 // POST /api/sessions/:id/summarize
-router.post('/:id/summarize', verifyToken, async (req, res) => {
+router.post('/:id/summarize', async (req, res) => {
     const session_id = req.params.id;
     try {
         const session = db.prepare('SELECT s.*, p.title AS project_title FROM sessions s JOIN projects p ON p.id = s.project_id WHERE s.id = ? AND s.user_id = ?')
             .get(session_id, req.user.id);
-        if (!session) return res.status(404).json({ error: 'Session not found' });
+        if (!session) return res.status(404).json({ success: false, error: 'Session not found' });
         const answers = db.prepare('SELECT * FROM answers WHERE session_id = ? ORDER BY id ASC').all(session_id);
         const lines = answers.map((a, i) => `Q${i + 1}: ${a.question}\nAnswer: ${a.answer}\nScores C/R/D/F: ${a.clarity_score}/${a.reasoning_score}/${a.depth_score}/${a.confidence_score}\nFeedback: ${a.feedback || ''}`).join('\n\n');
         const system = 'You are an academic coach. Return ONLY valid JSON, no markdown.';
@@ -169,28 +185,31 @@ nextSteps (array of 3 strings)`;
         const buffer = await pdfService.generateSessionSummaryPdf(summary);
         const url = await pdfService.writeSessionSummaryPdf(session_id, buffer);
         db.prepare('UPDATE sessions SET summary_pdf_url = ? WHERE id = ?').run(url, session_id);
-        res.json({ summaryUrl: url, summary });
+        res.json({ success: true, data: { summaryUrl: url, summary } });
     } catch (err) {
         console.error('summarize', err);
-        res.status(500).json({ error: 'Failed to generate summary' });
+        res.status(500).json({ success: false, error: 'Failed to generate summary' });
     }
 });
 
 // POST /api/sessions/:id/hint
-router.post('/:id/hint', verifyToken, async (req, res) => {
+router.post('/:id/hint', async (req, res) => {
     const session_id = req.params.id;
     const { questionIndex, questionText, tier } = req.body;
+    if (questionIndex === undefined || !questionText) {
+        return res.status(400).json({ success: false, error: 'questionIndex and questionText are required' });
+    }
     const qIdx = Math.max(0, parseInt(questionIndex, 10) || 0);
     try {
         const session = db.prepare('SELECT * FROM sessions WHERE id = ? AND user_id = ?').get(session_id, req.user.id);
-        if (!session) return res.status(404).json({ error: 'Session not found' });
+        if (!session) return res.status(404).json({ success: false, error: 'Session not found' });
         let state = {};
         try {
             state = session.hints_state_json ? JSON.parse(session.hints_state_json) : {};
         } catch (e) { /* */ }
         const key = String(qIdx);
         const used = Number(state[key] || 0);
-        if (used >= 3) return res.status(400).json({ error: 'No hints left for this question' });
+        if (used >= 3) return res.status(400).json({ success: false, error: 'No hints left for this question' });
         const system = 'You are a technical interview coach. Return ONLY valid JSON, no markdown.';
         const user = `For this interview question, give exactly 3 short hints (not full answers) as JSON:
 { "keyConcept": "one sentence on a core idea to address",
@@ -202,33 +221,37 @@ Question (tier ${tier || '?'}): ${String(questionText || '').slice(0, 2000)}`;
         state[key] = used + 1;
         db.prepare('UPDATE sessions SET hints_state_json = ? WHERE id = ?').run(JSON.stringify(state), session_id);
         const nowUsed = used + 1;
-        res.json({ hints: hintObj, used: nowUsed, remaining: Math.max(0, 3 - nowUsed), penaltyPoints: 5 });
+        res.json({ success: true, data: { hints: hintObj, used: nowUsed, remaining: Math.max(0, 3 - nowUsed), penaltyPoints: 5 } });
     } catch (err) {
         console.error('hint', err);
-        res.status(500).json({ error: 'Hint unavailable' });
+        res.status(500).json({ success: false, error: 'Hint unavailable' });
     }
 });
 
-// GET /api/sessions/:id (auth required)
-router.get('/:id', verifyToken, (req, res) => {
+// GET /api/sessions/:id
+router.get('/:id', (req, res) => {
     const user_id = req.user.id;
     const session_id = req.params.id;
     try {
         const session = db.prepare('SELECT s.*, p.title as project_title FROM sessions s JOIN projects p ON s.project_id = p.id WHERE s.id = ? AND s.user_id = ?').get(session_id, user_id);
-        if (!session) return res.status(404).json({ error: 'Session not found' });
+        if (!session) return res.status(404).json({ success: false, error: 'Session not found' });
 
         const answers = db.prepare('SELECT * FROM answers WHERE session_id = ?').all(session_id);
         auditService.logAction(req.user.id, req.user.email, 'VIEW_SESSION', 'session', session_id, req, {});
-        res.json({ ...session, answers });
+        res.json({ success: true, data: { ...session, answers } });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
-// POST /api/sessions/:id/answers (auth required)
-router.post('/:id/answers', verifyToken, (req, res) => {
+// POST /api/sessions/:id/answers
+router.post('/:id/answers', (req, res) => {
     const session_id = req.params.id;
     const { question, answer, tier, clarity_score, reasoning_score, depth_score, confidence_score, feedback } = req.body;
+
+    if (!question || answer === undefined) {
+        return res.status(400).json({ success: false, error: 'Question and answer are required' });
+    }
 
     try {
         const info = db.prepare(`
@@ -236,21 +259,26 @@ router.post('/:id/answers', verifyToken, (req, res) => {
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(session_id, question, answer, tier, clarity_score, reasoning_score, depth_score, confidence_score, feedback);
         
-        res.status(201).json({ id: info.lastInsertRowid });
+        res.status(201).json({ success: true, data: { id: info.lastInsertRowid } });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
-// PATCH /api/sessions/:id (auth required)
-router.patch('/:id', verifyToken, (req, res) => {
+// PATCH /api/sessions/:id
+router.patch('/:id', (req, res) => {
     const user_id = req.user.id;
     const session_id = req.params.id;
     const { status, overall_score, time_per_question_json, abandoned_at_question } = req.body;
 
+    const validStatuses = ['active', 'completed', 'abandoned'];
+    if (status && !validStatuses.includes(status)) {
+        return res.status(400).json({ success: false, error: 'Invalid status' });
+    }
+
     try {
         const session = db.prepare('SELECT id FROM sessions WHERE id = ? AND user_id = ?').get(session_id, user_id);
-        if (!session) return res.status(404).json({ error: 'Session not found' });
+        if (!session) return res.status(404).json({ success: false, error: 'Session not found' });
 
         let query = 'UPDATE sessions SET ';
         const params = [];
@@ -299,114 +327,83 @@ router.patch('/:id', verifyToken, (req, res) => {
             }
             badgeService.checkAndAward(user_id);
         }
-        res.json({ message: 'Session updated' });
+        res.json({ success: true, data: null });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
 // POST /api/sessions/:id/bookmark
-router.post('/:id/bookmark', verifyToken, (req, res) => {
+router.post('/:id/bookmark', (req, res) => {
     const { questionIndex, questionText, note } = req.body;
-    db.prepare(`
-        INSERT INTO bookmarks (user_id, session_id, question_index, question_text, note)
-        VALUES (?, ?, ?, ?, ?)
-    `).run(req.user.id, req.params.id, Number(questionIndex), questionText || '', note || '');
-    res.json({ success: true });
+    if (questionIndex === undefined || !questionText) {
+        return res.status(400).json({ success: false, error: 'questionIndex and questionText are required' });
+    }
+    try {
+        db.prepare(`
+            INSERT INTO bookmarks (user_id, session_id, question_index, question_text, note)
+            VALUES (?, ?, ?, ?, ?)
+        `).run(req.user.id, req.params.id, Number(questionIndex), questionText, note || '');
+        res.json({ success: true, data: null });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
 });
 
 // DELETE /api/sessions/:id/bookmark/:questionIndex
-router.delete('/:id/bookmark/:questionIndex', verifyToken, (req, res) => {
-    db.prepare('DELETE FROM bookmarks WHERE user_id = ? AND session_id = ? AND question_index = ?')
-        .run(req.user.id, req.params.id, Number(req.params.questionIndex));
-    res.json({ success: true });
-});
-
-// GET /api/bookmarks
-router.get('/bookmarks/all', verifyToken, (req, res) => {
-    const rows = db.prepare('SELECT * FROM bookmarks WHERE user_id = ? ORDER BY datetime(created_at) DESC').all(req.user.id);
-    res.json(rows);
+router.delete('/:id/bookmark/:questionIndex', (req, res) => {
+    try {
+        db.prepare('DELETE FROM bookmarks WHERE user_id = ? AND session_id = ? AND question_index = ?')
+            .run(req.user.id, req.params.id, Number(req.params.questionIndex));
+        res.json({ success: true, data: null });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
 });
 
 // POST /api/sessions/:id/note
-router.post('/:id/note', verifyToken, (req, res) => {
+router.post('/:id/note', (req, res) => {
     const { questionIndex, note } = req.body;
-    const existing = db.prepare(`
-        SELECT id FROM question_notes
-        WHERE user_id = ? AND session_id = ? AND question_index = ?
-    `).get(req.user.id, req.params.id, Number(questionIndex));
-    if (existing) {
-        db.prepare('UPDATE question_notes SET note = ?, created_at = CURRENT_TIMESTAMP WHERE id = ?').run(note || '', existing.id);
-    } else {
-        db.prepare('INSERT INTO question_notes (user_id, session_id, question_index, note) VALUES (?, ?, ?, ?)')
-            .run(req.user.id, req.params.id, Number(questionIndex), note || '');
+    if (questionIndex === undefined || note === undefined) {
+        return res.status(400).json({ success: false, error: 'questionIndex and note are required' });
     }
-    res.json({ success: true });
+    try {
+        const existing = db.prepare(`
+            SELECT id FROM question_notes
+            WHERE user_id = ? AND session_id = ? AND question_index = ?
+        `).get(req.user.id, req.params.id, Number(questionIndex));
+        if (existing) {
+            db.prepare('UPDATE question_notes SET note = ?, created_at = CURRENT_TIMESTAMP WHERE id = ?').run(note || '', existing.id);
+        } else {
+            db.prepare('INSERT INTO question_notes (user_id, session_id, question_index, note) VALUES (?, ?, ?, ?)')
+                .run(req.user.id, req.params.id, Number(questionIndex), note || '');
+        }
+        res.json({ success: true, data: null });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
 });
 
 // GET /api/sessions/:id/notes
-router.get('/:id/notes', verifyToken, (req, res) => {
-    const rows = db.prepare('SELECT * FROM question_notes WHERE user_id = ? AND session_id = ? ORDER BY question_index ASC')
-        .all(req.user.id, req.params.id);
-    res.json(rows);
+router.get('/:id/notes', (req, res) => {
+    try {
+        const rows = db.prepare('SELECT * FROM question_notes WHERE user_id = ? AND session_id = ? ORDER BY question_index ASC')
+            .all(req.user.id, req.params.id);
+        res.json({ success: true, data: rows });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
 });
 
 // GET /api/sessions/:id/export-pdf
-router.get('/:id/export-pdf', verifyToken, async (req, res) => {
+router.get('/:id/export-pdf', async (req, res) => {
     try {
         const pdf = await pdfService.generateSessionReport(req.params.id, req.user.id);
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', 'attachment; filename=session.pdf');
         res.send(pdf);
     } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// GET /api/student/export-report
-router.get('/student/export-report/full', verifyToken, async (req, res) => {
-    try {
-        const pdf = await pdfService.generateStudentReport(req.user.id);
-        res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', 'attachment; filename=progress-report.pdf');
-        res.send(pdf);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// POST /api/templates
-router.post('/templates', verifyToken, (req, res) => {
-    const { name, projectId, questionsJson } = req.body;
-    try {
-        const info = db.prepare(`
-            INSERT INTO session_templates (user_id, name, project_id, questions_json)
-            VALUES (?, ?, ?, ?)
-        `).run(req.user.id, name, projectId, questionsJson);
-        const template = db.prepare('SELECT * FROM session_templates WHERE id = ?').get(info.lastInsertRowid);
-        res.status(201).json(template);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// GET /api/templates
-router.get('/templates', verifyToken, (req, res) => {
-    try {
-        const templates = db.prepare('SELECT * FROM session_templates WHERE user_id = ?').all(req.user.id);
-        res.json(templates);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// DELETE /api/templates/:id
-router.delete('/templates/:id', verifyToken, (req, res) => {
-    try {
-        db.prepare('DELETE FROM session_templates WHERE id = ? AND user_id = ?').run(req.params.id, req.user.id);
-        res.json({ success: true });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 

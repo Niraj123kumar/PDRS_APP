@@ -179,12 +179,11 @@ document.addEventListener('DOMContentLoaded', () => {
         for (const item of q) {
             try {
                 if (item.type === 'answer' && currentSessionId) {
-                    const r = await fetch(`/api/sessions/${item.sessionId}/answers`, {
+                    await apiFetch(`/api/sessions/${item.sessionId}/answers`, {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${auth.getToken()}` },
+                        headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(item.payload)
                     });
-                    if (!r.ok) rest.push(item);
                 } else rest.push(item);
             } catch (e) {
                 rest.push(item);
@@ -198,10 +197,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Load projects
     async function loadProjects() {
         try {
-            const res = await fetch('/api/projects', {
-                headers: { 'Authorization': `Bearer ${auth.getToken()}` }
-            });
-            projects = await res.json();
+            projects = await apiFetch('/api/projects');
             projectList.innerHTML = '<option value="">-- Select a Project --</option>' + projects.map(p => `<option value="${p.id}">${p.title}</option>`).join('');
         } catch (err) {
             console.error('Failed to load projects', err);
@@ -216,12 +212,9 @@ document.addEventListener('DOMContentLoaded', () => {
         (async () => {
             showLoading('Loading template...');
             try {
-                const res = await fetch(`/api/sessions/from-template/${templateId}`, {
-                    method: 'POST',
-                    headers: { 'Authorization': `Bearer ${auth.getToken()}` }
+                const data = await apiFetch(`/api/sessions/from-template/${templateId}`, {
+                    method: 'POST'
                 });
-                const data = await res.json();
-                if (!res.ok) throw new Error(data.error);
                 currentSessionId = data.id;
                 questions = data.questions || [];
                 projectStep.style.display = 'none';
@@ -240,9 +233,9 @@ document.addEventListener('DOMContentLoaded', () => {
     async function saveReplayRemote() {
         if (!currentSessionId) return;
         try {
-            await fetch(`/api/sessions/${currentSessionId}/save-replay`, {
+            await apiFetch(`/api/sessions/${currentSessionId}/save-replay`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${auth.getToken()}` },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ replayData, timeStamps })
             });
         } catch (e) { /* */ }
@@ -258,16 +251,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const payload = importedPreview?.repoUrl
             ? { title, description, techStack, repoUrl: importedPreview.repoUrl }
             : { title, description, tech_stack: techStack };
-        const res = await fetch(endpoint, {
+        const data = await apiFetch(endpoint, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${auth.getToken()}`
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Failed to save project');
         importedPreview = null;
         projectTitleInput.value = '';
         projectDescriptionInput.value = '';
@@ -295,25 +283,18 @@ document.addEventListener('DOMContentLoaded', () => {
         showLoading('Initializing defense panel...');
         
         try {
-            const sessionRes = await fetch('/api/sessions', {
+            const sessionData = await apiFetch('/api/sessions', {
                 method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${auth.getToken()}`
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ project_id: projectId })
             });
-            const sessionData = await sessionRes.json();
             currentSessionId = sessionData.id;
 
             // Generate questions
             showLoading('Generating technical questions...');
             const aiRes = await fetch('/api/ai/generate-questions', {
                 method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${auth.getToken()}`
-                },
+                headers: auth.getHeaders({ 'Content-Type': 'application/json' }),
                 body: JSON.stringify({ 
                     sessionId: currentSessionId,
                     title: project.title, 
@@ -350,10 +331,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!repoUrl) return alert('Please enter a GitHub repository URL');
         const res = await fetch('/api/projects/import-github', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${auth.getToken()}`
-            },
+            headers: auth.getHeaders({ 'Content-Type': 'application/json' }),
             body: JSON.stringify({ repoUrl })
         });
         const data = await res.json();
@@ -425,7 +403,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const res = await fetch(`/api/sessions/${currentSessionId}/hint`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${auth.getToken()}` },
+                headers: auth.getHeaders({ 'Content-Type': 'application/json' }),
                 body: JSON.stringify({ questionIndex: currentIndex, questionText: q.question, tier: q.tier })
             });
             const d = await res.json();
@@ -540,10 +518,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!navigator.onLine) return;
             const res = await fetch('/api/ai/analyze-confidence', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${auth.getToken()}`
-                },
+                headers: auth.getHeaders({ 'Content-Type': 'application/json' }),
                 body: JSON.stringify({ answer: answerInput.value, questionText: q.question })
             });
             const data = await res.json();
@@ -564,10 +539,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const q = questions[currentIndex];
             const scoreRes = await fetch('/api/ai/score-answer', {
                 method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${auth.getToken()}`
-                },
+                headers: auth.getHeaders({ 'Content-Type': 'application/json' }),
                 body: JSON.stringify({ question: q.question, answer })
             });
             const scores = await scoreRes.json();
@@ -586,10 +558,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const doAnswer = async () => {
                 await fetch(`/api/sessions/${currentSessionId}/answers`, {
                     method: 'POST',
-                    headers: { 
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${auth.getToken()}`
-                    },
+                    headers: auth.getHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({
                         question: q.question,
                         answer: answer,
@@ -611,10 +580,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             await fetch(`/api/sessions/${currentSessionId}/note`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${auth.getToken()}`
-                },
+                headers: auth.getHeaders({ 'Content-Type': 'application/json' }),
                 body: JSON.stringify({ questionIndex: currentIndex, note: questionNote.value || '' })
             });
 
@@ -646,10 +612,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     finalScore = Math.max(0, finalScore - hintPenalty);
                     await fetch(`/api/sessions/${currentSessionId}`, {
                         method: 'PATCH',
-                        headers: { 
-                            'Content-Type': 'application/json',
-                            'Authorization': `Bearer ${auth.getToken()}`
-                        },
+                        headers: auth.getHeaders({ 'Content-Type': 'application/json' }),
                         body: JSON.stringify({
                             status: 'completed',
                             overall_score: finalScore,
@@ -712,10 +675,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 lastWordsPerMinute = Math.round(answerInput.value.trim().split(/\s+/).length / elapsedMin);
                 const res = await fetch('/api/ai/analyze-voice-tone', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${auth.getToken()}`
-                    },
+                    headers: auth.getHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({ transcript: answerInput.value, wordsPerMinute: lastWordsPerMinute, pauseCount: lastPauseCount })
                 });
                 const data = await res.json();
@@ -733,10 +693,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             await fetch(`/api/sessions/${currentSessionId}/bookmark`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${auth.getToken()}`
-                },
+                headers: auth.getHeaders({ 'Content-Type': 'application/json' }),
                 body: JSON.stringify({
                     questionIndex: currentIndex,
                     questionText: q.question,
@@ -772,10 +729,7 @@ document.addEventListener('DOMContentLoaded', () => {
             fetch(`/api/sessions/${currentSessionId}`, {
                 method: 'PATCH',
                 keepalive: true,
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
+                headers: auth.getHeaders({ 'Content-Type': 'application/json' }),
                 body: JSON.stringify(payload)
             });
         } catch (e) { /* ignore */ }

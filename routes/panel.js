@@ -85,13 +85,16 @@ router.post('/create-room', verifyToken, requireRole('faculty'), (req, res) => {
         auditService.logAction(req.user.id, req.user.email, 'CREATE_PANEL', 'panel_session', sessionId, req, { roomCode });
 
         res.json({
-            roomCode,
-            sessionId,
-            studentInviteUrl: `/panel.html?room=${roomCode}&role=student`,
-            teacherInviteUrl: `/panel.html?room=${roomCode}&role=teacher`
+            success: true,
+            data: {
+                roomCode,
+                sessionId,
+                studentInviteUrl: `/panel.html?room=${roomCode}&role=student`,
+                teacherInviteUrl: `/panel.html?room=${roomCode}&role=teacher`
+            }
         });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
@@ -106,11 +109,26 @@ router.get('/room/:roomCode', verifyToken, (req, res) => {
             WHERE ps.room_code = ?
         `).get(roomCode);
 
-        if (!session) return res.status(404).json({ error: 'Room not found' });
+        if (!session) return res.status(404).json({ success: false, error: 'Room not found' });
 
-        res.json(session);
+        res.json({ success: true, data: session });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// GET /api/panel/room/:roomCode/participants (auth)
+router.get('/room/:roomCode/participants', verifyToken, (req, res) => {
+    const { roomCode } = req.params;
+    try {
+        const wsApp = req.app.locals.wsApp;
+        if (!wsApp) {
+            return res.status(500).json({ success: false, error: 'WebSocket service not available' });
+        }
+        const participants = wsApp.getParticipants(roomCode);
+        res.json({ success: true, data: participants });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
@@ -122,10 +140,10 @@ router.post('/room/:roomCode/question', verifyToken, requireRole('faculty'), (re
 
     try {
         if (!question || !String(question).trim()) {
-            return res.status(400).json({ error: 'question is required' });
+            return res.status(400).json({ success: false, error: 'question is required' });
         }
         const session = db.prepare('SELECT id, panel_questions_json FROM panel_sessions WHERE room_code = ?').get(roomCode);
-        if (!session) return res.status(404).json({ error: 'Room not found' });
+        if (!session) return res.status(404).json({ success: false, error: 'Room not found' });
 
         const questions = JSON.parse(session.panel_questions_json || '[]');
         const newQuestion = {
@@ -145,9 +163,9 @@ router.post('/room/:roomCode/question', verifyToken, requireRole('faculty'), (re
             wsApp.broadcastRoom(roomCode, 'panel-question-added', questions);
         }
 
-        res.json(questions);
+        res.json({ success: true, data: questions });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
@@ -156,7 +174,7 @@ router.patch('/room/:roomCode/question/:id', verifyToken, requireRole('faculty')
     const { roomCode, id } = req.params;
     try {
         const session = db.prepare('SELECT id, panel_questions_json FROM panel_sessions WHERE room_code = ?').get(roomCode);
-        if (!session) return res.status(404).json({ error: 'Room not found' });
+        if (!session) return res.status(404).json({ success: false, error: 'Room not found' });
 
         const questions = JSON.parse(session.panel_questions_json || '[]');
         const updatedQuestions = questions.map(q => q.id == id ? { ...q, answered: true } : q);
@@ -169,9 +187,9 @@ router.patch('/room/:roomCode/question/:id', verifyToken, requireRole('faculty')
             wsApp.broadcastRoom(roomCode, 'panel-question-answered', updatedQuestions);
         }
 
-        res.json(updatedQuestions);
+        res.json({ success: true, data: updatedQuestions });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
@@ -181,7 +199,7 @@ router.patch('/room/:roomCode/phase', verifyToken, requireRole('faculty'), (req,
     const { phase } = req.body;
     const allowedPhases = new Set(['waiting', 'briefing', 'questioning', 'scoring', 'complete']);
     try {
-        if (!allowedPhases.has(phase)) return res.status(400).json({ error: 'Invalid phase' });
+        if (!allowedPhases.has(phase)) return res.status(400).json({ success: false, error: 'Invalid phase' });
 
         db.prepare('UPDATE panel_sessions SET phase = ? WHERE room_code = ?').run(phase, roomCode);
 
@@ -190,9 +208,9 @@ router.patch('/room/:roomCode/phase', verifyToken, requireRole('faculty'), (req,
             wsApp.broadcastRoom(roomCode, 'phase-change', { phase });
         }
 
-        res.json({ success: true, phase });
+        res.json({ success: true, data: { phase } });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
@@ -202,7 +220,7 @@ router.post('/room/:roomCode/raise-hand', verifyToken, requireRole('student'), (
     const { reason } = req.body;
     try {
         const session = db.prepare('SELECT id FROM panel_sessions WHERE room_code = ?').get(roomCode);
-        if (!session) return res.status(404).json({ error: 'Room not found' });
+        if (!session) return res.status(404).json({ success: false, error: 'Room not found' });
 
         const info = db.prepare('INSERT INTO raise_hand_events (panel_session_id, student_id, reason) VALUES (?, ?, ?)')
             .run(session.id, req.user.id, reason || null);
@@ -217,9 +235,9 @@ router.post('/room/:roomCode/raise-hand', verifyToken, requireRole('student'), (
             });
         }
 
-        res.json({ success: true });
+        res.json({ success: true, data: { id: info.lastInsertRowid } });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
@@ -227,16 +245,17 @@ router.post('/room/:roomCode/raise-hand', verifyToken, requireRole('student'), (
 router.patch('/room/:roomCode/raise-hand/:id/resolve', verifyToken, requireRole('faculty'), (req, res) => {
     const { roomCode, id } = req.params;
     try {
-        db.prepare('UPDATE raise_hand_events SET resolved = 1 WHERE id = ?').run(id);
+        const result = db.prepare('UPDATE raise_hand_events SET resolved = 1 WHERE id = ?').run(id);
+        if (result.changes === 0) return res.status(404).json({ success: false, error: 'Raise hand event not found' });
 
         const wsApp = req.app.locals.wsApp;
         if (wsApp) {
             wsApp.broadcastRoom(roomCode, 'raise-hand-resolved', { id: Number(id) });
         }
 
-        res.json({ success: true });
+        res.json({ success: true, data: { id: Number(id) } });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
@@ -246,10 +265,10 @@ router.post('/room/:roomCode/chat', verifyToken, (req, res) => {
     const { message, isPrivate } = req.body;
     try {
         if (!message || !String(message).trim()) {
-            return res.status(400).json({ error: 'message is required' });
+            return res.status(400).json({ success: false, error: 'message is required' });
         }
         const session = db.prepare('SELECT id FROM panel_sessions WHERE room_code = ?').get(roomCode);
-        if (!session) return res.status(404).json({ error: 'Room not found' });
+        if (!session) return res.status(404).json({ success: false, error: 'Room not found' });
 
         const info = db.prepare('INSERT INTO panel_chat (panel_session_id, sender_id, sender_name, message, is_private) VALUES (?, ?, ?, ?, ?)')
             .run(session.id, req.user.id, req.user.name, message, isPrivate ? 1 : 0);
@@ -272,9 +291,9 @@ router.post('/room/:roomCode/chat', verifyToken, (req, res) => {
             }
         }
 
-        res.json(savedMessage);
+        res.json({ success: true, data: savedMessage });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
@@ -283,7 +302,7 @@ router.get('/room/:roomCode/chat', verifyToken, (req, res) => {
     const { roomCode } = req.params;
     try {
         const session = db.prepare('SELECT id FROM panel_sessions WHERE room_code = ?').get(roomCode);
-        if (!session) return res.status(404).json({ error: 'Room not found' });
+        if (!session) return res.status(404).json({ success: false, error: 'Room not found' });
 
         let chat;
         if (req.user.role === 'faculty') {
@@ -292,9 +311,9 @@ router.get('/room/:roomCode/chat', verifyToken, (req, res) => {
             chat = db.prepare('SELECT * FROM panel_chat WHERE panel_session_id = ? AND is_private = 0 ORDER BY created_at ASC').all(session.id);
         }
 
-        res.json(chat);
+        res.json({ success: true, data: chat });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
@@ -303,8 +322,8 @@ router.post('/room/:roomCode/transcript', verifyToken, (req, res) => {
     const { roomCode } = req.params;
     const { chunk, isFinal } = req.body;
     try {
-        if (typeof chunk !== 'string' || chunk.length === 0) {
-            return res.status(400).json({ error: 'chunk is required' });
+        if (typeof chunk !== 'string' || chunk.trim().length === 0) {
+            return res.status(400).json({ success: false, error: 'chunk is required' });
         }
         db.prepare("UPDATE panel_sessions SET full_transcript = COALESCE(full_transcript, '') || ? WHERE room_code = ?")
             .run(chunk, roomCode);
@@ -317,9 +336,9 @@ router.post('/room/:roomCode/transcript', verifyToken, (req, res) => {
             });
         }
 
-        res.json({ success: true });
+        res.json({ success: true, data: { message: 'Chunk added' } });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
@@ -328,17 +347,17 @@ router.get('/room/:roomCode/rubric', verifyToken, (req, res) => {
     const { roomCode } = req.params;
     try {
         const session = db.prepare('SELECT rubric_url FROM panel_sessions WHERE room_code = ?').get(roomCode);
-        if (!session || !session.rubric_url) return res.status(404).json({ error: 'Rubric not found' });
+        if (!session || !session.rubric_url) return res.status(404).json({ success: false, error: 'Rubric not found' });
 
         const filePath = path.join(__dirname, '..', 'public', session.rubric_url);
         if (fs.existsSync(filePath)) {
             res.contentType("application/pdf");
             res.sendFile(filePath);
         } else {
-            res.status(404).json({ error: 'File not found on server' });
+            res.status(404).json({ success: false, error: 'File not found on server' });
         }
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
@@ -347,7 +366,7 @@ router.patch('/room/:roomCode/pause', verifyToken, requireRole('faculty'), (req,
     const { roomCode } = req.params;
     try {
         const session = db.prepare('SELECT is_paused FROM panel_sessions WHERE room_code = ?').get(roomCode);
-        if (!session) return res.status(404).json({ error: 'Room not found' });
+        if (!session) return res.status(404).json({ success: false, error: 'Room not found' });
         const newStatus = session.is_paused ? 0 : 1;
         db.prepare('UPDATE panel_sessions SET is_paused = ? WHERE room_code = ?').run(newStatus, roomCode);
 
@@ -356,9 +375,9 @@ router.patch('/room/:roomCode/pause', verifyToken, requireRole('faculty'), (req,
             wsApp.broadcastRoom(roomCode, newStatus ? 'session-paused' : 'session-resumed', { isPaused: !!newStatus });
         }
 
-        res.json({ isPaused: !!newStatus });
+        res.json({ success: true, data: { isPaused: !!newStatus } });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
@@ -368,7 +387,7 @@ router.patch('/room/:roomCode/timer', verifyToken, requireRole('faculty'), (req,
     const { seconds } = req.body;
     try {
         if (!Number.isInteger(seconds) || seconds < 1) {
-            return res.status(400).json({ error: 'seconds must be a positive integer' });
+            return res.status(400).json({ success: false, error: 'seconds must be a positive integer' });
         }
         db.prepare('UPDATE panel_sessions SET time_per_question = ? WHERE room_code = ?').run(seconds, roomCode);
 
@@ -377,9 +396,9 @@ router.patch('/room/:roomCode/timer', verifyToken, requireRole('faculty'), (req,
             wsApp.broadcastRoom(roomCode, 'timer-set', { seconds });
         }
 
-        res.json({ success: true, seconds });
+        res.json({ success: true, data: { seconds } });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
@@ -389,12 +408,12 @@ router.post('/room/:roomCode/score', verifyToken, requireRole('faculty'), (req, 
     const { clarity, reasoning, depth, confidence, questionIndex } = req.body;
     try {
         const session = getPanelSessionByRoom(roomCode);
-        if (!session) return res.status(404).json({ error: 'Room not found' });
+        if (!session) return res.status(404).json({ success: false, error: 'Room not found' });
 
         const resolvedQuestionIndex = Number.isInteger(questionIndex) ? questionIndex : getCurrentQuestionIndex(session);
         const values = [clarity, reasoning, depth, confidence].map(Number);
         if (values.some(v => !Number.isInteger(v) || v < 1 || v > 5)) {
-            return res.status(400).json({ error: 'Scores must be integers from 1 to 5' });
+            return res.status(400).json({ success: false, error: 'Scores must be integers from 1 to 5' });
         }
 
         db.prepare(`
@@ -420,9 +439,9 @@ router.post('/room/:roomCode/score', verifyToken, requireRole('faculty'), (req, 
         const wsApp = req.app.locals.wsApp;
         if (wsApp) wsApp.broadcastRoom(roomCode, 'score-update', payload);
 
-        res.json(payload);
+        res.json({ success: true, data: payload });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
@@ -431,7 +450,7 @@ router.get('/room/:roomCode/scores', verifyToken, (req, res) => {
     const { roomCode } = req.params;
     try {
         const session = getPanelSessionByRoom(roomCode);
-        if (!session) return res.status(404).json({ error: 'Room not found' });
+        if (!session) return res.status(404).json({ success: false, error: 'Room not found' });
 
         const qIndex = getCurrentQuestionIndex(session);
         const scoreRows = db.prepare(`
@@ -447,9 +466,9 @@ router.get('/room/:roomCode/scores', verifyToken, (req, res) => {
             WHERE panel_session_id = ? AND role IN ('faculty','teacher')
         `).get(session.id).total || 1;
 
-        res.json({ questionIndex: qIndex, ...computeScoreSummary(scoreRows, facultyCount) });
+        res.json({ success: true, data: { questionIndex: qIndex, ...computeScoreSummary(scoreRows, facultyCount) } });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
@@ -459,9 +478,9 @@ router.post('/room/:roomCode/whiteboard', verifyToken, requireRole('faculty'), (
     const { eventType, data } = req.body;
     const allowed = new Set(['draw', 'erase', 'clear', 'text', 'shape']);
     try {
-        if (!allowed.has(eventType)) return res.status(400).json({ error: 'Invalid eventType' });
+        if (!allowed.has(eventType)) return res.status(400).json({ success: false, error: 'Invalid eventType' });
         const session = getPanelSessionByRoom(roomCode);
-        if (!session) return res.status(404).json({ error: 'Room not found' });
+        if (!session) return res.status(404).json({ success: false, error: 'Room not found' });
 
         const info = db.prepare(`
             INSERT INTO whiteboard_events (panel_session_id, faculty_id, event_type, data_json)
@@ -471,9 +490,9 @@ router.post('/room/:roomCode/whiteboard', verifyToken, requireRole('faculty'), (
         const payload = { id: info.lastInsertRowid, eventType, data: data || {}, facultyId: req.user.id };
         const wsApp = req.app.locals.wsApp;
         if (wsApp) wsApp.broadcastRoom(roomCode, 'whiteboard-event', payload);
-        res.json(payload);
+        res.json({ success: true, data: payload });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
@@ -482,7 +501,7 @@ router.get('/room/:roomCode/whiteboard', verifyToken, (req, res) => {
     const { roomCode } = req.params;
     try {
         const session = getPanelSessionByRoom(roomCode);
-        if (!session) return res.status(404).json({ error: 'Room not found' });
+        if (!session) return res.status(404).json({ success: false, error: 'Room not found' });
         const events = db.prepare(`
             SELECT id, event_type, data_json, created_at
             FROM whiteboard_events
@@ -494,9 +513,9 @@ router.get('/room/:roomCode/whiteboard', verifyToken, (req, res) => {
             data: JSON.parse(row.data_json || '{}'),
             createdAt: row.created_at
         }));
-        res.json(events);
+        res.json({ success: true, data: events });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
@@ -506,9 +525,9 @@ router.post('/room/:roomCode/breakout', verifyToken, requireRole('faculty'), (re
     const { roomName, facultyIds } = req.body;
     try {
         const ids = Array.isArray(facultyIds) ? facultyIds.map(Number).filter(Number.isFinite) : [];
-        if (!roomName || ids.length === 0) return res.status(400).json({ error: 'roomName and facultyIds required' });
+        if (!roomName || ids.length === 0) return res.status(400).json({ success: false, error: 'roomName and facultyIds required' });
         const session = getPanelSessionByRoom(roomCode);
-        if (!session) return res.status(404).json({ error: 'Room not found' });
+        if (!session) return res.status(404).json({ success: false, error: 'Room not found' });
 
         const uniqueIds = Array.from(new Set([...ids, req.user.id]));
         const info = db.prepare(`
@@ -525,9 +544,9 @@ router.post('/room/:roomCode/breakout', verifyToken, requireRole('faculty'), (re
                 });
             });
         }
-        res.json({ breakoutId: info.lastInsertRowid });
+        res.json({ success: true, data: { breakoutId: info.lastInsertRowid } });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
@@ -536,12 +555,12 @@ router.post('/breakout/:id/message', verifyToken, requireRole('faculty'), (req, 
     const breakoutId = Number(req.params.id);
     const { message } = req.body;
     try {
-        if (!message || !String(message).trim()) return res.status(400).json({ error: 'message required' });
+        if (!message || !String(message).trim()) return res.status(400).json({ success: false, error: 'message required' });
         const breakout = db.prepare('SELECT * FROM breakout_rooms WHERE id = ? AND closed_at IS NULL').get(breakoutId);
-        if (!breakout) return res.status(404).json({ error: 'Breakout not found' });
+        if (!breakout) return res.status(404).json({ success: false, error: 'Breakout not found' });
 
         const facultyIds = JSON.parse(breakout.faculty_ids_json || '[]');
-        if (!facultyIds.includes(req.user.id)) return res.status(403).json({ error: 'Not in breakout room' });
+        if (!facultyIds.includes(req.user.id)) return res.status(403).json({ success: false, error: 'Not in breakout room' });
 
         const messages = JSON.parse(breakout.messages_json || '[]');
         const msg = { senderId: req.user.id, senderName: req.user.name, message, sentAt: new Date().toISOString() };
@@ -554,30 +573,31 @@ router.post('/breakout/:id/message', verifyToken, requireRole('faculty'), (req, 
                 wsApp.notifyUser(uid, { type: 'breakout-message', payload: { breakoutId, ...msg } });
             });
         }
-        res.json(msg);
+        res.json({ success: true, data: msg });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
 // DELETE /api/panel/breakout/:id (faculty auth)
 router.delete('/breakout/:id', verifyToken, requireRole('faculty'), (req, res) => {
     const breakoutId = Number(req.params.id);
+    if (!breakoutId) return res.status(400).json({ success: false, error: 'Invalid breakout ID' });
     try {
         const breakout = db.prepare('SELECT * FROM breakout_rooms WHERE id = ? AND closed_at IS NULL').get(breakoutId);
-        if (!breakout) return res.status(404).json({ error: 'Breakout not found' });
+        if (!breakout) return res.status(404).json({ success: false, error: 'Breakout not found' });
 
         const facultyIds = JSON.parse(breakout.faculty_ids_json || '[]');
-        if (!facultyIds.includes(req.user.id)) return res.status(403).json({ error: 'Not in breakout room' });
+        if (!facultyIds.includes(req.user.id)) return res.status(403).json({ success: false, error: 'Not in breakout room' });
 
         db.prepare("UPDATE breakout_rooms SET closed_at = CURRENT_TIMESTAMP WHERE id = ?").run(breakoutId);
         const wsApp = req.app.locals.wsApp;
         if (wsApp) {
             facultyIds.forEach(uid => wsApp.notifyUser(uid, { type: 'breakout-closed', payload: { breakoutId } }));
         }
-        res.json({ success: true });
+        res.json({ success: true, data: { message: 'Breakout closed' } });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
@@ -586,25 +606,26 @@ router.post('/room/:roomCode/attendance', verifyToken, (req, res) => {
     const { roomCode } = req.params;
     try {
         const session = getPanelSessionByRoom(roomCode);
-        if (!session) return res.status(404).json({ error: 'Room not found' });
+        if (!session) return res.status(404).json({ success: false, error: 'Room not found' });
 
         const info = db.prepare(`
             INSERT INTO panel_attendance (panel_session_id, user_id, user_name, role)
             VALUES (?, ?, ?, ?)
         `).run(session.id, req.user.id, req.user.name, req.user.role);
         auditService.logAction(req.user.id, req.user.email, 'JOIN_PANEL', 'panel_session', session.id, req, { roomCode });
-        res.json({ attendanceId: info.lastInsertRowid });
+        res.json({ success: true, data: { attendanceId: info.lastInsertRowid } });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
 // PATCH /api/panel/attendance/:id/leave (auth)
 router.patch('/attendance/:id/leave', verifyToken, (req, res) => {
     const attendanceId = Number(req.params.id);
+    if (!attendanceId) return res.status(400).json({ success: false, error: 'Invalid attendance ID' });
     try {
         const row = db.prepare('SELECT * FROM panel_attendance WHERE id = ? AND user_id = ?').get(attendanceId, req.user.id);
-        if (!row) return res.status(404).json({ error: 'Attendance entry not found' });
+        if (!row) return res.status(404).json({ success: false, error: 'Attendance entry not found' });
         db.prepare(`
             UPDATE panel_attendance
             SET left_at = CURRENT_TIMESTAMP,
@@ -612,9 +633,9 @@ router.patch('/attendance/:id/leave', verifyToken, (req, res) => {
             WHERE id = ?
         `).run(attendanceId);
         auditService.logAction(req.user.id, req.user.email, 'END_PANEL', 'panel_attendance', attendanceId, req, {});
-        res.json({ success: true });
+        res.json({ success: true, data: { message: 'Leave recorded' } });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
@@ -623,7 +644,7 @@ router.get('/room/:roomCode/attendance', verifyToken, requireRole('faculty'), (r
     const { roomCode } = req.params;
     try {
         const session = getPanelSessionByRoom(roomCode);
-        if (!session) return res.status(404).json({ error: 'Room not found' });
+        if (!session) return res.status(404).json({ success: false, error: 'Room not found' });
         const rows = db.prepare(`
             SELECT id, user_id, user_name, role, joined_at, left_at,
                    COALESCE(total_minutes, CAST((julianday(CURRENT_TIMESTAMP) - julianday(joined_at)) * 24 * 60 AS INTEGER)) as total_minutes
@@ -631,9 +652,9 @@ router.get('/room/:roomCode/attendance', verifyToken, requireRole('faculty'), (r
             WHERE panel_session_id = ?
             ORDER BY joined_at ASC
         `).all(session.id);
-        res.json(rows);
+        res.json({ success: true, data: rows });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
@@ -642,7 +663,7 @@ router.get('/room/:roomCode/details', verifyToken, (req, res) => {
     const { roomCode } = req.params;
     try {
         const session = getPanelSessionByRoom(roomCode);
-        if (!session) return res.status(404).json({ error: 'Room not found' });
+        if (!session) return res.status(404).json({ success: false, error: 'Room not found' });
         const attendance = db.prepare(`
             SELECT user_name, role, joined_at, left_at, total_minutes
             FROM panel_attendance WHERE panel_session_id = ? ORDER BY joined_at ASC
@@ -655,9 +676,9 @@ router.get('/room/:roomCode/details', verifyToken, (req, res) => {
             SELECT event_type, data_json, created_at
             FROM whiteboard_events WHERE panel_session_id = ? ORDER BY id ASC
         `).all(session.id).map(row => ({ eventType: row.event_type, data: JSON.parse(row.data_json || '{}'), createdAt: row.created_at }));
-        res.json({ session, attendance, scores, whiteboard });
+        res.json({ success: true, data: { session, attendance, scores, whiteboard } });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
@@ -671,7 +692,7 @@ router.get('/session/:sessionId/details', verifyToken, (req, res) => {
             ORDER BY id DESC
             LIMIT 1
         `).get(sessionId);
-        if (!panelSession) return res.status(404).json({ error: 'Panel session not found' });
+        if (!panelSession) return res.status(404).json({ success: false, error: 'Panel session not found' });
 
         const attendance = db.prepare(`
             SELECT user_name, role, joined_at, left_at, total_minutes
@@ -685,9 +706,9 @@ router.get('/session/:sessionId/details', verifyToken, (req, res) => {
             SELECT event_type, data_json, created_at
             FROM whiteboard_events WHERE panel_session_id = ? ORDER BY id ASC
         `).all(panelSession.id).map(row => ({ eventType: row.event_type, data: JSON.parse(row.data_json || '{}'), createdAt: row.created_at }));
-        res.json({ panelSession, attendance, scores, whiteboard });
+        res.json({ success: true, data: { panelSession, attendance, scores, whiteboard } });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
@@ -695,14 +716,15 @@ router.get('/session/:sessionId/details', verifyToken, (req, res) => {
 router.post('/request', verifyToken, requireRole('student'), (req, res) => {
     const { faculty_id, message } = req.body;
     const student_id = req.user.id;
+    if (!faculty_id) return res.status(400).json({ success: false, error: 'faculty_id is required' });
     try {
         const info = db.prepare('INSERT INTO session_requests (student_id, faculty_id, message) VALUES (?, ?, ?)')
-            .run(student_id, faculty_id, message);
+            .run(student_id, faculty_id, message || null);
         db.prepare("INSERT INTO notifications (user_id, type, title, message) VALUES (?, 'panel_request', 'New Session Request', ?)")
             .run(faculty_id, `Student ${req.user.name} has requested a mock defense session.`);
-        res.json({ id: info.lastInsertRowid, message: "Request sent" });
+        res.json({ success: true, data: { id: info.lastInsertRowid, message: "Request sent" } });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
@@ -710,12 +732,13 @@ router.post('/sessions/:id/annotations', verifyToken, requireRole('faculty'), (r
     const panel_session_id = req.params.id;
     const faculty_id = req.user.id;
     const { question_index, note, score_override } = req.body;
+    if (question_index === undefined) return res.status(400).json({ success: false, error: 'question_index is required' });
     try {
         db.prepare('INSERT INTO panel_annotations (panel_session_id, faculty_id, question_index, note, score_override) VALUES (?, ?, ?, ?, ?)')
-            .run(panel_session_id, faculty_id, question_index, note, score_override);
-        res.json({ message: "Annotation saved" });
+            .run(panel_session_id, faculty_id, question_index, note || null, score_override || null);
+        res.json({ success: true, data: { message: "Annotation saved" } });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
@@ -723,13 +746,13 @@ router.get('/sessions/:id/report', verifyToken, requireRole('faculty'), (req, re
     const panel_session_id = req.params.id;
     try {
         const panel = db.prepare('SELECT * FROM panel_sessions WHERE id = ?').get(panel_session_id);
-        if (!panel) return res.status(404).json({ error: "Panel session not found" });
+        if (!panel) return res.status(404).json({ success: false, error: "Panel session not found" });
         const answers = db.prepare('SELECT * FROM answers WHERE session_id = ?').all(panel.session_id);
         const annotations = db.prepare('SELECT * FROM panel_annotations WHERE panel_session_id = ?').all(panel_session_id);
         auditService.logAction(req.user.id, req.user.email, 'EXPORT_REPORT', 'panel_session', panel_session_id, req, {});
-        res.json({ panel, answers, annotations });
+        res.json({ success: true, data: { panel, answers, annotations } });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 

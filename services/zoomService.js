@@ -22,17 +22,18 @@ async function getAccessToken() {
         );
         return response.data.access_token;
     } catch (error) {
-        console.error('Zoom getAccessToken error:', error.response?.data || error.message);
-        throw new Error('Failed to get Zoom access token');
+        const details = error.response?.data?.message || error.message;
+        console.error('Zoom getAccessToken error:', details);
+        throw new Error(`Failed to get Zoom access token: ${details}`);
     }
 }
 
 /**
- * Create a Zoom meeting
+ * Create a Zoom meeting with graceful fallback
  */
-async function createMeeting(topic, startTime, duration) {
-    const token = await getAccessToken();
+async function createMeeting(topic, startTime, duration, internalRoomCode) {
     try {
+        const token = await getAccessToken();
         const response = await axios.post(
             'https://api.zoom.us/v2/users/me/meetings',
             {
@@ -59,11 +60,22 @@ async function createMeeting(topic, startTime, duration) {
         return {
             meetingId: response.data.id,
             joinUrl: response.data.join_url,
-            startUrl: response.data.start_url
+            startUrl: response.data.start_url,
+            isFallback: false
         };
     } catch (error) {
-        console.error('Zoom createMeeting error:', error.response?.data || error.message);
-        throw new Error('Failed to create Zoom meeting');
+        const details = error.response?.data?.message || error.message;
+        console.warn(`Zoom createMeeting failed, using internal fallback: ${details}`);
+        
+        // Fallback to internal WebRTC-based room
+        const fallbackUrl = `/panel.html?room=${internalRoomCode || 'LOBBY'}`;
+        return {
+            meetingId: `fallback-${Date.now()}`,
+            joinUrl: fallbackUrl,
+            startUrl: fallbackUrl,
+            isFallback: true,
+            error: details
+        };
     }
 }
 
@@ -80,8 +92,9 @@ async function getMeeting(meetingId) {
         });
         return response.data;
     } catch (error) {
-        console.error('Zoom getMeeting error:', error.response?.data || error.message);
-        throw new Error('Failed to fetch Zoom meeting details');
+        const details = error.response?.data?.message || error.message;
+        console.error('Zoom getMeeting error:', details);
+        throw new Error(`Failed to fetch Zoom meeting details: ${details}`);
     }
 }
 

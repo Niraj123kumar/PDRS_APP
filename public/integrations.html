@@ -55,17 +55,23 @@
 </head>
 <body class="animate-up">
     <nav class="navbar">
-        <div style="display: flex; align-items: center; gap: 2rem;">
-            <h1 style="color: var(--primary-color); font-weight: 800; cursor: pointer;" onclick="window.location.href='/'">PDRS</h1>
-            <div style="display: flex; gap: 1.5rem;">
-                <a href="/student.html" id="nav-dashboard" style="text-decoration: none; color: var(--text-muted);">Dashboard</a>
-                <a href="/integrations.html" style="text-decoration: none; color: var(--text-color); font-weight: 600;">Integrations</a>
+        <div class="container" style="display:flex; justify-content:space-between; align-items:center;">
+            <div style="display: flex; align-items: center; gap: 2rem;">
+                <h1 style="color: var(--primary-color); margin:0; display:flex; align-items:center; gap:0.5rem; cursor:pointer; font-weight: 800;" onclick="window.location.href='/'">
+                    <span style="font-size:1.5rem;">🛡️</span> PDRS Admin
+                </h1>
+                <div style="display: flex; gap: 1.5rem;">
+                    <a href="/admin.html" id="nav-dashboard" class="nav-link">Dashboard</a>
+                    <a href="/audit.html" class="nav-link">Audit Log</a>
+                    <a href="/integrations.html" class="nav-link active">Integrations</a>
+                </div>
             </div>
-        </div>
-        <div style="display: flex; align-items: center; gap: 1.5rem;">
-            <button onclick="toggleTheme()" class="theme-toggle">🌙</button>
-            <span id="user-name" style="font-weight: 600;"></span>
-            <button onclick="auth.logout()" class="btn btn-secondary" style="width: auto; padding: 0.5rem 1rem;">Logout</button>
+            <div style="display:flex; align-items:center; gap:1.25rem;">
+                <button onclick="toggleTheme()" class="theme-toggle" id="theme-btn" title="Toggle Theme">🌙</button>
+                <div id="user-avatar" class="avatar-initials" style="width: 35px; height: 35px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 0.9rem; background: var(--primary-color);"></div>
+                <a href="/student.html" class="btn btn-secondary" style="width:auto; padding: 0.5rem 1rem;">View as Student</a>
+                <button onclick="auth.logout()" class="btn btn-secondary" style="width: auto; padding: 0.5rem 1rem;">Logout</button>
+            </div>
         </div>
     </nav>
 
@@ -86,7 +92,7 @@
             <div id="slack-setup">
                 <div class="form-group">
                     <label for="slack-webhook">Webhook URL</label>
-                    <input type="text" id="slack-webhook" placeholder="https://hooks.slack.com/services/...">
+                    <input type="text" id="slack-webhook" placeholder="https://hooks.slack.com/services/..." required>
                 </div>
                 <button id="slack-connect-btn" class="btn" style="width: auto;">Connect Slack</button>
             </div>
@@ -122,6 +128,9 @@
             <button id="zoom-connect-btn" class="btn" style="width: auto;">Connect Zoom Account</button>
             
             <div id="zoom-connected" style="display: none; margin-top: 1rem;">
+                <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
+                    <button onclick="disconnectZoom()" class="btn btn-secondary" style="width: auto; color: #ef4444;">Disconnect Zoom</button>
+                </div>
                 <label class="toggle-item"><input type="checkbox" id="zoom-auto-create"> Auto-create meeting when defense is scheduled</label>
                 <h4 style="margin-top: 1.5rem;">Meeting History</h4>
                 <table style="width: 100%; border-collapse: collapse; margin-top: 0.5rem;">
@@ -150,27 +159,32 @@
                 <span id="lms-status" class="status-badge status-disconnected">Never Synced</span>
             </div>
             
-            <div class="form-group">
-                <label for="lms-type">LMS Provider</label>
-                <select id="lms-type">
-                    <option value="moodle">Moodle</option>
-                    <option value="canvas">Canvas</option>
-                </select>
+            <div id="lms-sync-container">
+                <div class="form-group">
+                    <label for="lms-type">LMS Provider</label>
+                    <select id="lms-type">
+                        <option value="moodle">Moodle</option>
+                        <option value="canvas">Canvas</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="lms-url">LMS URL</label>
+                    <input type="text" id="lms-url" placeholder="https://moodle.university.edu" required>
+                </div>
+                <div class="form-group">
+                    <label for="lms-token">API Token / Web Service Key</label>
+                    <div style="position: relative;">
+                        <input type="password" id="lms-token" style="padding-right: 3rem;" required>
+                        <button type="button" onclick="ui.togglePassword('lms-token', this)" style="position: absolute; right: 0.75rem; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; font-size: 1.25rem;">👁️</button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="lms-course-id">Course ID</label>
+                    <input type="text" id="lms-course-id" placeholder="123" required>
+                </div>
+                
+                <button id="lms-sync-btn" class="btn" style="width: auto;">Sync Students Now</button>
             </div>
-            <div class="form-group">
-                <label for="lms-url">LMS URL</label>
-                <input type="text" id="lms-url" placeholder="https://moodle.university.edu">
-            </div>
-            <div class="form-group">
-                <label for="lms-token">API Token / Web Service Key</label>
-                <input type="password" id="lms-token">
-            </div>
-            <div class="form-group">
-                <label for="lms-course-id">Course ID</label>
-                <input type="text" id="lms-course-id" placeholder="123">
-            </div>
-            
-            <button id="lms-sync-btn" class="btn" style="width: auto;">Sync Students Now</button>
             
             <div id="lms-results" style="margin-top: 1.5rem; display: none;">
                 <p id="lms-last-status" style="font-weight: 600;"></p>
@@ -199,14 +213,31 @@
         </div>
     </div>
 
-    <button onclick="toggleTheme()" class="theme-toggle-fixed" id="theme-btn">🌙</button>
+
 
     <script src="/js/auth.js"></script>
+    <script src="/js/utils.js"></script>
     <script src="/js/toast.js"></script>
     <script>
         auth.requireAuth();
         const user = auth.getUser();
-        document.getElementById('user-name').textContent = user.name;
+        
+        // Initialize Validation
+        ui.initFormValidation('slack-setup');
+        ui.initFormValidation('lms-sync-container');
+
+        // Initialize Initials Avatar
+        document.addEventListener('DOMContentLoaded', () => {
+            if (user && user.name) {
+                const avatar = document.getElementById('user-avatar');
+                if (avatar) {
+                    const initials = user.name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2);
+                    avatar.textContent = initials;
+                    avatar.style.background = `hsl(${user.name.length * 137.5 % 360}, 70%, 50%)`;
+                }
+            }
+            loadIntegrationStatus();
+        });
         
         if (user.role === 'faculty' || user.role === 'admin') {
             document.querySelectorAll('.faculty-only').forEach(el => el.style.display = 'block');
@@ -216,14 +247,14 @@
         async function loadIntegrationStatus() {
             try {
                 const res = await fetch('/api/notifications/preferences', {
-                    headers: { 'Authorization': `Bearer ${auth.getToken()}` }
+                    headers: auth.getHeaders()
                 });
                 const prefs = await res.json();
                 
                 // For this phase, we'll fetch the user record for integration fields
                 // Normally we'd have a specific endpoint, but we can reuse preferences or similar
                 const userRes = await fetch('/api/auth/me', {
-                    headers: { 'Authorization': `Bearer ${auth.getToken()}` }
+                    headers: auth.getHeaders()
                 });
                 const userData = await userRes.json();
 
@@ -245,7 +276,7 @@
 
                 if (user.role === 'faculty' || user.role === 'admin') {
                     const lmsRes = await fetch('/api/integrations/lms/status', {
-                        headers: { 'Authorization': `Bearer ${auth.getToken()}` }
+                        headers: auth.getHeaders()
                     });
                     const lmsStatus = await lmsRes.json();
                     if (lmsStatus && lmsStatus.length > 0) {
@@ -270,10 +301,7 @@
             try {
                 const res = await fetch('/api/integrations/slack/connect', {
                     method: 'POST',
-                    headers: { 
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${auth.getToken()}`
-                    },
+                    headers: auth.getHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({ webhookUrl })
                 });
                 const data = await res.json();
@@ -296,7 +324,7 @@
             try {
                 const res = await fetch('/api/integrations/slack/test', {
                     method: 'POST',
-                    headers: { 'Authorization': `Bearer ${auth.getToken()}` }
+                    headers: auth.getHeaders()
                 });
                 if (res.ok) showToast('Test message sent! 🚀', 'success');
                 else throw new Error('Failed to send test');
@@ -315,7 +343,7 @@
                 try {
                     const res = await fetch('/api/integrations/slack/disconnect', {
                         method: 'DELETE',
-                        headers: { 'Authorization': `Bearer ${auth.getToken()}` }
+                        headers: auth.getHeaders()
                     });
                     if (res.ok) {
                         showToast('Slack disconnected', 'success');
@@ -327,6 +355,46 @@
                 }
             });
         };
+
+        // Zoom Connect
+        document.getElementById('zoom-connect-btn').onclick = async function() {
+            ui.setLoading(this, true, 'Connecting...');
+            try {
+                const res = await fetch('/api/integrations/zoom/connect', {
+                    method: 'POST',
+                    headers: auth.getHeaders()
+                });
+                if (res.ok) {
+                    showToast('Zoom connected! 📹', 'success');
+                    loadIntegrationStatus();
+                } else {
+                    const data = await res.json();
+                    throw new Error(data.error || 'Failed to connect Zoom');
+                }
+            } catch (err) {
+                showToast(err.message, 'error');
+            } finally {
+                ui.setLoading(this, false);
+            }
+        };
+
+        // Zoom Disconnect (Adding a button for it in the UI logic)
+        async function disconnectZoom() {
+            ui.showConfirm('Disconnect Zoom', 'Are you sure you want to disconnect Zoom? Meetings will no longer be auto-created.', async () => {
+                try {
+                    const res = await fetch('/api/integrations/zoom/disconnect', {
+                        method: 'DELETE',
+                        headers: auth.getHeaders()
+                    });
+                    if (res.ok) {
+                        showToast('Zoom disconnected', 'success');
+                        location.reload();
+                    } else throw new Error('Failed to disconnect');
+                } catch (err) {
+                    showToast(err.message, 'error');
+                }
+            });
+        }
 
         // LMS Sync
         document.getElementById('lms-sync-btn').onclick = async function() {
@@ -343,10 +411,7 @@
             try {
                 const res = await fetch('/api/integrations/lms/sync', {
                     method: 'POST',
-                    headers: { 
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${auth.getToken()}`
-                    },
+                    headers: auth.getHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify(payload)
                 });
                 const data = await res.json();
@@ -372,10 +437,7 @@
             try {
                 const res = await fetch('/api/integrations/whatsapp/save', {
                     method: 'POST',
-                    headers: { 
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${auth.getToken()}`
-                    },
+                    headers: auth.getHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({ whatsappNumber })
                 });
                 if (res.ok) {

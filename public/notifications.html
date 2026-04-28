@@ -121,7 +121,7 @@
                 ui.showSkeleton('notif-list', 4, 'card');
                 const token = auth.getToken();
                 const res = await fetch('/api/notifications', {
-                    headers: { 'Authorization': `Bearer ${token}` }
+                    headers: auth.getHeaders()
                 });
                 const notifs = await res.json();
                 allNotifications = Array.isArray(notifs) ? notifs : [];
@@ -192,7 +192,7 @@
 
                 await fetch(`/api/notifications/${id}/read`, {
                     method: 'PATCH',
-                    headers: { 'Authorization': `Bearer ${token}` }
+                    headers: auth.getHeaders()
                 });
                 
                 // Re-render after animation completes
@@ -214,7 +214,7 @@
                 const token = auth.getToken();
                 await fetch('/api/notifications/read-all', {
                     method: 'PATCH',
-                    headers: { 'Authorization': `Bearer ${token}` }
+                    headers: auth.getHeaders()
                 });
                 showToast('All marked as read ✅', 'success');
                 allNotifications.forEach(n => n.is_read = true);

@@ -66,21 +66,21 @@ router.post('/register', (req, res) => {
 
     // Strict role validation
     if (!['student', 'faculty'].includes(role)) {
-        return res.status(400).json({ error: 'Invalid role. Must be student or faculty.' });
+        return res.status(400).json({ success: false, error: 'Invalid role. Must be student or faculty.' });
     }
 
     if (!name || !email || !password) {
-        return res.status(400).json({ error: 'All fields are required' });
+        return res.status(400).json({ success: false, error: 'All fields are required' });
     }
 
     // Email validation
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-        return res.status(400).json({ error: 'Invalid email format' });
+        return res.status(400).json({ success: false, error: 'Invalid email format' });
     }
 
     // Password validation: minimum 8 chars, 1 number, 1 uppercase
     if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[a-zA-Z\d\W]{8,}$/.test(password)) {
-        return res.status(400).json({ error: 'Password must be at least 8 characters long and contain at least one uppercase letter and one number' });
+        return res.status(400).json({ success: false, error: 'Password must be at least 8 characters long and contain at least one uppercase letter and one number' });
     }
 
     try {
@@ -100,12 +100,12 @@ router.post('/register', (req, res) => {
             cacheService.invalidatePattern('faculty:stats:*');
         }
 
-        res.json({ token, user });
+        res.json({ success: true, data: { token, user } });
     } catch (err) {
         if (err.message.includes('UNIQUE constraint failed')) {
-            return res.status(400).json({ error: 'Email already exists' });
+            return res.status(400).json({ success: false, error: 'Email already exists' });
         }
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
@@ -119,10 +119,10 @@ router.post('/login', (req, res) => {
 
         if (!user || !bcrypt.compareSync(password, user.password_hash)) {
             db.prepare('INSERT INTO login_attempts (user_id, email, ip, success) VALUES (?, ?, ?, 0)').run(user?.id || null, email, ip);
-            return res.status(401).json({ error: 'Wrong credentials' });
+            return res.status(401).json({ success: false, error: 'Wrong credentials' });
         }
         if (Number(user.is_suspended) === 1) {
-            return res.status(403).json({ error: 'Account suspended', reason: user.suspension_reason || 'No reason provided' });
+            return res.status(403).json({ success: false, error: 'Account suspended', reason: user.suspension_reason || 'No reason provided' });
         }
 
         db.prepare('INSERT INTO login_attempts (user_id, email, ip, success) VALUES (?, ?, ?, 1)').run(user.id, email, ip);
@@ -130,17 +130,43 @@ router.post('/login', (req, res) => {
         const totp = db.prepare('SELECT enabled FROM totp_secrets WHERE user_id = ?').get(user.id);
         const maskedEmail = maskEmail(user.email);
         if (totp && Number(totp.enabled) === 1) {
-            return res.json({ requiresTOTP: true, email: maskedEmail, maskedEmail, forcePasswordChange: Number(user.force_password_change) === 1 });
+            return res.json({
+                success: true,
+                data: {
+                    requiresTOTP: true,
+                    email: maskedEmail,
+                    maskedEmail,
+                    forcePasswordChange: Number(user.force_password_change) === 1
+                }
+            });
         }
 
         const otp = generateOTPCode();
+        console.log(`[DEBUG] Generated OTP for ${user.email}: ${otp}`); // Temporary debug log
+        
         db.prepare('DELETE FROM otp_codes WHERE email = ?').run(user.email);
         db.prepare("INSERT INTO otp_codes (email, code, expires_at, used) VALUES (?, ?, datetime('now', '+10 minutes'), 0)")
             .run(user.email, otp);
-        emailService.sendOTP(user.email, otp).catch(() => {});
-        res.json({ requiresOTP: true, maskedEmail, email: user.email, forcePasswordChange: Number(user.force_password_change) === 1 });
+
+        const secondsRemaining = 60;
+
+        // Fire and forget email but with proper error logging
+        emailService.sendOTP(user.email, otp).catch(err => {
+            console.error(`[ERROR] Failed to send OTP to ${user.email}:`, err.message);
+        });
+
+        res.json({
+            success: true,
+            data: {
+                requiresOTP: true,
+                maskedEmail,
+                email: user.email,
+                forcePasswordChange: Number(user.force_password_change) === 1,
+                secondsRemaining
+            }
+        });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
@@ -149,13 +175,13 @@ router.post('/verify-otp', (req, res) => {
     const { email, otp } = req.body;
     try {
         const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
-        if (!user) return res.status(401).json({ error: 'Invalid code' });
+        if (!user) return res.status(401).json({ success: false, error: 'Invalid code' });
         const row = db.prepare(`
             SELECT * FROM otp_codes
             WHERE email = ? AND code = ? AND used = 0 AND datetime(expires_at) > datetime('now')
             ORDER BY created_at DESC LIMIT 1
         `).get(email, String(otp));
-        if (!row) return res.status(401).json({ error: 'Invalid code' });
+        if (!row) return res.status(401).json({ success: false, error: 'Invalid code' });
 
         db.prepare('UPDATE otp_codes SET used = 1 WHERE id = ?').run(row.id);
         const deviceId = recordDevice(user.id, req);
@@ -171,13 +197,16 @@ router.post('/verify-otp', (req, res) => {
         auditService.logAction(user.id, user.email, 'LOGIN', 'auth', null, req, { method: 'otp' });
         ipDetection.checkSuspiciousLogin(user.id, getRequestIp(req), req).catch(() => {});
         res.json({
-            token: accessToken,
-            user: { id: user.id, name: user.name, email: maskEmail(user.email), role: user.role },
-            deviceId,
-            forcePasswordChange: Number(user.force_password_change) === 1
+            success: true,
+            data: {
+                token: accessToken,
+                user: { id: user.id, name: user.name, email: maskEmail(user.email), role: user.role },
+                deviceId,
+                forcePasswordChange: Number(user.force_password_change) === 1
+            }
         });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
@@ -186,11 +215,11 @@ router.post('/verify-totp', (req, res) => {
     const { email, token } = req.body;
     try {
         const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
-        if (!user) return res.status(401).json({ error: 'Invalid authenticator code' });
+        if (!user) return res.status(401).json({ success: false, error: 'Invalid authenticator code' });
         const row = db.prepare('SELECT secret, enabled FROM totp_secrets WHERE user_id = ?').get(user.id);
-        if (!row || Number(row.enabled) !== 1) return res.status(401).json({ error: 'TOTP not enabled' });
+        if (!row || Number(row.enabled) !== 1) return res.status(401).json({ success: false, error: 'TOTP not enabled' });
         const ok = totpService.verifyToken(row.secret, String(token));
-        if (!ok) return res.status(401).json({ error: 'Invalid authenticator code' });
+        if (!ok) return res.status(401).json({ success: false, error: 'Invalid authenticator code' });
 
         const deviceId = recordDevice(user.id, req);
         const accessToken = tokenService.generateAccessToken(user);
@@ -205,13 +234,16 @@ router.post('/verify-totp', (req, res) => {
         auditService.logAction(user.id, user.email, 'LOGIN', 'auth', null, req, { method: 'totp' });
         ipDetection.checkSuspiciousLogin(user.id, getRequestIp(req), req).catch(() => {});
         res.json({
-            token: accessToken,
-            user: { id: user.id, name: user.name, email: maskEmail(user.email), role: user.role },
-            deviceId,
-            forcePasswordChange: Number(user.force_password_change) === 1
+            success: true,
+            data: {
+                token: accessToken,
+                user: { id: user.id, name: user.name, email: maskEmail(user.email), role: user.role },
+                deviceId,
+                forcePasswordChange: Number(user.force_password_change) === 1
+            }
         });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
@@ -220,31 +252,55 @@ router.post('/resend-otp', (req, res) => {
     const { email } = req.body;
     try {
         const user = db.prepare('SELECT id, email FROM users WHERE email = ?').get(email);
-        if (!user) return res.status(404).json({ error: 'User not found' });
+        if (!user) return res.status(404).json({ success: false, error: 'User not found' });
 
         const last = db.prepare(`
             SELECT created_at FROM otp_codes WHERE email = ?
             ORDER BY created_at DESC LIMIT 1
         `).get(email);
         if (last) {
-            const remaining = db.prepare(`
-                SELECT CAST((strftime('%s', datetime(created_at, '+60 seconds')) - strftime('%s', 'now')) AS INTEGER) AS seconds
+            const row = db.prepare(`
+                SELECT strftime('%s', created_at) AS created_ts
                 FROM otp_codes WHERE email = ?
                 ORDER BY created_at DESC LIMIT 1
-            `).get(email).seconds;
-            if (remaining > 0) {
-                return res.status(429).json({ error: 'Please wait before requesting another OTP', secondsRemaining: remaining });
+            `).get(email);
+            
+            if (row) {
+                const now = Math.floor(Date.now() / 1000);
+                const elapsed = now - parseInt(row.created_ts);
+                const remaining = 60 - elapsed;
+                if (remaining > 0) {
+                    return res.status(429).json({ 
+                        success: false,
+                        error: 'Please wait before requesting another OTP', 
+                        secondsRemaining: Math.ceil(remaining) 
+                    });
+                }
             }
         }
 
         const otp = generateOTPCode();
+        console.log(`[DEBUG] Generated Resend OTP for ${email}: ${otp}`); // Temporary debug log
+
         db.prepare('DELETE FROM otp_codes WHERE email = ?').run(email);
         db.prepare("INSERT INTO otp_codes (email, code, expires_at, used) VALUES (?, ?, datetime('now', '+10 minutes'), 0)")
             .run(email, otp);
-        emailService.sendOTP(email, otp).catch(() => {});
-        res.json({ success: true, maskedEmail: maskEmail(email) });
+
+        const secondsRemaining = 60;
+
+        emailService.sendOTP(email, otp).catch(err => {
+            console.error(`[ERROR] Failed to resend OTP to ${email}:`, err.message);
+        });
+        
+        res.json({
+            success: true,
+            data: {
+                maskedEmail: maskEmail(email),
+                secondsRemaining
+            }
+        });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
@@ -252,16 +308,22 @@ router.post('/resend-otp', (req, res) => {
 router.post('/setup-totp', verifyToken, async (req, res) => {
     try {
         const user = db.prepare('SELECT email FROM users WHERE id = ?').get(req.user.id);
-        if (!user) return res.status(404).json({ error: 'User not found' });
+        if (!user) return res.status(404).json({ success: false, error: 'User not found' });
         const generated = await totpService.generateSecret(user.email);
         db.prepare(`
             INSERT INTO totp_secrets (user_id, secret, enabled)
             VALUES (?, ?, 0)
             ON CONFLICT(user_id) DO UPDATE SET secret = excluded.secret, enabled = 0
         `).run(req.user.id, generated.secret);
-        res.json({ qrCodeDataUrl: generated.qrCodeDataUrl, manualEntryKey: generated.secret });
+        res.json({
+            success: true,
+            data: {
+                qrCodeDataUrl: generated.qrCodeDataUrl,
+                manualEntryKey: generated.secret
+            }
+        });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
@@ -270,14 +332,14 @@ router.post('/confirm-totp', verifyToken, (req, res) => {
     const { token } = req.body;
     try {
         const row = db.prepare('SELECT secret FROM totp_secrets WHERE user_id = ?').get(req.user.id);
-        if (!row) return res.status(400).json({ error: 'TOTP not setup' });
+        if (!row) return res.status(400).json({ success: false, error: 'TOTP not setup' });
         const ok = totpService.verifyToken(row.secret, String(token));
-        if (!ok) return res.status(401).json({ error: 'Invalid authenticator code' });
+        if (!ok) return res.status(401).json({ success: false, error: 'Invalid authenticator code' });
         totpService.enableTOTP(req.user.id, row.secret);
         auditService.logAction(req.user.id, req.user.email, 'ENABLE_TOTP', 'auth', req.user.id, req, {});
-        res.json({ success: true });
+        res.json({ success: true, data: null });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
@@ -286,9 +348,9 @@ router.delete('/totp', verifyToken, (req, res) => {
     try {
         totpService.disableTOTP(req.user.id);
         auditService.logAction(req.user.id, req.user.email, 'DISABLE_TOTP', 'auth', req.user.id, req, {});
-        res.json({ success: true });
+        res.json({ success: true, data: null });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
@@ -296,9 +358,14 @@ router.delete('/totp', verifyToken, (req, res) => {
 router.get('/totp-status', verifyToken, (req, res) => {
     try {
         const row = db.prepare('SELECT enabled FROM totp_secrets WHERE user_id = ?').get(req.user.id);
-        res.json({ enabled: !!(row && Number(row.enabled) === 1) });
+        res.json({
+            success: true,
+            data: {
+                enabled: !!(row && Number(row.enabled) === 1)
+            }
+        });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
@@ -311,9 +378,12 @@ router.get('/devices', verifyToken, (req, res) => {
             WHERE user_id = ?
             ORDER BY datetime(last_active) DESC
         `).all(req.user.id);
-        res.json(rows);
+        res.json({
+            success: true,
+            data: rows
+        });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
@@ -322,11 +392,16 @@ router.delete('/devices/:id', verifyToken, (req, res) => {
     try {
         const { id } = req.params;
         const result = db.prepare('DELETE FROM user_devices WHERE id = ? AND user_id = ?').run(id, req.user.id);
-        if (result.changes === 0) return res.status(404).json({ error: 'Device not found' });
+        if (result.changes === 0) return res.status(404).json({ success: false, error: 'Device not found' });
         const currentDeviceId = req.headers['x-device-id'];
-        res.json({ success: true, invalidateToken: currentDeviceId && String(currentDeviceId) === String(id) });
+        res.json({
+            success: true,
+            data: {
+                invalidateToken: currentDeviceId && String(currentDeviceId) === String(id)
+            }
+        });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
@@ -334,13 +409,13 @@ router.delete('/devices/:id', verifyToken, (req, res) => {
 router.delete('/account', verifyToken, (req, res) => {
     const { password, confirmation } = req.body;
     if (confirmation !== 'DELETE MY ACCOUNT') {
-        return res.status(400).json({ error: 'Confirmation text does not match' });
+        return res.status(400).json({ success: false, error: 'Confirmation text does not match' });
     }
     try {
         const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
-        if (!user) return res.status(404).json({ error: 'User not found' });
+        if (!user) return res.status(404).json({ success: false, error: 'User not found' });
         if (!bcrypt.compareSync(password || '', user.password_hash)) {
-            return res.status(401).json({ error: 'Invalid password' });
+            return res.status(401).json({ success: false, error: 'Invalid password' });
         }
 
         const deleteAll = db.transaction(() => {
@@ -370,16 +445,16 @@ router.delete('/account', verifyToken, (req, res) => {
         deleteAll();
         res.clearCookie('pdrs_refresh');
         auditService.logAction(user.id, user.email, 'DELETE_ACCOUNT', 'user', user.id, req, {});
-        res.json({ success: true });
+        res.json({ success: true, data: null });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
 // POST /api/auth/refresh
 router.post('/refresh', (req, res) => {
     const refresh = req.cookies?.pdrs_refresh;
-    if (!refresh) return res.status(401).json({ error: 'Refresh token missing' });
+    if (!refresh) return res.status(401).json({ success: false, error: 'Refresh token missing' });
     try {
         const decoded = tokenService.verifyRefreshToken(refresh);
         const tokenHash = tokenService.hashToken(refresh);
@@ -388,14 +463,17 @@ router.post('/refresh', (req, res) => {
             WHERE user_id = ? AND token_hash = ? AND revoked = 0 AND datetime(expires_at) > datetime('now')
             ORDER BY created_at DESC LIMIT 1
         `).get(decoded.id, tokenHash);
-        if (!row) return res.status(401).json({ error: 'Invalid refresh token' });
+        if (!row) return res.status(401).json({ success: false, error: 'Invalid refresh token' });
 
         const user = db.prepare('SELECT id, email, role FROM users WHERE id = ?').get(decoded.id);
-        if (!user) return res.status(401).json({ error: 'User not found' });
+        if (!user) return res.status(401).json({ success: false, error: 'User not found' });
         const token = tokenService.generateAccessToken(user);
-        res.json({ token });
+        res.json({
+            success: true,
+            data: { token }
+        });
     } catch (err) {
-        res.status(401).json({ error: 'Invalid refresh token' });
+        res.status(401).json({ success: false, error: 'Invalid refresh token' });
     }
 });
 
@@ -408,29 +486,29 @@ router.post('/logout', verifyToken, (req, res) => {
     }
     res.clearCookie('pdrs_refresh');
     auditService.logAction(req.user.id, req.user.email, 'LOGOUT', 'auth', null, req, {});
-    res.json({ success: true });
+    res.json({ success: true, data: null });
 });
 
 // POST /api/auth/change-password
 router.post('/change-password', verifyToken, (req, res) => {
     const { currentPassword, newPassword } = req.body;
     if (!newPassword || String(newPassword).length < 8) {
-        return res.status(400).json({ error: 'New password must be at least 8 characters' });
+        return res.status(400).json({ success: false, error: 'New password must be at least 8 characters' });
     }
     try {
         const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
-        if (!user) return res.status(404).json({ error: 'User not found' });
+        if (!user) return res.status(404).json({ success: false, error: 'User not found' });
         if (!bcrypt.compareSync(currentPassword || '', user.password_hash)) {
-            return res.status(401).json({ error: 'Current password is incorrect' });
+            return res.status(401).json({ success: false, error: 'Current password is incorrect' });
         }
         const newHash = bcrypt.hashSync(newPassword, 12);
         db.prepare('UPDATE users SET password_hash = ?, force_password_change = 0 WHERE id = ?').run(newHash, user.id);
         db.prepare('UPDATE refresh_tokens SET revoked = 1 WHERE user_id = ?').run(user.id);
         res.clearCookie('pdrs_refresh');
         auditService.logAction(user.id, user.email, 'CHANGE_PASSWORD', 'auth', null, req, {});
-        return res.json({ success: true });
+        res.json({ success: true, data: null });
     } catch (err) {
-        return res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
@@ -473,7 +551,9 @@ router.get('/google/callback', (req, res, next) => {
             }
             auditService.logAction(user.id, user.email, 'LOGIN', 'auth', null, req, { method: 'google' });
             ipDetection.checkSuspiciousLogin(user.id, getRequestIp(req), req).catch(() => {});
-            return res.redirect(`/student.html#token=${accessToken}`);
+            
+            const redirectUrl = user.role === 'admin' ? '/admin.html' : (user.role === 'faculty' ? '/faculty.html' : '/student.html');
+            return res.redirect(`${redirectUrl}#token=${accessToken}`);
         } catch (callbackErr) {
             return next(callbackErr);
         }
@@ -493,9 +573,9 @@ router.get('/audit', verifyToken, (req, res) => {
             if (from) rows = rows.filter(r => new Date(r.created_at) >= new Date(from));
             if (to) rows = rows.filter(r => new Date(r.created_at) <= new Date(to));
         }
-        res.json(rows);
+        res.json({ success: true, data: rows });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
@@ -503,14 +583,17 @@ router.get('/audit', verifyToken, (req, res) => {
 router.get('/me', verifyToken, (req, res) => {
     try {
         const user = db.prepare('SELECT id, name, email, role, avatar_url, github_username, force_password_change, slack_webhook_url, whatsapp_number, zoom_user_id FROM users WHERE id = ?').get(req.user.id);
-        if (!user) return res.status(404).json({ error: 'User not found' });
+        if (!user) return res.status(404).json({ success: false, error: 'User not found' });
         return res.json({
-            ...user,
-            email: maskEmail(user.email),
-            force_password_change: Number(user.force_password_change) === 1
+            success: true,
+            data: {
+                ...user,
+                email: maskEmail(user.email),
+                force_password_change: Number(user.force_password_change) === 1
+            }
         });
     } catch (err) {
-        return res.status(500).json({ error: err.message });
+        return res.status(500).json({ success: false, error: err.message });
     }
 });
 

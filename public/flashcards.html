@@ -165,7 +165,7 @@
             try {
                 ui.showSkeleton('cards-container', 1, 'card');
                 const res = await fetch('/api/flashcards', { 
-                    headers: { Authorization: `Bearer ${auth.getToken()}` } 
+                    headers: auth.getHeaders() 
                 });
                 const data = await res.json();
                 
@@ -267,7 +267,7 @@
                 ui.setLoading(btn, true, btn.innerHTML);
                 await fetch(`/api/flashcards/${cardId}/review`, {
                     method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${auth.getToken()}` },
+                    headers: auth.getHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({ difficulty })
                 });
                 reviewed += 1;
@@ -299,7 +299,7 @@
                 ui.setLoading(btn, true);
                 await fetch('/api/flashcards', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${auth.getToken()}` },
+                    headers: auth.getHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({ question, answer })
                 });
                 showToast('Flashcard added ✅', 'success');
@@ -322,7 +322,7 @@
                 ui.setLoading(btn, true, '✨ Generating...');
                 await fetch('/api/flashcards/generate', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${auth.getToken()}` },
+                    headers: auth.getHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({ projectId: Number(projectId) })
                 });
                 showToast('Cards generated successfully! ✅', 'success');
@@ -376,7 +376,7 @@
                 try {
                     await fetch(`/api/flashcards/${card.id}/review`, {
                         method: 'PATCH',
-                        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${auth.getToken()}` },
+                        headers: auth.getHeaders({ 'Content-Type': 'application/json' }),
                         body: JSON.stringify({ difficulty })
                     });
                     reviewed += 1;

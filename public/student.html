@@ -59,10 +59,10 @@
         <div style="display: flex; align-items: center; gap: 2rem;">
             <h1 style="color: var(--primary-color); font-weight: 800; cursor: pointer;" onclick="window.location.href='/'">PDRS</h1>
             <div style="display: flex; gap: 1.5rem;">
-                <a href="/student.html" style="text-decoration: none; color: var(--text-color); font-weight: 600;">Dashboard</a>
-                <a href="/history.html" style="text-decoration: none; color: var(--text-muted);">History</a>
-                <a href="/notifications.html" style="text-decoration: none; color: var(--text-muted);">Notifications</a>
-                <a href="/integrations.html" style="text-decoration: none; color: var(--text-muted);">Integrations</a>
+                <a href="/student.html" class="nav-link active">Dashboard</a>
+                <a href="/history.html" class="nav-link">History</a>
+                <a href="/notifications.html" class="nav-link">Notifications</a>
+                <a href="/integrations.html" class="nav-link">Integrations</a>
             </div>
         </div>
         <div style="display: flex; align-items: center; gap: 1.5rem;">
@@ -172,6 +172,8 @@
     </div>
 
     <script src="/js/auth.js"></script>
+    <script src="/js/api.js"></script>
+    <script src="/js/utils.js"></script>
     <script src="/js/toast.js"></script>
     <script>
         auth.requireAuth();
@@ -199,30 +201,19 @@
             ui.showSkeleton('bookmarks-section', 3, 'list');
 
             try {
-                const token = auth.getToken();
-                const [sessionsRes, notifsRes, defenseRes, goalsRes, badgesRes, bookmarksRes, insightsRes, predictRes] = await Promise.all([
-                    fetch('/api/sessions', { headers: { 'Authorization': `Bearer ${token}` } }),
-                    fetch('/api/notifications', { headers: { 'Authorization': `Bearer ${token}` } }),
-                    fetch('/api/student/defense-date', { headers: { 'Authorization': `Bearer ${token}` } }),
-                    fetch('/api/student/goals', { headers: { 'Authorization': `Bearer ${token}` } }),
-                    fetch('/api/student/badges', { headers: { 'Authorization': `Bearer ${token}` } }),
-                    fetch('/api/student/bookmarks', { headers: { 'Authorization': `Bearer ${token}` } }),
-                    fetch('/api/student/dashboard-insights', { headers: { 'Authorization': `Bearer ${token}` } }),
-                    fetch('/api/ai/predict-score', {
+                const [sessions, notifs, defenseData, goals, badges, bookmarks, insights, prediction] = await Promise.all([
+                    apiFetch('/api/sessions'),
+                    apiFetch('/api/notifications'),
+                    apiFetch('/api/student/defense-date'),
+                    apiFetch('/api/student/goals'),
+                    apiFetch('/api/student/badges'),
+                    apiFetch('/api/student/bookmarks'),
+                    apiFetch('/api/student/dashboard-insights'),
+                    apiFetch('/api/ai/predict-score', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
                         body: JSON.stringify({ userId: auth.getUser().id })
                     })
                 ]);
-
-                const sessions = await sessionsRes.json();
-                const notifs = await notifsRes.json();
-                const defenseData = await defenseRes.json();
-                const goals = await goalsRes.json();
-                const badges = await badgesRes.json();
-                const bookmarks = await bookmarksRes.json();
-                const insights = await insightsRes.json();
-                const prediction = await predictRes.json();
 
                 renderSessions(sessions);
                 renderStats(sessions);
@@ -451,10 +442,7 @@
                 const connectCalendar = document.getElementById('connect-calendar-toggle').checked;
                 const res = await fetch('/api/student/schedule-defense', {
                     method: 'POST',
-                    headers: { 
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${auth.getToken()}`
-                    },
+                    headers: auth.getHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({ date, title, facultyEmails: connectCalendar ? facultyEmails : '' })
                 });
                 const data = await res.json();
@@ -481,7 +469,7 @@
                 try {
                     const res = await fetch(`/api/sessions/${id}`, {
                         method: 'DELETE',
-                        headers: { 'Authorization': `Bearer ${auth.getToken()}` }
+                        headers: auth.getHeaders()
                     });
                     if (!res.ok) throw new Error('Failed to delete session');
                     showToast('Session deleted ✅', 'success');
@@ -497,7 +485,7 @@
                 try {
                     const res = await fetch(`/api/student/goals/${id}`, {
                         method: 'DELETE',
-                        headers: { 'Authorization': `Bearer ${auth.getToken()}` }
+                        headers: auth.getHeaders()
                     });
                     if (!res.ok) throw new Error('Failed to delete goal');
                     showToast('Goal deleted ✅', 'success');
@@ -513,7 +501,7 @@
                 try {
                     const res = await fetch(`/api/student/bookmarks/${id}`, {
                         method: 'DELETE',
-                        headers: { 'Authorization': `Bearer ${auth.getToken()}` }
+                        headers: auth.getHeaders()
                     });
                     if (!res.ok) throw new Error('Failed to delete bookmark');
                     showToast('Bookmark deleted ✅', 'success');
@@ -533,7 +521,7 @@
             ui.showConfirm('Remove Calendar Event', 'Are you sure? This cannot be undone.', () => {
                 fetch('/api/student/calendar-event', {
                     method: 'DELETE',
-                    headers: { 'Authorization': `Bearer ${auth.getToken()}` }
+                    headers: auth.getHeaders()
                 }).then(() => {
                     const googleLink = document.getElementById('google-event-link');
                     googleLink.style.display = 'none';
@@ -578,7 +566,7 @@
             try {
                 const res = await fetch(`/api/goals/${id}`, {
                     method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${auth.getToken()}` },
+                    headers: auth.getHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({ targetScore: Number(newTarget) })
                 });
                 if (!res.ok) throw new Error('Failed to update goal');
@@ -600,8 +588,8 @@
                 const len = el.value.length;
                 counter.textContent = `${len} / ${max} characters`;
                 counter.className = 'char-counter';
-                if (len >= max * 0.95) counter.classList.add('char-red');
-                else if (len >= max * 0.8) counter.classList.add('char-amber');
+                if (len >= max * 0.95) counter.classList.add('danger');
+                else if (len >= max * 0.8) counter.classList.add('warning');
             };
             el.addEventListener('input', update);
             update();
@@ -618,7 +606,7 @@
             ui.setLoading(btn, true);
             try {
                 const res = await fetch('/api/student/export-report', {
-                    headers: { Authorization: `Bearer ${auth.getToken()}` }
+                    headers: auth.getHeaders()
                 });
                 if (!res.ok) throw new Error('Failed to export PDF');
                 const blob = await res.blob();

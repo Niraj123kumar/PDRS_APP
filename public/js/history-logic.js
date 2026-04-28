@@ -2,6 +2,29 @@ document.addEventListener('DOMContentLoaded', async () => {
     auth.requireAuth();
     auth.requireRole('student');
 
+    const user = auth.getUser();
+    if (user) {
+        const avatar = document.getElementById('user-avatar');
+        if (avatar) {
+            const initials = user.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+            avatar.textContent = initials;
+            avatar.style.background = `hsl(${user.name.length * 137.5 % 360}, 70%, 50%)`;
+        }
+    }
+
+    // Load unread count
+    try {
+        const res = await fetch('/api/notifications/unread-count', {
+            headers: auth.getHeaders()
+        });
+        const data = await res.json();
+        const badge = document.getElementById('unread-count');
+        if (badge && data.count > 0) {
+            badge.textContent = data.count;
+            badge.style.display = 'block';
+        }
+    } catch (e) {}
+
     const list = document.getElementById('session-list');
     const loading = document.getElementById('loading-history');
     const empty = document.getElementById('empty-history');
@@ -11,6 +34,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     const loadingTemplates = document.getElementById('loading-templates');
     const templatesList = document.getElementById('templates-list');
     const emptyTemplates = document.getElementById('empty-templates');
+
+    // Initialize Validation
+    ui.initFormValidation('history-panel-sessions');
 
     async function loadTemplates() {
         if (!templatesList) return;
@@ -22,14 +48,22 @@ document.addEventListener('DOMContentLoaded', async () => {
         
         try {
             const res = await fetch('/api/templates', {
-                headers: { Authorization: `Bearer ${auth.getToken()}` }
+                headers: auth.getHeaders()
             });
             if (!res.ok) throw new Error();
             const arr = await res.json();
             if (loadingTemplates) loadingTemplates.style.display = 'none';
             if (!arr.length) {
                 templatesList.innerHTML = '';
-                ui.showEmptyState('empty-templates', '📋', 'No templates yet', 'Create a template from a completed session in the Sessions tab.');
+                ui.showEmptyState('empty-templates', '📋', 'No templates yet', 'Create a template from a completed session in the Sessions tab.', 'View Sessions', '#');
+                const cta = document.querySelector('#empty-templates .btn');
+                if (cta) {
+                    cta.onclick = (e) => {
+                        e.preventDefault();
+                        const sessionsTab = document.querySelector('[data-history-tab="sessions"]');
+                        if (sessionsTab) sessionsTab.click();
+                    };
+                }
                 if (emptyTemplates) emptyTemplates.style.display = 'block';
                 return;
             }
@@ -93,7 +127,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 try {
                     const res = await fetch(`/api/templates/${id}`, {
                         method: 'DELETE',
-                        headers: { Authorization: `Bearer ${auth.getToken()}` }
+                        headers: auth.getHeaders()
                     });
                     if (!res.ok) throw new Error();
                     showToast('Template removed ✅', 'success');
@@ -108,48 +142,50 @@ document.addEventListener('DOMContentLoaded', async () => {
     };
     window.createTemplateFromSession = async (sessionId, btn) => {
         const def = `Rehearsal ${new Date().toLocaleDateString()}`;
-        const name = window.prompt('Template name:', def);
-        if (name === null || !String(name).trim()) return;
         
-        if (btn) ui.setLoading(btn, true);
-        try {
-            const res = await fetch(`/api/sessions/${sessionId}`, {
-                headers: { Authorization: `Bearer ${auth.getToken()}` }
-            });
-            if (!res.ok) throw new Error();
-            const s = await res.json();
-            let questions = [];
+        ui.showPrompt('Create Template', 'Enter a name for this practice template:', def, async (name) => {
+            if (!name) return;
+            
+            if (btn) ui.setLoading(btn, true);
             try {
-                questions = JSON.parse(s.questions_json || '[]');
+                const res = await fetch(`/api/sessions/${sessionId}`, {
+                    headers: auth.getHeaders()
+                });
+                if (!res.ok) throw new Error();
+                const s = await res.json();
+                let questions = [];
+                try {
+                    questions = JSON.parse(s.questions_json || '[]');
+                } catch (e) {
+                    questions = [];
+                }
+                if (!questions.length && s.answers && s.answers.length) {
+                    questions = s.answers.map((a) => ({
+                        question: a.question,
+                        tier: a.tier || 1,
+                        tier_label: a.tier ? `Tier ${a.tier}` : 'Question',
+                        modelAnswer: '',
+                        keyPoints: []
+                    }));
+                }
+                if (!questions.length) {
+                    showToast('No questions found for this session', 'error');
+                    return;
+                }
+                const r2 = await fetch('/api/templates', {
+                    method: 'POST',
+                    headers: auth.getHeaders({ 'Content-Type': 'application/json' }),
+                    body: JSON.stringify({ name: String(name).trim(), projectId: s.project_id, questionsJson: questions })
+                });
+                if (!r2.ok) throw new Error();
+                showToast('Template created ✅', 'success');
+                if (historyPanelTemplates && historyPanelTemplates.style.display === 'block') loadTemplates();
             } catch (e) {
-                questions = [];
+                showToast('Could not create template', 'error');
+            } finally {
+                if (btn) ui.setLoading(btn, false);
             }
-            if (!questions.length && s.answers && s.answers.length) {
-                questions = s.answers.map((a) => ({
-                    question: a.question,
-                    tier: a.tier || 1,
-                    tier_label: a.tier ? `Tier ${a.tier}` : 'Question',
-                    modelAnswer: '',
-                    keyPoints: []
-                }));
-            }
-            if (!questions.length) {
-                showToast('No questions found for this session', 'error');
-                return;
-            }
-            const r2 = await fetch('/api/templates', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${auth.getToken()}` },
-                body: JSON.stringify({ name: String(name).trim(), projectId: s.project_id, questionsJson: questions })
-            });
-            if (!r2.ok) throw new Error();
-            showToast('Template created ✅', 'success');
-            if (historyPanelTemplates && historyPanelTemplates.style.display === 'block') loadTemplates();
-        } catch (e) {
-            showToast('Could not create template', 'error');
-        } finally {
-            if (btn) ui.setLoading(btn, false);
-        }
+        });
     };
 
     const exportBtn = document.getElementById('export-progress-btn');
@@ -257,7 +293,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             ui.setLoading(exportBtn, true);
             try {
                 const res = await fetch('/api/student/export-report', {
-                    headers: { Authorization: `Bearer ${auth.getToken()}` }
+                    headers: auth.getHeaders()
                 });
                 if (!res.ok) throw new Error();
                 const blob = await res.blob();
@@ -285,7 +321,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (empty) empty.style.display = 'none';
 
         const res = await fetch('/api/sessions', {
-            headers: { 'Authorization': `Bearer ${token}` }
+            headers: auth.getHeaders()
         });
         allSessions = await res.json();
 
@@ -328,9 +364,8 @@ async function toggleDetails(sessionId) {
     // Load Q&A if not loaded
     if (details.innerHTML.includes('skeleton')) {
         try {
-            const token = auth.getToken();
             const res = await fetch(`/api/sessions/${sessionId}`, {
-                headers: { 'Authorization': `Bearer ${token}` }
+                headers: auth.getHeaders()
             });
             const data = await res.json();
 

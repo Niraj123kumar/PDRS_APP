@@ -95,9 +95,12 @@ router.get('/stats', verifyToken, requireRole('faculty'), async (req, res) => {
         };
 
         await cacheService.set(cacheKey, result, 300); // 5 mins
-        res.json(result);
+        res.json({
+            success: true,
+            data: result
+        });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
@@ -106,7 +109,7 @@ router.get('/cohort', verifyToken, requireRole('faculty'), async (req, res) => {
     try {
         const cacheKey = `cohort:chart:${req.user.id}`;
         const cached = await cacheService.get(cacheKey);
-        if (cached) return res.json(cached);
+        if (cached) return res.json({ success: true, data: cached });
 
         const students = db.prepare(`
             SELECT u.id, u.name, u.email, 
@@ -127,9 +130,12 @@ router.get('/cohort', verifyToken, requireRole('faculty'), async (req, res) => {
 
         const result = { students, cohortChart: distribution };
         await cacheService.set(cacheKey, result, 300); // 5 mins
-        res.json(result);
+        res.json({
+            success: true,
+            data: result
+        });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
@@ -147,9 +153,12 @@ router.get('/at-risk', verifyToken, requireRole('faculty'), (req, res) => {
                 OR u.id NOT IN (SELECT user_id FROM sessions WHERE created_at >= datetime('now', '-7 days'))
             )
         `).all();
-        res.json(atRisk);
+        res.json({
+            success: true,
+            data: atRisk
+        });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
@@ -163,9 +172,12 @@ router.get('/students', verifyToken, requireRole('faculty'), (req, res) => {
             FROM users u 
             WHERE u.role = 'student'
         `).all();
-        res.json(students);
+        res.json({
+            success: true,
+            data: students
+        });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
@@ -173,15 +185,18 @@ router.get('/students', verifyToken, requireRole('faculty'), (req, res) => {
 router.get('/student/:id', verifyToken, requireRole('faculty'), (req, res) => {
     try {
         const student = db.prepare("SELECT id, name, email, created_at FROM users WHERE id = ? AND role = 'student'").get(req.params.id);
-        if (!student) return res.status(404).json({ error: 'Student not found' });
+        if (!student) return res.status(404).json({ success: false, error: 'Student not found' });
 
         const sessions = db.prepare('SELECT s.*, p.title as project_title FROM sessions s JOIN projects p ON s.project_id = p.id WHERE s.user_id = ? ORDER BY s.created_at DESC').all(req.params.id);
         const projects = db.prepare('SELECT * FROM projects WHERE user_id = ?').all(req.params.id);
         auditService.logAction(req.user.id, req.user.email, 'VIEW_STUDENT', 'student', req.params.id, req, {});
 
-        res.json({ student, sessions, projects });
+        res.json({
+            success: true,
+            data: { student, sessions, projects }
+        });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
@@ -194,9 +209,12 @@ router.get('/session-requests', verifyToken, requireRole('faculty'), (req, res) 
             JOIN users u ON sr.student_id = u.id 
             WHERE sr.faculty_id = ? AND sr.status = 'pending'
         `).all(req.user.id);
-        res.json(requests);
+        res.json({
+            success: true,
+            data: requests
+        });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
@@ -206,9 +224,13 @@ router.patch('/session-requests/:id', verifyToken, requireRole('faculty'), (req,
     const request_id = req.params.id;
     const faculty_id = req.user.id;
 
+    if (!['accept', 'reject'].includes(action)) {
+        return res.status(400).json({ success: false, error: 'Invalid action. Must be accept or reject.' });
+    }
+
     try {
         const request = db.prepare('SELECT * FROM session_requests WHERE id = ? AND faculty_id = ?').get(request_id, faculty_id);
-        if (!request) return res.status(404).json({ error: 'Request not found' });
+        if (!request) return res.status(404).json({ success: false, error: 'Request not found' });
 
         if (action === 'accept') {
             db.prepare("UPDATE session_requests SET status = 'approved' WHERE id = ?").run(request_id);
@@ -230,9 +252,12 @@ router.patch('/session-requests/:id', verifyToken, requireRole('faculty'), (req,
                 .run(request.student_id, reason || "No reason provided");
         }
 
-        res.json({ message: `Request ${action}ed successfully` });
+        res.json({
+            success: true,
+            data: { message: `Request ${action}ed successfully` }
+        });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
@@ -245,9 +270,9 @@ router.get('/question-bank', verifyToken, requireRole('faculty'), (req, res) => 
             WHERE faculty_id = ?
             ORDER BY created_at DESC
         `).all(req.user.id);
-        res.json(rows);
+        res.json({ success: true, data: rows });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
@@ -256,16 +281,16 @@ router.post('/question-bank', verifyToken, requireRole('faculty'), (req, res) =>
     const { question, category, difficulty } = req.body;
     const allowed = new Set(['easy', 'medium', 'hard']);
     try {
-        if (!question || !String(question).trim()) return res.status(400).json({ error: 'question is required' });
+        if (!question || !String(question).trim()) return res.status(400).json({ success: false, error: 'question is required' });
         const safeDifficulty = allowed.has(difficulty) ? difficulty : 'medium';
         const info = db.prepare(`
             INSERT INTO custom_questions (faculty_id, question, category, difficulty)
             VALUES (?, ?, ?, ?)
         `).run(req.user.id, String(question).trim(), category || null, safeDifficulty);
         const saved = db.prepare('SELECT * FROM custom_questions WHERE id = ?').get(info.lastInsertRowid);
-        res.json(saved);
+        res.json({ success: true, data: saved });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
@@ -274,10 +299,10 @@ router.delete('/question-bank/:id', verifyToken, requireRole('faculty'), (req, r
     try {
         const result = db.prepare('DELETE FROM custom_questions WHERE id = ? AND faculty_id = ?')
             .run(req.params.id, req.user.id);
-        if (result.changes === 0) return res.status(404).json({ error: 'Question not found' });
-        res.json({ success: true });
+        if (result.changes === 0) return res.status(404).json({ success: false, error: 'Question not found' });
+        res.json({ success: true, data: { message: 'Question deleted' } });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
@@ -289,10 +314,10 @@ router.patch('/question-bank/:id/use', verifyToken, requireRole('faculty'), (req
             SET times_used = times_used + 1
             WHERE id = ? AND faculty_id = ?
         `).run(req.params.id, req.user.id);
-        if (result.changes === 0) return res.status(404).json({ error: 'Question not found' });
-        res.json({ success: true });
+        if (result.changes === 0) return res.status(404).json({ success: false, error: 'Question not found' });
+        res.json({ success: true, data: { message: 'Usage updated' } });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
@@ -332,18 +357,21 @@ router.get('/analytics/heatmap', verifyToken, requireRole('faculty'), (req, res)
             return out;
         };
         res.json({
-            tier1: buildTier(1),
-            tier2: buildTier(2),
-            tier3: buildTier(3),
-            byDimension: {
-                clarity: byDim('ac'),
-                reasoning: byDim('ar'),
-                depth: byDim('ad'),
-                confidence: byDim('af')
+            success: true,
+            data: {
+                tier1: buildTier(1),
+                tier2: buildTier(2),
+                tier3: buildTier(3),
+                byDimension: {
+                    clarity: byDim('ac'),
+                    reasoning: byDim('ar'),
+                    depth: byDim('ad'),
+                    confidence: byDim('af')
+                }
             }
         });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
@@ -374,9 +402,12 @@ router.get('/analytics/dropoff', verifyToken, requireRole('faculty'), (req, res)
             }
         }
         const avgQuestionsCompleted = rows.length ? Math.round((sumQ / rows.length) * 10) / 10 : 0;
-        res.json({ abandonedAt, completionRate, avgQuestionsCompleted });
+        res.json({
+            success: true,
+            data: { abandonedAt, completionRate, avgQuestionsCompleted }
+        });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
@@ -432,15 +463,18 @@ router.get('/analytics/time', verifyToken, requireRole('faculty'), (req, res) =>
             durationHistogram.push({ label, count, lo, hi: hi || Infinity });
         }
         res.json({
-            avgTimePerQuestion: { tier1: avg(secByTier[1]), tier2: avg(secByTier[2]), tier3: avg(secByTier[3]) },
-            avgSessionDuration: durations.length ? Math.round((durations.reduce((a, b) => a + b, 0) / durations.length) * 10) / 10 : 0,
-            fastestCompletion: durations.length ? Math.min(...durations) : 0,
-            slowestCompletion: durations.length ? Math.max(...durations) : 0,
-            timeByDimension: dimAvg,
-            durationHistogram
+            success: true,
+            data: {
+                avgTimePerQuestion: { tier1: avg(secByTier[1]), tier2: avg(secByTier[2]), tier3: avg(secByTier[3]) },
+                avgSessionDuration: durations.length ? Math.round((durations.reduce((a, b) => a + b, 0) / durations.length) * 10) / 10 : 0,
+                fastestCompletion: durations.length ? Math.min(...durations) : 0,
+                slowestCompletion: durations.length ? Math.max(...durations) : 0,
+                timeByDimension: dimAvg,
+                durationHistogram
+            }
         });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
@@ -470,9 +504,12 @@ router.get('/analytics/department', verifyToken, requireRole('faculty'), (req, r
             };
         });
         const withStudents = departments.filter((x) => x.studentCount > 0);
-        res.json({ departments, crossDeptComparison: withStudents.length > 1 });
+        res.json({
+            success: true,
+            data: { departments, crossDeptComparison: withStudents.length > 1 }
+        });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
@@ -551,14 +588,17 @@ router.get('/analytics/yearly', verifyToken, requireRole('faculty'), (req, res) 
         };
 
         res.json({
-            currentYear: cur,
-            previousYear: previous,
-            improvement: improvementPct,
-            byDimension,
-            monthlyTrend: { current: monthly(yCur), previous: monthly(yPrev) }
+            success: true,
+            data: {
+                currentYear: cur,
+                previousYear: previous,
+                improvement: improvementPct,
+                byDimension,
+                monthlyTrend: { current: monthly(yCur), previous: monthly(yPrev) }
+            }
         });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
@@ -609,9 +649,12 @@ router.get('/analytics/weakdimensions', verifyToken, requireRole('faculty'), (re
             confidence: cohort && cohort.confidence != null ? toDisplayScore(cohort.confidence) : 0
         };
 
-        res.json({ ranking, cohortAverage });
+        res.json({
+            success: true,
+            data: { ranking, cohortAverage }
+        });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
@@ -655,191 +698,238 @@ router.get('/export-all', verifyToken, requireRole('faculty'), (req, res) => {
 
 // GET /api/faculty/compare/:studentAId/:studentBId
 router.get('/compare/:studentAId/:studentBId', verifyToken, requireRole('faculty'), (req, res) => {
-    const a = buildStudentProfile(req.params.studentAId);
-    const b = buildStudentProfile(req.params.studentBId);
-    if (!a || !b) return res.status(404).json({ error: 'Students not found' });
-    const winner = (dim) => {
-        const k = ['clarity', 'reasoning', 'depth', 'confidence'];
-        if (!k.includes(dim)) return 'tie';
-        const d = a.dimAvgs[dim] - b.dimAvgs[dim];
-        if (Math.abs(d) < 0.1) return 'tie';
-        return d > 0 ? 'A' : 'B';
-    };
-    const compOverall = a.avgScore > b.avgScore ? 'A' : (a.avgScore < b.avgScore ? 'B' : 'tie');
-    let closestDim = 'clarity';
-    let minDiff = 9999;
-    let biggestGap = { dimension: 'clarity', gap: 0 };
-    for (const d of ['clarity', 'reasoning', 'depth', 'confidence']) {
-        const g = Math.abs(a.dimAvgs[d] - b.dimAvgs[d]);
-        if (g < minDiff) {
-            minDiff = g;
-            closestDim = d;
+    try {
+        const a = buildStudentProfile(req.params.studentAId);
+        const b = buildStudentProfile(req.params.studentBId);
+        if (!a || !b) return res.status(404).json({ success: false, error: 'Students not found' });
+        const winner = (dim) => {
+            const k = ['clarity', 'reasoning', 'depth', 'confidence'];
+            if (!k.includes(dim)) return 'tie';
+            const d = a.dimAvgs[dim] - b.dimAvgs[dim];
+            if (Math.abs(d) < 0.1) return 'tie';
+            return d > 0 ? 'A' : 'B';
+        };
+        const compOverall = a.avgScore > b.avgScore ? 'A' : (a.avgScore < b.avgScore ? 'B' : 'tie');
+        let closestDim = 'clarity';
+        let minDiff = 9999;
+        let biggestGap = { dimension: 'clarity', gap: 0 };
+        for (const d of ['clarity', 'reasoning', 'depth', 'confidence']) {
+            const g = Math.abs(a.dimAvgs[d] - b.dimAvgs[d]);
+            if (g < minDiff) {
+                minDiff = g;
+                closestDim = d;
+            }
+            if (g > biggestGap.gap) biggestGap = { dimension: d, gap: Math.round(g * 10) / 10 };
         }
-        if (g > biggestGap.gap) biggestGap = { dimension: d, gap: Math.round(g * 10) / 10 };
+        res.json({
+            success: true,
+            data: {
+                studentA: { name: a.student.name, avgScore: a.avgScore, sessions: a.sessions, dimensions: a.dimAvgs },
+                studentB: { name: b.student.name, avgScore: b.avgScore, sessions: b.sessions, dimensions: b.dimAvgs },
+                comparison: {
+                    winner: {
+                        overall: compOverall,
+                        clarity: winner('clarity'),
+                        reasoning: winner('reasoning'),
+                        depth: winner('depth'),
+                        confidence: winner('confidence')
+                    },
+                    closestDimension: closestDim,
+                    biggestGap
+                }
+            }
+        });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
     }
-    res.json({
-        studentA: { name: a.student.name, avgScore: a.avgScore, sessions: a.sessions, dimensions: a.dimAvgs },
-        studentB: { name: b.student.name, avgScore: b.avgScore, sessions: b.sessions, dimensions: b.dimAvgs },
-        comparison: {
-            winner: {
-                overall: compOverall,
-                clarity: winner('clarity'),
-                reasoning: winner('reasoning'),
-                depth: winner('depth'),
-                confidence: winner('confidence')
-            },
-            closestDimension: closestDim,
-            biggestGap
-        }
-    });
 });
 
 // POST /api/faculty/flag-student
 router.post('/flag-student', verifyToken, requireRole('faculty'), (req, res) => {
     const { studentId, reason } = req.body;
-    if (!studentId) return res.status(400).json({ error: 'studentId required' });
-    const st = db.prepare("SELECT * FROM users WHERE id = ? AND role = 'student'").get(studentId);
-    if (!st) return res.status(404).json({ error: 'Student not found' });
-    const info = db.prepare(`
-        INSERT INTO flagged_students (student_id, faculty_id, reason) VALUES (?, ?, ?)
-    `).run(Number(studentId), req.user.id, String(reason || ''));
-    db.prepare("INSERT INTO notifications (user_id, type, title, message) VALUES (?, 'account', ?, ?)").run(
-        Number(studentId),
-        'Account notice',
-        'Your instructor has flagged your account for additional practice. Meet with your instructor if you have questions.'
-    );
-    res.json({ success: true, id: info.lastInsertRowid });
+    if (!studentId) return res.status(400).json({ success: false, error: 'studentId required' });
+    try {
+        const st = db.prepare("SELECT * FROM users WHERE id = ? AND role = 'student'").get(studentId);
+        if (!st) return res.status(404).json({ success: false, error: 'Student not found' });
+        const info = db.prepare(`
+            INSERT INTO flagged_students (student_id, faculty_id, reason) VALUES (?, ?, ?)
+        `).run(Number(studentId), req.user.id, String(reason || ''));
+        db.prepare("INSERT INTO notifications (user_id, type, title, message) VALUES (?, 'account', ?, ?)").run(
+            Number(studentId),
+            'Account notice',
+            'Your instructor has flagged your account for additional practice. Meet with your instructor if you have questions.'
+        );
+        res.json({ success: true, data: { id: info.lastInsertRowid } });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
 });
 
 // PATCH /api/faculty/flag-student/:id/resolve
 router.patch('/flag-student/:id/resolve', verifyToken, requireRole('faculty'), (req, res) => {
-    const row = db.prepare('SELECT * FROM flagged_students WHERE id = ? AND faculty_id = ?').get(req.params.id, req.user.id);
-    if (!row) return res.status(404).json({ error: 'Not found' });
-    db.prepare('UPDATE flagged_students SET resolved = 1 WHERE id = ?').run(req.params.id);
-    db.prepare("INSERT INTO notifications (user_id, type, title, message) VALUES (?, 'account', 'Flag cleared', 'Your instructor has resolved the practice flag. Keep up the good work!')")
-        .run(row.student_id);
-    res.json({ success: true });
+    try {
+        const row = db.prepare('SELECT * FROM flagged_students WHERE id = ? AND faculty_id = ?').get(req.params.id, req.user.id);
+        if (!row) return res.status(404).json({ success: false, error: 'Not found' });
+        db.prepare('UPDATE flagged_students SET resolved = 1 WHERE id = ?').run(req.params.id);
+        db.prepare("INSERT INTO notifications (user_id, type, title, message) VALUES (?, 'account', 'Flag cleared', 'Your instructor has resolved the practice flag. Keep up the good work!')")
+            .run(row.student_id);
+        res.json({ success: true, data: null });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
 });
 
 // GET /api/faculty/flagged
 router.get('/flagged', verifyToken, requireRole('faculty'), (req, res) => {
-    const rows = db.prepare(`
-        SELECT f.*, u.name AS student_name, u.email AS student_email
-        FROM flagged_students f
-        JOIN users u ON u.id = f.student_id
-        WHERE f.faculty_id = ? AND f.resolved = 0
-        ORDER BY f.created_at DESC
-    `).all(req.user.id);
-    res.json(rows);
+    try {
+        const rows = db.prepare(`
+            SELECT f.*, u.name AS student_name, u.email AS student_email
+            FROM flagged_students f
+            JOIN users u ON u.id = f.student_id
+            WHERE f.faculty_id = ? AND f.resolved = 0
+            ORDER BY f.created_at DESC
+        `).all(req.user.id);
+        res.json({ success: true, data: rows });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
 });
 
 // POST /api/faculty/announcements
 router.post('/announcements', verifyToken, requireRole('faculty'), async (req, res) => {
     const { title, message, targetRole = 'student' } = req.body;
-    if (!title || !message) return res.status(400).json({ error: 'title and message required' });
-    const tr = (targetRole === 'faculty' || targetRole === 'admin') ? targetRole : 'student';
-    const info = db.prepare('INSERT INTO announcements (faculty_id, title, message, target_role) VALUES (?, ?, ?, ?)')
-        .run(req.user.id, String(title), String(message), tr);
-    const users = db.prepare('SELECT id FROM users WHERE role = ?').all(tr);
-    for (const u of users) {
-        db.prepare("INSERT INTO notifications (user_id, type, title, message) VALUES (?, 'announcement', ?, ?)")
-            .run(u.id, String(title), String(message).slice(0, 2000));
-    }
+    if (!title || !message) return res.status(400).json({ success: false, error: 'title and message required' });
     try {
-        await pushService.sendToRole(tr, String(title), String(message).slice(0, 200), '/notifications.html');
-    } catch (e) { /* optional */ }
-    res.json({ success: true, id: info.lastInsertRowid });
+        const tr = (targetRole === 'faculty' || targetRole === 'admin') ? targetRole : 'student';
+        const info = db.prepare('INSERT INTO announcements (faculty_id, title, message, target_role) VALUES (?, ?, ?, ?)')
+            .run(req.user.id, String(title), String(message), tr);
+        const users = db.prepare('SELECT id FROM users WHERE role = ?').all(tr);
+        for (const u of users) {
+            db.prepare("INSERT INTO notifications (user_id, type, title, message) VALUES (?, 'announcement', ?, ?)")
+                .run(u.id, String(title), String(message).slice(0, 2000));
+        }
+        try {
+            await pushService.sendToRole(tr, String(title), String(message).slice(0, 200), '/notifications.html');
+        } catch (e) { /* optional */ }
+        res.json({ success: true, data: { id: info.lastInsertRowid } });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
 });
 
 // GET /api/faculty/announcements
 router.get('/announcements', verifyToken, requireRole('faculty'), (req, res) => {
-    const rows = db.prepare('SELECT * FROM announcements ORDER BY created_at DESC').all();
-    res.json(rows);
+    try {
+        const rows = db.prepare('SELECT * FROM announcements ORDER BY created_at DESC').all();
+        res.json({ success: true, data: rows });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
 });
 
 router.patch('/announcements/:id', verifyToken, requireRole('faculty'), (req, res) => {
     const { title, message } = req.body;
-    const a = db.prepare('SELECT * FROM announcements WHERE id = ? AND faculty_id = ?').get(req.params.id, req.user.id);
-    if (!a) return res.status(404).json({ error: 'Not found' });
-    db.prepare('UPDATE announcements SET title = COALESCE(?, title), message = COALESCE(?, message) WHERE id = ?')
-        .run(title != null ? String(title) : null, message != null ? String(message) : null, req.params.id);
-    res.json({ success: true });
+    try {
+        const a = db.prepare('SELECT * FROM announcements WHERE id = ? AND faculty_id = ?').get(req.params.id, req.user.id);
+        if (!a) return res.status(404).json({ success: false, error: 'Not found' });
+        db.prepare('UPDATE announcements SET title = COALESCE(?, title), message = COALESCE(?, message) WHERE id = ?')
+            .run(title != null ? String(title) : null, message != null ? String(message) : null, req.params.id);
+        res.json({ success: true, data: null });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
 });
 
 router.delete('/announcements/:id', verifyToken, requireRole('faculty'), (req, res) => {
-    const r = db.prepare('DELETE FROM announcements WHERE id = ? AND faculty_id = ?').run(req.params.id, req.user.id);
-    if (r.changes === 0) return res.status(404).json({ error: 'Not found' });
-    res.json({ success: true });
+    try {
+        const r = db.prepare('DELETE FROM announcements WHERE id = ? AND faculty_id = ?').run(req.params.id, req.user.id);
+        if (r.changes === 0) return res.status(404).json({ success: false, error: 'Not found' });
+        res.json({ success: true, data: null });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
 });
 
 // POST /api/faculty/schedule-defense
 router.post('/schedule-defense', verifyToken, requireRole('faculty'), async (req, res) => {
     const { studentId, date, location, panelMembers, notes } = req.body;
-    if (!studentId || !date) return res.status(400).json({ error: 'studentId and date required' });
-    const st = db.prepare("SELECT * FROM users WHERE id = ? AND role = 'student'").get(studentId);
-    if (!st) return res.status(404).json({ error: 'Student not found' });
-    const panel = typeof panelMembers === 'string' ? panelMembers : (Array.isArray(panelMembers) ? panelMembers.join(', ') : String(panelMembers || ''));
-    const info = db.prepare(`
-        INSERT INTO defense_schedule (student_id, faculty_id, scheduled_date, location, panel_members, notes, status)
-        VALUES (?, ?, ?, ?, ?, ?, 'scheduled')
-    `).run(Number(studentId), req.user.id, String(date), String(location || ''), panel, String(notes || ''));
-    db.prepare('UPDATE users SET defense_date = ? WHERE id = ?').run(String(date), Number(studentId));
-    const msg = `Defense: ${String(date)}. Location: ${String(location || 'TBA')}. Panel: ${panel || 'TBA'}`;
-    db.prepare("INSERT INTO notifications (user_id, type, title, message) VALUES (?, 'defense', 'Defense scheduled', ?)")
-        .run(Number(studentId), msg.slice(0, 2000));
+    if (!studentId || !date) return res.status(400).json({ success: false, error: 'studentId and date required' });
     try {
-        await emailService.sendDefenseScheduledEmail(st.email, st.name, { date, location, panel, notes });
-    } catch (e) { /* */ }
-    res.json({ success: true, id: info.lastInsertRowid });
+        const st = db.prepare("SELECT * FROM users WHERE id = ? AND role = 'student'").get(studentId);
+        if (!st) return res.status(404).json({ success: false, error: 'Student not found' });
+        const panel = typeof panelMembers === 'string' ? panelMembers : (Array.isArray(panelMembers) ? panelMembers.join(', ') : String(panelMembers || ''));
+        const info = db.prepare(`
+            INSERT INTO defense_schedule (student_id, faculty_id, scheduled_date, location, panel_members, notes, status)
+            VALUES (?, ?, ?, ?, ?, ?, 'scheduled')
+        `).run(Number(studentId), req.user.id, String(date), String(location || ''), panel, String(notes || ''));
+        db.prepare('UPDATE users SET defense_date = ? WHERE id = ?').run(String(date), Number(studentId));
+        const msg = `Defense: ${String(date)}. Location: ${String(location || 'TBA')}. Panel: ${panel || 'TBA'}`;
+        db.prepare("INSERT INTO notifications (user_id, type, title, message) VALUES (?, 'defense', 'Defense scheduled', ?)")
+            .run(Number(studentId), msg.slice(0, 2000));
+        try {
+            await emailService.sendDefenseScheduledEmail(st.email, st.name, { date, location, panel, notes });
+        } catch (e) { /* */ }
+        res.json({ success: true, data: { id: info.lastInsertRowid } });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
 });
 
 // GET /api/faculty/defense-schedule?upcoming=true | ?all=true
 router.get('/defense-schedule', verifyToken, requireRole('faculty'), (req, res) => {
-    const upcoming = req.query.upcoming === 'true';
-    const all = req.query.all === 'true' || !upcoming;
-    let q = `
-        SELECT d.*, u.name AS student_name, u.email AS student_email
-        FROM defense_schedule d
-        JOIN users u ON u.id = d.student_id
-        WHERE d.faculty_id = ?
-    `;
-    const p = [req.user.id];
-    if (upcoming && !all) {
-        q += " AND d.scheduled_date >= datetime('now', '-1 day') ";
+    try {
+        const upcoming = req.query.upcoming === 'true';
+        const all = req.query.all === 'true' || !upcoming;
+        let q = `
+            SELECT d.*, u.name AS student_name, u.email AS student_email
+            FROM defense_schedule d
+            JOIN users u ON u.id = d.student_id
+            WHERE d.faculty_id = ?
+        `;
+        const p = [req.user.id];
+        if (upcoming && !all) {
+            q += " AND d.scheduled_date >= datetime('now', '-1 day') ";
+        }
+        q += ' ORDER BY d.scheduled_date ASC';
+        res.json({ success: true, data: db.prepare(q).all(...p) });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
     }
-    q += ' ORDER BY d.scheduled_date ASC';
-    res.json(db.prepare(q).all(...p));
 });
 
 router.patch('/defense-schedule/:id', verifyToken, requireRole('faculty'), (req, res) => {
-    const d = db.prepare('SELECT * FROM defense_schedule WHERE id = ? AND faculty_id = ?').get(req.params.id, req.user.id);
-    if (!d) return res.status(404).json({ error: 'Not found' });
-    const { date, location, status, panelMembers, notes } = req.body;
-    db.prepare(`
-        UPDATE defense_schedule SET
-        scheduled_date = COALESCE(?, scheduled_date),
-        location = COALESCE(?, location),
-        status = COALESCE(?, status),
-        panel_members = COALESCE(?, panel_members),
-        notes = COALESCE(?, notes)
-        WHERE id = ?
-    `).run(
-        date != null ? String(date) : null,
-        location != null ? String(location) : null,
-        status != null ? String(status) : null,
-        panelMembers != null ? String(panelMembers) : null,
-        notes != null ? String(notes) : null,
-        req.params.id
-    );
-    if (date) {
-        db.prepare('UPDATE users SET defense_date = ? WHERE id = ?').run(String(date), d.student_id);
+    try {
+        const d = db.prepare('SELECT * FROM defense_schedule WHERE id = ? AND faculty_id = ?').get(req.params.id, req.user.id);
+        if (!d) return res.status(404).json({ success: false, error: 'Not found' });
+        const { date, location, status, panelMembers, notes } = req.body;
+        db.prepare(`
+            UPDATE defense_schedule SET
+            scheduled_date = COALESCE(?, scheduled_date),
+            location = COALESCE(?, location),
+            status = COALESCE(?, status),
+            panel_members = COALESCE(?, panel_members),
+            notes = COALESCE(?, notes)
+            WHERE id = ?
+        `).run(
+            date != null ? String(date) : null,
+            location != null ? String(location) : null,
+            status != null ? String(status) : null,
+            panelMembers != null ? String(panelMembers) : null,
+            notes != null ? String(notes) : null,
+            req.params.id
+        );
+        if (date) {
+            db.prepare('UPDATE users SET defense_date = ? WHERE id = ?').run(String(date), d.student_id);
+        }
+        const u = db.prepare('SELECT * FROM users WHERE id = ?').get(d.student_id);
+        if (u) {
+            db.prepare("INSERT INTO notifications (user_id, type, title, message) VALUES (?, 'defense', 'Defense updated', 'Your defense schedule was updated. Check the app for new details.')")
+                .run(d.student_id);
+        }
+        res.json({ success: true, data: null });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
     }
-    const u = db.prepare('SELECT * FROM users WHERE id = ?').get(d.student_id);
-    if (u) {
-        db.prepare("INSERT INTO notifications (user_id, type, title, message) VALUES (?, 'defense', 'Defense updated', 'Your defense schedule was updated. Check the app for new details.')")
-            .run(d.student_id);
-    }
-    res.json({ success: true });
 });
 
 async function askClaudePaper(system, user) {

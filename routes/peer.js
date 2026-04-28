@@ -81,7 +81,7 @@ router.post('/create', verifyToken, requireRole('student'), async (req, res) => 
     try {
         const userId = req.user.id;
         const project = db.prepare('SELECT * FROM projects WHERE user_id = ? ORDER BY created_at DESC LIMIT 1').get(userId);
-        if (!project) return res.status(400).json({ error: 'Create a project first' });
+        if (!project) return res.status(400).json({ success: false, error: 'Create a project first' });
 
         let room;
         for (let i = 0; i < 8; i++) {
@@ -89,7 +89,7 @@ router.post('/create', verifyToken, requireRole('student'), async (req, res) => 
             const ex = db.prepare('SELECT 1 FROM peer_sessions WHERE room_code = ?').get(code);
             if (!ex) { room = code; break; }
         }
-        if (!room) return res.status(500).json({ error: 'Could not allocate room' });
+        if (!room) return res.status(500).json({ success: false, error: 'Could not allocate room' });
 
         const questions = await generatePeerQuestions(project);
         const info = db.prepare(`
@@ -99,14 +99,17 @@ router.post('/create', verifyToken, requireRole('student'), async (req, res) => 
 
         const base = (process.env.APP_URL || (req.get('x-forwarded-proto') ? `${req.get('x-forwarded-proto')}://${req.get('host')}` : `http://${req.get('host') || 'localhost:3000'}`));
         res.status(201).json({
-            roomCode: room,
-            inviteUrl: `${base}/peer.html?room=${room}`,
-            sessionId: info.lastInsertRowid,
-            questions
+            success: true,
+            data: {
+                roomCode: room,
+                inviteUrl: `${base}/peer.html?room=${room}`,
+                sessionId: info.lastInsertRowid,
+                questions
+            }
         });
     } catch (err) {
         console.error('peer create', err);
-        res.status(500).json({ error: 'Failed to create peer room' });
+        res.status(500).json({ success: false, error: 'Failed to create peer room' });
     }
 });
 
@@ -115,15 +118,15 @@ router.post('/join/:roomCode', verifyToken, requireRole('student'), (req, res) =
     try {
         const { roomCode } = req.params;
         const ps = db.prepare('SELECT * FROM peer_sessions WHERE room_code = ?').get(roomCode);
-        if (!ps) return res.status(404).json({ error: 'Room not found' });
+        if (!ps) return res.status(404).json({ success: false, error: 'Room not found' });
         const uid = req.user.id;
 
         if (ps.student_a_id === uid) {
-            return res.status(400).json({ error: "Cannot join your own room" });
+            return res.status(400).json({ success: false, error: "Cannot join your own room" });
         }
 
         if (ps.student_b_id && ps.student_b_id !== uid) {
-            return res.status(400).json({ error: 'Room is full' });
+            return res.status(400).json({ success: false, error: 'Room is full' });
         }
         if (!ps.student_b_id) {
             db.prepare("UPDATE peer_sessions SET student_b_id = ?, status = 'active' WHERE id = ?").run(uid, ps.id);
@@ -139,9 +142,9 @@ router.post('/join/:roomCode', verifyToken, requireRole('student'), (req, res) =
                 payload: { roomCode, joinedBy: uid, name: (un && un.name) || 'Student' }
             });
         }
-        res.json(serializeSession(updated, uid));
+        res.json({ success: true, data: serializeSession(updated, uid) });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
@@ -149,9 +152,9 @@ router.post('/join/:roomCode', verifyToken, requireRole('student'), (req, res) =
 router.post('/:roomCode/ready', verifyToken, requireRole('student'), (req, res) => {
     try {
         const ps = db.prepare('SELECT * FROM peer_sessions WHERE room_code = ?').get(req.params.roomCode);
-        if (!ps) return res.status(404).json({ error: 'Not found' });
+        if (!ps) return res.status(404).json({ success: false, error: 'Not found' });
         const uid = req.user.id;
-        if (ps.student_a_id !== uid && ps.student_b_id !== uid) return res.status(403).json({ error: 'Not in room' });
+        if (ps.student_a_id !== uid && ps.student_b_id !== uid) return res.status(403).json({ success: false, error: 'Not in room' });
         if (ps.student_a_id === uid) {
             db.prepare('UPDATE peer_sessions SET ready_a = 1 WHERE id = ?').run(ps.id);
         } else {
@@ -166,68 +169,77 @@ router.post('/:roomCode/ready', verifyToken, requireRole('student'), (req, res) 
         if (u.ready_a && u.ready_b && u.status !== 'in_progress') {
             db.prepare("UPDATE peer_sessions SET status = 'in_progress' WHERE id = ?").run(ps.id);
         }
-        res.json(serializeSession(db.prepare('SELECT * FROM peer_sessions WHERE id = ?').get(ps.id), uid));
+        res.json({ success: true, data: serializeSession(db.prepare('SELECT * FROM peer_sessions WHERE id = ?').get(ps.id), uid) });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
 // POST /api/peer/:roomCode/answer — submit answer for current question; scores when both
 router.post('/:roomCode/answer', verifyToken, requireRole('student'), async (req, res) => {
-    const { roomCode } = req.params;
-    const { questionIndex, answer } = req.body;
-    const idx = Math.max(0, parseInt(questionIndex, 10) || 0);
-    const ps = db.prepare('SELECT * FROM peer_sessions WHERE room_code = ?').get(roomCode);
-    if (!ps) return res.status(404).json({ error: 'Not found' });
-    const uid = req.user.id;
-    if (ps.student_a_id !== uid && ps.student_b_id !== uid) return res.status(403).json({ error: 'Not in room' });
-    if (!ps.student_b_id) return res.status(400).json({ error: 'Waiting for partner' });
-
-    const qlist = (() => {
-        try {
-            return ps.questions_json ? JSON.parse(ps.questions_json) : [];
-        } catch (e) {
-            return [];
+    try {
+        const { roomCode } = req.params;
+        const { questionIndex, answer } = req.body;
+        
+        if (questionIndex === undefined || !answer) {
+            return res.status(400).json({ success: false, error: 'questionIndex and answer are required' });
         }
-    })();
-    if (!qlist[idx]) return res.status(400).json({ error: 'Invalid question' });
 
-    const data = loadAnswers(ps);
-    const key = String(idx);
-    if (!data[key]) data[key] = { a: null, b: null, scoreA: null, scoreB: null, scored: false };
-    const isA = ps.student_a_id === uid;
-    if (isA) data[key].a = String(answer || '');
-    else data[key].b = String(answer || '');
+        const idx = Math.max(0, parseInt(questionIndex, 10) || 0);
+        const ps = db.prepare('SELECT * FROM peer_sessions WHERE room_code = ?').get(roomCode);
+        if (!ps) return res.status(404).json({ success: false, error: 'Not found' });
+        const uid = req.user.id;
+        if (ps.student_a_id !== uid && ps.student_b_id !== uid) return res.status(403).json({ success: false, error: 'Not in room' });
+        if (!ps.student_b_id) return res.status(400).json({ success: false, error: 'Waiting for partner' });
 
-    db.prepare('UPDATE peer_sessions SET answers_json = ?, current_question_index = ? WHERE id = ?')
-        .run(JSON.stringify(data), idx, ps.id);
+        const qlist = (() => {
+            try {
+                return ps.questions_json ? JSON.parse(ps.questions_json) : [];
+            } catch (e) {
+                return [];
+            }
+        })();
+        if (!qlist[idx]) return res.status(400).json({ success: false, error: 'Invalid question' });
 
-    const wsApp = req.app.locals.wsApp;
-    if (wsApp) {
-        wsApp.broadcastRoom(roomCode, 'peer-answer-submitted', { roomCode, questionIndex: idx, from: uid, side: isA ? 'A' : 'B' });
-    }
+        const data = loadAnswers(ps);
+        const key = String(idx);
+        if (!data[key]) data[key] = { a: null, b: null, scoreA: null, scoreB: null, scored: false };
+        const isA = ps.student_a_id === uid;
+        if (isA) data[key].a = String(answer || '');
+        else data[key].b = String(answer || '');
 
-    const slot = data[key];
-    const both = slot.a && slot.b && String(slot.a).length && String(slot.b).length;
-    if (both && !slot.scored) {
-        const qText = qlist[idx].question;
-        try {
-            const [sA, sB] = await Promise.all([scoreAnswer(qText, slot.a), scoreAnswer(qText, slot.b)]);
-            slot.scoreA = sA;
-            slot.scoreB = sB;
-            slot.scored = true;
-        } catch (e) {
-            return res.status(500).json({ error: 'Scoring failed' });
-        }
-        db.prepare('UPDATE peer_sessions SET answers_json = ? WHERE id = ?').run(JSON.stringify(data), ps.id);
+        db.prepare('UPDATE peer_sessions SET answers_json = ?, current_question_index = ? WHERE id = ?')
+            .run(JSON.stringify(data), idx, ps.id);
+
+        const wsApp = req.app.locals.wsApp;
         if (wsApp) {
-            wsApp.broadcastRoom(roomCode, 'peer-both-submitted', { roomCode, questionIndex: idx, scores: { A: slot.scoreA, B: slot.scoreB } });
-            wsApp.broadcastRoom(roomCode, 'peer-scores', { roomCode, questionIndex: idx, scoreA: slot.scoreA, scoreB: slot.scoreB });
+            wsApp.broadcastRoom(roomCode, 'peer-answer-submitted', { roomCode, questionIndex: idx, from: uid, side: isA ? 'A' : 'B' });
         }
-    }
 
-    const fresh = db.prepare('SELECT * FROM peer_sessions WHERE id = ?').get(ps.id);
-    res.json(serializeSession(fresh, uid, data));
+        const slot = data[key];
+        const both = slot.a && slot.b && String(slot.a).length && String(slot.b).length;
+        if (both && !slot.scored) {
+            const qText = qlist[idx].question;
+            try {
+                const [sA, sB] = await Promise.all([scoreAnswer(qText, slot.a), scoreAnswer(qText, slot.b)]);
+                slot.scoreA = sA;
+                slot.scoreB = sB;
+                slot.scored = true;
+            } catch (e) {
+                return res.status(500).json({ success: false, error: 'Scoring failed' });
+            }
+            db.prepare('UPDATE peer_sessions SET answers_json = ? WHERE id = ?').run(JSON.stringify(data), ps.id);
+            if (wsApp) {
+                wsApp.broadcastRoom(roomCode, 'peer-both-submitted', { roomCode, questionIndex: idx, scores: { A: slot.scoreA, B: slot.scoreB } });
+                wsApp.broadcastRoom(roomCode, 'peer-scores', { roomCode, questionIndex: idx, scoreA: slot.scoreA, scoreB: slot.scoreB });
+            }
+        }
+
+        const fresh = db.prepare('SELECT * FROM peer_sessions WHERE id = ?').get(ps.id);
+        res.json({ success: true, data: serializeSession(fresh, uid, data) });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
 });
 
 function namesFor(sid) {
@@ -265,52 +277,63 @@ function serializeSession(ps, viewerId, preParsed) {
 
 // POST /api/peer/:roomCode/comment
 router.post('/:roomCode/comment', verifyToken, requireRole('student'), (req, res) => {
-    const { roomCode } = req.params;
-    const { questionIndex, comment } = req.body;
-    const idx = Math.max(0, parseInt(questionIndex, 10) || 0);
-    const ps = db.prepare('SELECT * FROM peer_sessions WHERE room_code = ?').get(roomCode);
-    if (!ps) return res.status(404).json({ error: 'Not found' });
-    const uid = req.user.id;
-    if (ps.student_a_id !== uid && ps.student_b_id !== uid) return res.status(403).json({ error: 'Not in room' });
-    const data = loadAnswers(ps);
-    const key = String(idx);
-    if (!data[key]) return res.status(400).json({ error: 'No question' });
-    const field = ps.student_a_id === uid ? 'commentA' : 'commentB';
-    data[key][field] = String(comment || '');
-    db.prepare('UPDATE peer_sessions SET answers_json = ? WHERE id = ?').run(JSON.stringify(data), ps.id);
-    res.json({ success: true });
+    try {
+        const { roomCode } = req.params;
+        const { questionIndex, comment } = req.body;
+        if (questionIndex === undefined || comment === undefined) {
+            return res.status(400).json({ success: false, error: 'questionIndex and comment are required' });
+        }
+        const idx = Math.max(0, parseInt(questionIndex, 10) || 0);
+        const ps = db.prepare('SELECT * FROM peer_sessions WHERE room_code = ?').get(roomCode);
+        if (!ps) return res.status(404).json({ success: false, error: 'Not found' });
+        const uid = req.user.id;
+        if (ps.student_a_id !== uid && ps.student_b_id !== uid) return res.status(403).json({ success: false, error: 'Not in room' });
+        const data = loadAnswers(ps);
+        const key = String(idx);
+        if (!data[key]) return res.status(400).json({ success: false, error: 'No question' });
+        const field = ps.student_a_id === uid ? 'commentA' : 'commentB';
+        data[key][field] = String(comment || '');
+        db.prepare('UPDATE peer_sessions SET answers_json = ? WHERE id = ?').run(JSON.stringify(data), ps.id);
+        res.json({ success: true, data: null });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
 });
 
 // advance question (optional)
 router.post('/:roomCode/next', verifyToken, requireRole('student'), (req, res) => {
-    const { roomCode } = req.params;
-    const { questionIndex } = req.body;
-    const ps = db.prepare('SELECT * FROM peer_sessions WHERE room_code = ?').get(roomCode);
-    if (!ps) return res.status(404).json({ error: 'Not found' });
-    const uid = req.user.id;
-    if (ps.student_a_id !== uid && ps.student_b_id !== uid) return res.status(403).json({ error: 'Not in room' });
-    const next = questionIndex != null ? parseInt(questionIndex, 10) : ps.current_question_index + 1;
-    db.prepare('UPDATE peer_sessions SET current_question_index = ? WHERE id = ?').run(next, ps.id);
-    const ws = req.app.locals.wsApp;
-    if (ws) ws.broadcastRoom(roomCode, 'peer-question', { roomCode, questionIndex: next });
-    const f = db.prepare('SELECT * FROM peer_sessions WHERE id = ?').get(ps.id);
-    res.json(serializeSession(f, uid));
+    try {
+        const { roomCode } = req.params;
+        const { questionIndex } = req.body;
+        const ps = db.prepare('SELECT * FROM peer_sessions WHERE room_code = ?').get(roomCode);
+        if (!ps) return res.status(404).json({ success: false, error: 'Not found' });
+        const uid = req.user.id;
+        if (ps.student_a_id !== uid && ps.student_b_id !== uid) return res.status(403).json({ success: false, error: 'Not in room' });
+        const next = questionIndex != null ? parseInt(questionIndex, 10) : ps.current_question_index + 1;
+        db.prepare('UPDATE peer_sessions SET current_question_index = ? WHERE id = ?').run(next, ps.id);
+        const ws = req.app.locals.wsApp;
+        if (ws) ws.broadcastRoom(roomCode, 'peer-question', { roomCode, questionIndex: next });
+        const f = db.prepare('SELECT * FROM peer_sessions WHERE id = ?').get(ps.id);
+        res.json({ success: true, data: serializeSession(f, uid) });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
 });
 
 // GET /api/peer/:roomCode (keep last: generic :roomCode)
 router.get('/:roomCode', verifyToken, (req, res) => {
     try {
         const ps = db.prepare('SELECT * FROM peer_sessions WHERE room_code = ?').get(req.params.roomCode);
-        if (!ps) return res.status(404).json({ error: 'Not found' });
+        if (!ps) return res.status(404).json({ success: false, error: 'Not found' });
         const uid = req.user.id;
         const isParticipant = ps.student_a_id === uid || ps.student_b_id === uid;
         if (!isParticipant && req.user.role === 'student') {
-            return res.status(403).json({ error: 'Not a participant' });
+            return res.status(403).json({ success: false, error: 'Not a participant' });
         }
         const viewAs = (req.user.role === 'faculty' || req.user.role === 'admin') ? ps.student_a_id : uid;
-        res.json(serializeSession(ps, viewAs));
+        res.json({ success: true, data: serializeSession(ps, viewAs) });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 

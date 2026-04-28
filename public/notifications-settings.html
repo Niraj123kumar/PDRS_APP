@@ -28,10 +28,22 @@
 </head>
 <body class="animate-up">
     <nav class="navbar">
-        <h1 style="color: var(--primary-color); cursor: pointer;" onclick="window.location.href='/'">PDRS</h1>
-        <div style="display: flex; align-items: center; gap: 1rem;">
-            <button onclick="toggleTheme()" class="theme-toggle">🌙</button>
-            <button class="btn btn-secondary" style="width:auto;" onclick="window.location.href='/notifications.html'">Back</button>
+        <div class="container" style="display:flex; justify-content:space-between; align-items:center;">
+            <div style="display: flex; align-items: center; gap: 2rem;">
+                <h1 style="color: var(--primary-color); margin:0; display:flex; align-items:center; gap:0.5rem; cursor:pointer; font-weight: 800;" onclick="window.location.href='/'">
+                    <span style="font-size:1.5rem;">🛡️</span> PDRS
+                </h1>
+                <div style="display: flex; gap: 1.5rem;">
+                    <a href="/student.html" id="nav-dashboard" class="nav-link">Dashboard</a>
+                    <a href="/history.html" class="nav-link">History</a>
+                    <a href="/notifications.html" class="nav-link">Notifications</a>
+                </div>
+            </div>
+            <div style="display:flex; align-items:center; gap:1.25rem;">
+                <button onclick="toggleTheme()" class="theme-toggle" id="theme-btn" title="Toggle Theme">🌙</button>
+                <div id="user-avatar" class="avatar-initials" style="width: 35px; height: 35px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 0.9rem; background: var(--primary-color);"></div>
+                <button onclick="auth.logout()" class="btn btn-secondary" style="width: auto; padding: 0.5rem 1rem;">Logout</button>
+            </div>
         </div>
     </nav>
     <div class="container" style="max-width:760px;">
@@ -48,16 +60,20 @@
 
             <div class="card">
                 <h3>SMS Notifications</h3>
-                <div class="form-group">
-                    <label>Phone Number (International format)</label>
-                    <input id="phone-input" placeholder="+1234567890" style="margin-bottom: 0.5rem;">
-                    <button id="verify-phone-btn" class="btn" style="width:auto;">Verify Phone</button>
+                <div id="sms-setup">
+                    <div class="form-group">
+                        <label for="phone-input">Phone Number (International format)</label>
+                        <input id="phone-input" placeholder="+1234567890" style="margin-bottom: 0.5rem;" required>
+                        <button id="verify-phone-btn" class="btn" style="width:auto;">Verify Phone</button>
+                    </div>
                 </div>
-                <div style="margin-top:1.5rem; padding-top: 1rem; border-top: 1px solid var(--border-color);">
-                    <label>Enter Verification Code</label>
-                    <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
-                        <input id="phone-code-input" placeholder="6-digit code" style="flex: 1;">
-                        <button id="submit-phone-code-btn" class="btn btn-secondary" style="width:auto;">Submit Code</button>
+                <div id="sms-verification" style="margin-top:1.5rem; padding-top: 1rem; border-top: 1px solid var(--border-color);">
+                    <div class="form-group">
+                        <label for="phone-code-input">Enter Verification Code</label>
+                        <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
+                            <input id="phone-code-input" placeholder="6-digit code" style="flex: 1;" required>
+                            <button id="submit-phone-code-btn" class="btn btn-secondary" style="width:auto;">Submit Code</button>
+                        </div>
                     </div>
                 </div>
                 <label style="display:flex; align-items: center; gap: 0.5rem; margin-top:1rem; cursor: pointer;">
@@ -87,12 +103,34 @@
         </div>
     </div>
 
-    <button onclick="toggleTheme()" class="theme-toggle-fixed" id="theme-btn">🌙</button>
-
     <script src="/js/auth.js"></script>
+    <script src="/js/utils.js"></script>
     <script src="/js/toast.js"></script>
     <script>
         auth.requireAuth();
+        const user = auth.getUser();
+
+        // Initialize Initials Avatar
+        document.addEventListener('DOMContentLoaded', () => {
+            if (user && user.name) {
+                const avatar = document.getElementById('user-avatar');
+                if (avatar) {
+                    const initials = user.name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2);
+                    avatar.textContent = initials;
+                    avatar.style.background = `hsl(${user.name.length * 137.5 % 360}, 70%, 50%)`;
+                }
+            }
+            // Initialize Validation
+            ui.initFormValidation('sms-setup');
+            ui.initFormValidation('sms-verification');
+            
+            loadPrefs();
+        });
+
+        if (user.role === 'faculty' || user.role === 'admin') {
+            document.getElementById('nav-dashboard').href = '/faculty.html';
+        }
+
         async function loadPrefs() {
             const loading = document.getElementById('loading-prefs');
             const content = document.getElementById('settings-content');
@@ -102,7 +140,7 @@
             ui.showSkeleton('loading-prefs', 3, 'card');
 
             try {
-                const res = await fetch('/api/notifications/preferences', { headers: { Authorization: `Bearer ${auth.getToken()}` } });
+                const res = await fetch('/api/notifications/preferences', { headers: auth.getHeaders() });
                 const p = await res.json();
                 document.getElementById('phone-input').value = p.phone_number || '';
                 document.getElementById('sms-toggle').checked = !!p.sms_notifications;
@@ -140,7 +178,7 @@
                 if (permission !== 'granted') throw new Error('Notification permission denied');
                 
                 const reg = await navigator.serviceWorker.register('/sw.js');
-                const vapidRes = await fetch('/api/notifications/vapid-key');
+                const vapidRes = await fetch('/api/notifications/vapid-key', { headers: auth.getHeaders() });
                 const vapid = await vapidRes.json();
                 
                 const sub = await reg.pushManager.subscribe({
@@ -151,7 +189,7 @@
                 const json = sub.toJSON();
                 await fetch('/api/notifications/subscribe-push', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${auth.getToken()}` },
+                    headers: auth.getHeaders('application/json'),
                     body: JSON.stringify({
                         endpoint: json.endpoint,
                         p256dh: json.keys.p256dh,
@@ -177,7 +215,7 @@
                     if (sub) {
                         await fetch('/api/notifications/unsubscribe-push', {
                             method: 'DELETE',
-                            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${auth.getToken()}` },
+                            headers: auth.getHeaders('application/json'),
                             body: JSON.stringify({ endpoint: sub.endpoint })
                         });
                         await sub.unsubscribe();
@@ -203,7 +241,7 @@
             try {
                 const res = await fetch('/api/notifications/update-phone', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${auth.getToken()}` },
+                    headers: auth.getHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({ phoneNumber })
                 });
                 const data = await res.json();
@@ -224,7 +262,7 @@
             try {
                 const res = await fetch('/api/notifications/verify-phone', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${auth.getToken()}` },
+                    headers: auth.getHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({ code })
                 });
                 const data = await res.json();
@@ -250,7 +288,7 @@
                 };
                 const res = await fetch('/api/notifications/preferences', {
                     method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${auth.getToken()}` },
+                    headers: auth.getHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify(payload)
                 });
                 const data = await res.json();
@@ -262,13 +300,6 @@
                 ui.setLoading(this, false);
             }
         };
-        loadPrefs();
-
-        function toggleTheme() {
-            const isDark = document.documentElement.classList.toggle('dark-mode');
-            localStorage.setItem('pdrs_theme', isDark ? 'dark' : 'light');
-        }
-
         // Character Counters
         ui.initCharCounter('phone-input', 20);
         ui.initCharCounter('phone-code-input', 6);

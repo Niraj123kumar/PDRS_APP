@@ -28,17 +28,27 @@
     </script>
 </head>
 <body class="animate-up">
-    <button onclick="toggleTheme()" class="theme-toggle-fixed" id="theme-btn">🌙</button>
     <nav class="navbar">
-        <div style="display: flex; align-items: center; gap: 1rem;">
-            <a href="#" onclick="handleBack(event)" style="font-weight: 800; color: var(--primary-color); display: flex; align-items: center; gap: 0.5rem; text-decoration: none;">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-                Back
-            </a>
-            <span id="me-name" style="font-weight: 600; color: var(--text-color);"></span>
+        <div style="display: flex; align-items: center; gap: 2rem;">
+            <h1 style="color: var(--primary-color); font-weight: 800; cursor: pointer;" onclick="window.location.href='/'">PDRS</h1>
+            <div style="display: flex; gap: 1.5rem;">
+                <a href="/student.html" class="nav-link">Dashboard</a>
+                <a href="/peer.html" class="nav-link active">Peer Practice</a>
+            </div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 1.5rem;">
+            <button onclick="toggleTheme()" class="theme-toggle" id="theme-btn" title="Toggle Theme">🌙</button>
+            <div id="user-avatar" class="avatar-initials" style="width: 35px; height: 35px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 0.9rem; background: var(--primary-color);"></div>
+            <button onclick="auth.logout()" class="btn btn-secondary" style="width: auto; padding: 0.5rem 1rem;">Logout</button>
         </div>
     </nav>
     <div class="container">
+        <div style="margin-bottom: 2rem;">
+            <a href="#" onclick="handleBack(event)" style="color: var(--text-muted); text-decoration: none; display: flex; align-items: center; gap: 0.5rem; font-weight: 600;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+                Back to Dashboard
+            </a>
+        </div>
         <div id="lobby" class="room-setup">
             <h1 style="font-weight: 800; margin-bottom: 0.5rem;">Peer Practice</h1>
             <p class="text-muted" style="margin-bottom: 2rem;">Practice with a classmate. Create a room and share the link, or join with a code.</p>
@@ -48,9 +58,12 @@
                 <span style="color: var(--text-muted); font-size: 0.8rem; font-weight: 700;">OR JOIN ROOM</span>
                 <hr style="flex: 1; border: 0; border-top: 1px solid var(--border-color);">
             </div>
-            <div style="display: flex; gap: 0.75rem;">
-                <input type="text" id="join-code" placeholder="ROOM CODE" maxlength="6" style="text-transform:uppercase; font-weight: 700; text-align: center; letter-spacing: 2px;" />
-                <button type="button" class="btn" id="btn-join" style="width:auto; padding: 0 1.5rem;">Join</button>
+            <div class="form-group">
+                <label for="join-code">Enter Room Code</label>
+                <div style="display: flex; gap: 0.75rem;">
+                    <input type="text" id="join-code" placeholder="ROOM CODE" maxlength="6" required style="text-transform:uppercase; font-weight: 700; text-align: center; letter-spacing: 2px;" />
+                    <button type="button" class="btn" id="btn-join" style="width:auto; padding: 0 1.5rem;">Join</button>
+                </div>
             </div>
         </div>
 
@@ -84,7 +97,13 @@
                             <strong id="label-a" style="font-size: 1.1rem;">You</strong>
                             <span class="badge" style="background: var(--primary-glow); color: var(--primary-color);">OWN ANSWER</span>
                         </div>
-                        <textarea class="ans" id="ans-me" placeholder="Type your answer here..."></textarea>
+                        <div class="form-group">
+                            <label for="ans-me">Your Answer</label>
+                            <div style="position: relative;">
+                                <textarea class="ans" id="ans-me" placeholder="Type your answer here..." required></textarea>
+                                <div id="ans-me-counter" class="char-counter">0/1000</div>
+                            </div>
+                        </div>
                     </div>
                     <div class="compare-side">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
@@ -107,7 +126,10 @@
                 <div class="peer-grid" id="scores-compare"></div>
                 <div class="card" style="margin-top:2rem; padding: 1.5rem;">
                     <label style="font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 0.75rem; text-transform: uppercase; font-size: 0.8rem;">Leave feedback for your partner</label>
-                    <textarea id="comment-me" class="ans" style="min-height: 80px;" placeholder="What did they do well? What could be improved?"></textarea>
+                    <div style="position: relative; margin-bottom: 1.5rem;">
+                        <textarea id="comment-me" class="ans" style="min-height: 80px;" placeholder="What did they do well? What could be improved?"></textarea>
+                        <div id="comment-me-counter" class="char-counter">0/500</div>
+                    </div>
                     <div style="display: flex; gap: 1rem; margin-top: 1.5rem;">
                         <button type="button" class="btn" id="btn-comment" style="width:auto; padding: 0 2rem;">Send Feedback</button>
                         <button type="button" class="btn btn-secondary" id="btn-next" style="width:auto; padding: 0 2rem;">Next Question</button>
@@ -117,16 +139,25 @@
         </div>
     </div>
     <script src="/js/auth.js"></script>
+    <script src="/js/utils.js"></script>
     <script src="/js/toast.js"></script>
     <script>
         auth.requireAuth();
         auth.requireRole('student');
         const u = auth.getUser();
-        document.getElementById('me-name').textContent = u.name || u.email;
+        
+        // User Avatar Initials
+        if (u) {
+            const avatar = document.getElementById('user-avatar');
+            if (avatar) {
+                const initials = (u.name || u.email).split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+                avatar.textContent = initials;
+                avatar.style.background = `hsl(${(u.name || u.email).length * 137.5 % 360}, 70%, 50%)`;
+            }
+        }
+
         const params = new URLSearchParams(window.location.search);
         let room = (params.get('room') || '').trim().toUpperCase();
-        const token = () => auth.getToken();
-        const headers = { 'Authorization': `Bearer ${token()}`, 'Content-Type': 'application/json' };
         let sessionData = null;
         let myIsA = true;
         let currentIdx = 0;
@@ -136,10 +167,14 @@
         ui.initCharCounter('ans-me', 'ans-me-counter', 1000);
         ui.initCharCounter('comment-me', 'comment-me-counter', 500);
 
+        // Initialize Validation
+        ui.initFormValidation('lobby');
+        ui.initFormValidation('session');
+
         function connectWs() {
             if (!room) return;
             const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-            ws = new WebSocket(`${protocol}//${location.host}?token=${encodeURIComponent(token())}`);
+            ws = new WebSocket(`${protocol}//${location.host}?token=${encodeURIComponent(auth.getToken())}`);
             ws.onopen = () => {
                 ws.send(JSON.stringify({ type: 'room-join', roomCode: room, payload: { name: u.name || 'Student' } }));
             };
@@ -180,7 +215,7 @@
             }
 
             try {
-                const r = await fetch('/api/peer/' + encodeURIComponent(room), { headers: { 'Authorization': `Bearer ${token()}` } });
+                const r = await fetch('/api/peer/' + encodeURIComponent(room), { headers: auth.getHeaders() });
                 if (!r.ok) {
                     const error = await r.json();
                     throw new Error(error.error || 'Failed to load session');
@@ -319,7 +354,7 @@
         document.getElementById('btn-create').onclick = async function() {
             ui.setLoading(this, true);
             try {
-                const r = await fetch('/api/peer/create', { method: 'POST', headers: headers });
+                const r = await fetch('/api/peer/create', { method: 'POST', headers: auth.getHeaders() });
                 const d = await r.json();
                 if (!r.ok) throw new Error(d.error || 'Failed to create room');
                 room = d.roomCode;
@@ -339,7 +374,7 @@
             if (c.length < 4) { showToast('Enter valid room code', 'error'); return; }
             ui.setLoading(this, true);
             try {
-                const r = await fetch('/api/peer/join/' + c, { method: 'POST', headers: headers });
+                const r = await fetch('/api/peer/join/' + c, { method: 'POST', headers: auth.getHeaders() });
                 const d = await r.json();
                 if (!r.ok) throw new Error(d.error || 'Failed to join room');
                 room = c;
@@ -357,7 +392,7 @@
         document.getElementById('btn-ready').onclick = async function() {
             ui.setLoading(this, true);
             try {
-                const r = await fetch('/api/peer/' + encodeURIComponent(room) + '/ready', { method: 'POST', headers: headers });
+                const r = await fetch('/api/peer/' + encodeURIComponent(room) + '/ready', { method: 'POST', headers: auth.getHeaders() });
                 const d = await r.json();
                 if (!r.ok) throw new Error(d.error || 'Failed');
                 sessionData = d;
@@ -376,7 +411,7 @@
             try {
                 const r = await fetch('/api/peer/' + encodeURIComponent(room) + '/answer', {
                     method: 'POST',
-                    headers: headers,
+                    headers: auth.getHeaders('application/json'),
                     body: JSON.stringify({ questionIndex: currentIdx, answer: t })
                 });
                 const d = await r.json();
@@ -398,7 +433,7 @@
             try {
                 const r = await fetch('/api/peer/' + encodeURIComponent(room) + '/comment', {
                     method: 'POST',
-                    headers: headers,
+                    headers: auth.getHeaders('application/json'),
                     body: JSON.stringify({ questionIndex: currentIdx, comment: c })
                 });
                 if (!r.ok) throw new Error('Failed to save comment');
@@ -416,7 +451,7 @@
             try {
                 const r = await fetch('/api/peer/' + encodeURIComponent(room) + '/next', {
                     method: 'POST',
-                    headers: headers,
+                    headers: auth.getHeaders('application/json'),
                     body: JSON.stringify({})
                 });
                 const d = await r.json();

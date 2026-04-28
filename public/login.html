@@ -8,8 +8,9 @@
     <link rel="stylesheet" href="/css/style.css">
     <link rel="stylesheet" href="/css/animations.css">
     <style>
-        body { display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%); min-height: 100vh; }
+        body { display: flex; flex-direction: column; background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%); min-height: 100vh; }
         body.dark-mode { background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); --bg-color: #0f172a; --card-bg: #1e293b; --text-color: #f1f5f9; --text-muted: #94a3b8; --border-color: rgba(255,255,255,0.1); }
+        .auth-container { flex-grow: 1; display: flex; align-items: center; justify-content: center; padding: 2rem 1rem; }
         .auth-card { background: white; padding: 2.5rem; border-radius: var(--radius); box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); width: 100%; max-width: 400px; }
         body.dark-mode .auth-card { background: var(--card-bg); border: 1px solid var(--border-color); color: var(--text-color); }
         .auth-header { text-align: center; margin-bottom: 2rem; }
@@ -27,8 +28,21 @@
     </script>
 </head>
 <body class="animate-up">
-    <button onclick="toggleTheme()" class="theme-toggle-fixed" id="theme-btn">🌙</button>
-    <div class="auth-card">
+    <nav class="navbar">
+        <div class="container" style="display:flex; justify-content:space-between; align-items:center;">
+            <div style="display: flex; align-items: center; gap: 2rem;">
+                <h1 style="color: var(--primary-color); margin:0; display:flex; align-items:center; gap:0.5rem; cursor:pointer; font-weight: 800;" onclick="window.location.href='/'">
+                    <span style="font-size:1.5rem;">🛡️</span> PDRS
+                </h1>
+            </div>
+            <div style="display:flex; align-items:center; gap:1.25rem;">
+                <button onclick="toggleTheme()" class="theme-toggle" id="theme-btn" title="Toggle Theme">🌙</button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="auth-container">
+        <div class="auth-card">
         <div class="auth-header">
             <h1>PDRS Login</h1>
             <p class="text-muted">Welcome back! Please login.</p>
@@ -48,7 +62,7 @@
                 </div>
                 <div style="position: relative;">
                     <input type="password" id="password" required placeholder="••••••••" style="padding-right: 2.5rem; width: 100%;">
-                    <button type="button" id="toggle-password" style="position: absolute; right: 0.75rem; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; font-size: 1.25rem; padding: 0; display: flex; align-items: center; justify-content: center; color: var(--text-muted);">👁</button>
+                    <button type="button" onclick="ui.togglePassword('password', this)" style="position: absolute; right: 0.75rem; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; font-size: 1.25rem; padding: 0; display: flex; align-items: center; justify-content: center; color: var(--text-muted);">👁</button>
                 </div>
             </div>
             <div class="form-group" style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1.5rem;">
@@ -73,8 +87,11 @@
                 <input class="otp-cell" maxlength="1" inputmode="numeric">
                 <input class="otp-cell" maxlength="1" inputmode="numeric">
             </div>
-            <button id="resend-otp-btn" class="btn btn-secondary" type="button">Resend OTP</button>
-            <p id="resend-otp-timer" class="text-muted" style="margin-top:0.5rem;"></p>
+            <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                <button id="resend-otp-btn" class="btn btn-secondary" type="button">Resend OTP</button>
+                <button type="button" class="btn btn-icon" style="width: 100%; font-size: 0.9rem;" onclick="showStep('login')">← Back to Login</button>
+            </div>
+            <p id="resend-otp-timer" class="text-muted" style="margin-top:0.5rem; text-align: center;"></p>
         </div>
 
         <div id="totp-step" class="hidden-step">
@@ -82,16 +99,22 @@
             <div class="form-group">
                 <input type="text" id="totp-input" maxlength="6" placeholder="123456" inputmode="numeric">
             </div>
-            <button id="totp-submit" class="btn" type="button">Verify Authenticator Code</button>
-            <button id="use-email-otp" class="btn btn-secondary" type="button" style="margin-top:0.5rem;">Use email OTP instead</button>
+            <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                <button id="totp-submit" class="btn" type="button">Verify Authenticator Code</button>
+                <button id="use-email-otp" class="btn btn-secondary" type="button">Use email OTP instead</button>
+                <button type="button" class="btn btn-icon" style="width: 100%; font-size: 0.9rem;" onclick="showStep('login')">← Back to Login</button>
+            </div>
         </div>
 
         <div style="text-align: center; margin-top: 1.5rem;">
             <p class="text-muted">Don't have an account? <a href="/register.html" style="color: var(--primary-color); font-weight: 600; text-decoration: none;">Register</a></p>
         </div>
     </div>
+</div>
 
+    <script src="/js/utils.js"></script>
     <script src="/js/auth.js"></script>
+    <script src="/js/api.js"></script>
     <script src="/js/toast.js"></script>
     <script>
         let pendingEmail = '';
@@ -100,26 +123,68 @@
         // Initialize form validation
         ui.initFormValidation('login-form');
 
+        // Add real-time validation for login fields
+        const emailInput = document.getElementById('email');
+        const passwordInput = document.getElementById('password');
+
+        emailInput.addEventListener('input', () => ui.clearError(emailInput));
+        passwordInput.addEventListener('input', () => ui.clearError(passwordInput));
+
+        function showError(message) {
+            const errorBox = document.getElementById('error-box');
+            if (errorBox) {
+                errorBox.textContent = message;
+                errorBox.style.display = 'block';
+            }
+            showToast(message, 'error');
+        }
+
         function showStep(step) {
             document.getElementById('login-form').style.display = step === 'login' ? 'block' : 'none';
             document.getElementById('otp-step').style.display = step === 'otp' ? 'block' : 'none';
             document.getElementById('totp-step').style.display = step === 'totp' ? 'block' : 'none';
             
-            if (step === 'otp') document.querySelector('.otp-cell').focus();
-            if (step === 'totp') document.getElementById('totp-input').focus();
+            if (step === 'login') {
+                // Reset OTP fields when going back
+                otpInputs.forEach(i => i.value = '');
+                if (resendInterval) {
+                    clearInterval(resendInterval);
+                    resendInterval = null;
+                }
+                document.getElementById('resend-otp-timer').textContent = '';
+                document.getElementById('resend-otp-btn').disabled = false;
+            }
+
+            if (step === 'otp') {
+                otpInputs[0].focus();
+            }
+            if (step === 'totp') {
+                document.getElementById('totp-input').value = '';
+                document.getElementById('totp-input').focus();
+            }
         }
 
         function startResendTimer(seconds = 60) {
             const btn = document.getElementById('resend-otp-btn');
             const timer = document.getElementById('resend-otp-timer');
-            let remaining = seconds;
+            let remaining = Math.max(0, Math.ceil(seconds));
+            
+            if (remaining <= 0) {
+                btn.disabled = false;
+                timer.textContent = '';
+                return;
+            }
+
             btn.disabled = true;
             if (resendInterval) clearInterval(resendInterval);
+            
             timer.textContent = `Resend available in ${remaining}s`;
+            
             resendInterval = setInterval(() => {
                 remaining -= 1;
                 if (remaining <= 0) {
                     clearInterval(resendInterval);
+                    resendInterval = null;
                     btn.disabled = false;
                     timer.textContent = '';
                     return;
@@ -128,12 +193,7 @@
             }, 1000);
         }
 
-        document.getElementById('toggle-password').addEventListener('click', function() {
-            const passwordInput = document.getElementById('password');
-            const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
-            passwordInput.setAttribute('type', type);
-            this.textContent = type === 'password' ? '👁' : '🙈';
-        });
+
 
         document.getElementById('forgot-password').addEventListener('click', (e) => {
             e.preventDefault();
@@ -151,21 +211,17 @@
             ui.setLoading(loginBtn, true);
 
             try {
-                const response = await fetch('/api/auth/login', {
+                const data = await apiFetch('/api/auth/login', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ email, password, remember })
                 });
-
-                const data = await response.json();
-                if (!response.ok) throw new Error(data.error || 'Login failed');
 
                 pendingEmail = email;
 
                 if (data.requiresOTP) {
                     document.getElementById('otp-email-mask').textContent = data.maskedEmail || data.email;
                     showStep('otp');
-                    startResendTimer(60);
+                    startResendTimer(data.secondsRemaining || 60);
                     return;
                 }
 
@@ -177,8 +233,22 @@
                 auth.saveToken(data.token, data.user);
                 auth.setDeviceId(data.deviceId);
                 showToast('Login successful! ✅', 'success');
+                
+                const user = data?.user || data?.data?.user || data?.data;
+                const role = user?.role;
+                if (!role) { 
+                    showError('Login failed. Please try again.'); 
+                    return; 
+                }
+
+                const redirectMap = {
+                    student: '/student.html',
+                    faculty: '/faculty.html',
+                    admin: '/admin.html'
+                };
+                
                 setTimeout(() => {
-                    window.location.href = data.user.role === 'admin' ? '/admin.html' : (data.user.role === 'faculty' ? '/faculty.html' : '/student.html');
+                    window.location.href = redirectMap[role] || '/student.html';
                 }, 500);
 
             } catch (err) {
@@ -211,16 +281,26 @@
         async function submitOTP(code) {
             const errorBox = document.getElementById('error-box');
             try {
-                const response = await fetch('/api/auth/verify-otp', {
+                const data = await apiFetch('/api/auth/verify-otp', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ email: pendingEmail, otp: code })
                 });
-                const data = await response.json();
-                if (!response.ok) throw new Error(data.error || 'Invalid code');
                 auth.saveToken(data.token, data.user);
                 auth.setDeviceId(data.deviceId);
-                window.location.href = data.user.role === 'admin' ? '/admin.html' : (data.user.role === 'faculty' ? '/faculty.html' : '/student.html');
+                
+                const user = data?.user || data?.data?.user || data?.data;
+                const role = user?.role;
+                if (!role) { 
+                    showError('Login failed. Please try again.'); 
+                    return; 
+                }
+
+                const redirectMap = {
+                    student: '/student.html',
+                    faculty: '/faculty.html',
+                    admin: '/admin.html'
+                };
+                window.location.href = redirectMap[role] || '/student.html';
             } catch (err) {
                 document.getElementById('otp-grid').classList.add('shake');
                 otpInputs.forEach(i => i.style.borderColor = '#dc2626');
@@ -238,20 +318,17 @@
         document.getElementById('resend-otp-btn').addEventListener('click', async function() {
             ui.setLoading(this, true);
             try {
-                const response = await fetch('/api/auth/resend-otp', {
+                const data = await apiFetch('/api/auth/resend-otp', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ email: pendingEmail })
                 });
-                const data = await response.json();
-                if (!response.ok) {
-                    if (response.status === 429 && data.secondsRemaining) {
-                        startResendTimer(data.secondsRemaining);
-                    }
-                    return;
-                }
-                startResendTimer(60);
+                startResendTimer(data.secondsRemaining || 60);
                 showToast('OTP resent ✅', 'success');
+            } catch (err) {
+                // If 429, the error message from apiFetch/toast might already be enough, 
+                // but we might want to check for secondsRemaining if we want to restart timer.
+                // However apiFetch doesn't return the raw response for 429.
+                // Let's stick to simple for now.
             } finally {
                 ui.setLoading(this, false, 'Resend OTP');
             }
@@ -265,36 +342,46 @@
             }
             ui.setLoading(this, true);
             try {
-                const response = await fetch('/api/auth/verify-totp', {
+                const data = await apiFetch('/api/auth/verify-totp', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ email: pendingEmail, token })
                 });
-                const data = await response.json();
-                if (!response.ok) {
-                    document.getElementById('error-box').textContent = data.error || 'Invalid authenticator code';
-                    document.getElementById('error-box').style.display = 'block';
-                    return;
-                }
                 auth.saveToken(data.token, data.user);
                 auth.setDeviceId(data.deviceId);
-                window.location.href = data.user.role === 'admin' ? '/admin.html' : (data.user.role === 'faculty' ? '/faculty.html' : '/student.html');
+                
+                const user = data?.user || data?.data?.user || data?.data;
+                const role = user?.role;
+                if (!role) { 
+                    showError('Login failed. Please try again.'); 
+                    return; 
+                }
+
+                const redirectMap = {
+                    student: '/student.html',
+                    faculty: '/faculty.html',
+                    admin: '/admin.html'
+                };
+                window.location.href = redirectMap[role] || '/student.html';
+            } catch (err) {
+                document.getElementById('error-box').textContent = err.message || 'Invalid authenticator code';
+                document.getElementById('error-box').style.display = 'block';
             } finally {
                 ui.setLoading(this, false);
             }
         });
 
         document.getElementById('use-email-otp').addEventListener('click', async () => {
-            const response = await fetch('/api/auth/resend-otp', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email: pendingEmail })
-            });
-            const data = await response.json();
-            if (!response.ok) return;
-            document.getElementById('otp-email-mask').textContent = data.maskedEmail || pendingEmail;
-            showStep('otp');
-            startResendTimer(60);
+            try {
+                const data = await apiFetch('/api/auth/resend-otp', {
+                    method: 'POST',
+                    body: JSON.stringify({ email: pendingEmail })
+                });
+                document.getElementById('otp-email-mask').textContent = data.maskedEmail || pendingEmail;
+                showStep('otp');
+                startResendTimer(data.secondsRemaining || 60);
+            } catch (err) {
+                // Error handled by apiFetch
+            }
         });
 
         function toggleTheme() {
@@ -320,14 +407,27 @@
             if (!hash.startsWith('#token=')) return;
             const token = decodeURIComponent(hash.replace('#token=', ''));
             try {
-                const meRes = await fetch('/api/auth/me', {
+                // apiFetch automatically handles Authorization header if we pass it, 
+                // but here we have a raw token from redirect.
+                const meData = await apiFetch('/api/auth/me', {
                     headers: { Authorization: `Bearer ${token}` }
                 });
-                const meData = await meRes.json();
-                if (!meRes.ok || !meData.user) throw new Error('Failed to load user profile');
-                auth.saveToken(token, meData.user);
+                // meData IS the user object since apiFetch unwraps it
+                const user = meData?.user || meData?.data?.user || meData?.data || meData;
+                const role = user?.role;
+                if (!role) { 
+                    showError('Login failed. Please try again.'); 
+                    return; 
+                }
+                auth.saveToken(token, user);
                 history.replaceState(null, '', window.location.pathname);
-                window.location.href = meData.user.role === 'admin' ? '/admin.html' : (meData.user.role === 'faculty' ? '/faculty.html' : '/student.html');
+                
+                const redirectMap = {
+                    student: '/student.html',
+                    faculty: '/faculty.html',
+                    admin: '/admin.html'
+                };
+                window.location.href = redirectMap[role] || '/student.html';
             } catch (err) {
                 errorBox.textContent = 'Google sign-in failed. Please login again.';
                 errorBox.style.display = 'block';

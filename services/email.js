@@ -1,17 +1,46 @@
 const nodemailer = require('nodemailer');
+const { logInfo, logError, logWarn } = require('./logger');
 
-const SMTP_USER = process.env.SMTP_USER || process.env.GMAIL_USER;
-const SMTP_PASS = process.env.SMTP_PASS || process.env.GMAIL_APP_PASSWORD;
-const FROM_EMAIL = process.env.FROM_EMAIL || SMTP_USER || 'no-reply@pdrs.local';
+const EMAIL_HOST = process.env.EMAIL_HOST || 'smtp.gmail.com';
+const EMAIL_PORT = parseInt(process.env.EMAIL_PORT || '587');
+const EMAIL_SECURE = process.env.EMAIL_SECURE === 'true';
+const EMAIL_USER = process.env.EMAIL_USER || process.env.SMTP_USER || process.env.GMAIL_USER;
+const EMAIL_PASS = process.env.EMAIL_PASS || process.env.SMTP_PASS || process.env.GMAIL_APP_PASSWORD;
+const FROM_EMAIL = process.env.FROM_EMAIL || EMAIL_USER || 'no-reply@pdrs.local';
 const APP_URL = process.env.APP_URL || 'http://localhost:3000';
 
 const transporter = nodemailer.createTransport({
-    service: 'gmail',
+    host: EMAIL_HOST,
+    port: EMAIL_PORT,
+    secure: EMAIL_SECURE,
     auth: {
-        user: SMTP_USER,
-        pass: SMTP_PASS
+        user: EMAIL_USER,
+        pass: EMAIL_PASS
     }
 });
+
+// Verify connection configuration on startup
+if (EMAIL_USER && EMAIL_PASS) {
+    transporter.verify((error, success) => {
+        if (error) {
+            logError('SMTP Verification Failed', { 
+                error: error.message, 
+                user: EMAIL_USER,
+                host: EMAIL_HOST,
+                port: EMAIL_PORT
+            });
+            console.error('❌ SMTP Connection Error:', error.message);
+        } else {
+            logInfo('SMTP Server is ready to take messages');
+            console.log('✅ SMTP connection OK');
+        }
+    });
+} else {
+    const msg = 'SMTP credentials missing. Email service will be disabled.';
+    logWarn(msg);
+    console.warn('⚠️', msg);
+    console.info('To enable OTP emails, configure EMAIL_USER and EMAIL_PASS (App Password) in .env');
+}
 
 function emailShell(title, body) {
     return `
@@ -26,13 +55,22 @@ function emailShell(title, body) {
 }
 
 async function sendEmail(mailOptions) {
-    if (!SMTP_USER || !SMTP_PASS) {
-        return;
+    if (!EMAIL_USER || !EMAIL_PASS) {
+        logWarn('Email send skipped: Missing SMTP credentials', { to: mailOptions.to });
+        return { success: false, error: 'SMTP credentials missing' };
     }
-    await transporter.sendMail({
-        from: FROM_EMAIL,
-        ...mailOptions
-    });
+    try {
+        const info = await transporter.sendMail({
+            from: FROM_EMAIL,
+            ...mailOptions
+        });
+        logInfo('Email sent successfully', { messageId: info.messageId, to: mailOptions.to });
+        return { success: true, messageId: info.messageId };
+    } catch (err) {
+        logError('Failed to send email', { error: err.message, to: mailOptions.to, subject: mailOptions.subject });
+        // Instead of throwing, we return success: false so the app can continue
+        return { success: false, error: err.message };
+    }
 }
 
 async function sendOTP(email, otp) {

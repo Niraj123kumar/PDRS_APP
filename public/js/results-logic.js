@@ -36,7 +36,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (exportBtn) {
         exportBtn.onclick = async () => {
             const res = await fetch(`/api/sessions/${sessionId}/export-pdf`, {
-                headers: { Authorization: `Bearer ${auth.getToken()}` }
+                headers: auth.getHeaders()
             });
             if (!res.ok) return showToast('Failed to export PDF', 'error');
             const blob = await res.blob();
@@ -49,17 +49,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     try {
-        const token = auth.getToken();
-        
         // Fetch session details
         const sessionRes = await fetch(`/api/sessions/${sessionId}`, {
-            headers: { 'Authorization': `Bearer ${token}` }
+            headers: auth.getHeaders()
         });
         const session = await sessionRes.json();
         fullSession = session;
 
         const replayRes = await fetch(`/api/sessions/${sessionId}/replay`, {
-            headers: { Authorization: `Bearer ${token}` }
+            headers: auth.getHeaders()
         });
         if (replayRes.ok) {
             const rj = await replayRes.json();
@@ -68,7 +66,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // Fetch all sessions to compare
         const allSessionsRes = await fetch('/api/sessions', {
-            headers: { 'Authorization': `Bearer ${token}` }
+            headers: auth.getHeaders()
         });
         const allSessions = await allSessionsRes.json();
         const prevSession = allSessions.find(s => s.id != sessionId && s.status === 'completed');
@@ -155,10 +153,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         try {
             const res = await fetch('/api/ai/generate-coaching', {
                 method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${auth.getToken()}`
-                },
+                headers: auth.getHeaders({ 'Content-Type': 'application/json' }),
                 body: JSON.stringify({ weakDimensions })
             });
             const data = await res.json();
@@ -179,7 +174,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (!container) return;
         try {
             const res = await fetch(`/api/panel/session/${sessionId}/details`, {
-                headers: { 'Authorization': `Bearer ${auth.getToken()}` }
+                headers: auth.getHeaders()
             });
             if (!res.ok) {
                 container.textContent = 'No panel session data available.';
@@ -386,7 +381,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             try {
                 const res = await fetch(`/api/sessions/${sessionId}/summarize`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${auth.getToken()}` }
+                    headers: auth.getHeaders({ 'Content-Type': 'application/json' })
                 });
                 if (!res.ok) throw new Error('fail');
                 const data = await res.json();

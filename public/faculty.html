@@ -83,12 +83,13 @@
         <div style="display: flex; align-items: center; gap: 2rem;">
             <h1 style="color: var(--primary-color); font-weight: 800; cursor: pointer;" onclick="window.location.href='/'">PDRS Faculty</h1>
             <div style="display: flex; gap: 1.5rem;">
-                <a href="/faculty.html" style="text-decoration: none; color: var(--text-color); font-weight: 600;">Dashboard</a>
-                <a href="/integrations.html" style="text-decoration: none; color: var(--text-muted);">Integrations</a>
+                <a href="/faculty.html" class="nav-link active">Dashboard</a>
+                <a href="/integrations.html" class="nav-link">Integrations</a>
             </div>
         </div>
         <div style="display: flex; align-items: center; gap: 1.5rem;">
             <button onclick="toggleTheme()" class="theme-toggle">🌙</button>
+            <div id="user-avatar" class="initials-avatar" style="background: var(--primary-color);"></div>
             <span id="faculty-name" style="font-weight: 600;"></span>
             <button onclick="auth.logout()" class="btn btn-secondary" style="width: auto; padding: 0.5rem 1rem;">Logout</button>
         </div>
@@ -366,6 +367,7 @@
     </div>
 
     <script src="/js/auth.js"></script>
+    <script src="/js/api.js"></script>
     <script src="/js/charts.js"></script>
     <script src="/js/toast.js"></script>
     <script>
@@ -374,6 +376,14 @@
 
         const user = auth.getUser();
         document.getElementById('faculty-name').textContent = user.name;
+
+        // Initials Avatar
+        const avatar = document.getElementById('user-avatar');
+        if (avatar) {
+            const initials = user.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+            avatar.textContent = initials;
+            avatar.style.background = `hsl(${user.name.length * 137.5 % 360}, 70%, 50%)`;
+        }
 
         let cohortChart, historyChart;
         const axCharts = { dropoff: null, timeTier: null, timeHist: null, dept: null, yoy: null };
@@ -403,7 +413,6 @@
         let calCursor = new Date();
         let defenseRows = [];
         let qbCache = [];
-        const tok = () => auth.getToken();
 
         // Character counter helper
         function initCharCounter(textareaId, maxChars) {
@@ -418,8 +427,8 @@
                 const len = textarea.value.length;
                 counter.textContent = `${len} / ${maxChars} characters`;
                 counter.className = 'char-counter';
-                if (len >= maxChars * 0.95) counter.classList.add('char-red');
-                else if (len >= maxChars * 0.8) counter.classList.add('char-amber');
+                if (len >= maxChars * 0.95) counter.classList.add('danger');
+                else if (len >= maxChars * 0.8) counter.classList.add('warning');
             };
 
             textarea.addEventListener('input', update);
@@ -445,7 +454,7 @@
             const list = document.getElementById('qb-list');
             ui.showSkeleton('qb-list', 3, 'card');
             try {
-                const res = await fetch('/api/faculty/question-bank', { headers: { 'Authorization': `Bearer ${tok()}` } });
+                const res = await fetch('/api/faculty/question-bank', { headers: auth.getHeaders() });
                 qbCache = await res.json();
                 renderQB();
             } catch (e) { 
@@ -486,10 +495,58 @@
         window.useQB = async function(id, btn) {
             ui.setLoading(btn, true);
             try {
-                const res = await fetch(`/api/faculty/question-bank/${id}/use`, { method: 'PATCH', headers: { 'Authorization': `Bearer ${tok()}` } });
+                const res = await fetch(`/api/faculty/question-bank/${id}/use`, { method: 'PATCH', headers: auth.getHeaders() });
                 if (res.ok) {
                     showToast('Question marked as used ✅', 'success');
-                    loadQuestionBank();
+                    // Initialize UI details
+        window.addEventListener('load', () => {
+            initCharCounter('ann-body', 500);
+            initCharCounter('def-notes', 200);
+            initSearchClear('student-search-container');
+            initSearchClear('qb-search-container');
+        });
+
+        // Dropdown active indicator
+        document.querySelectorAll('select').forEach(select => {
+            const check = () => {
+                const isDefault = select.selectedIndex === 0 || select.value === 'all' || select.value === '';
+                select.classList.toggle('active', !isDefault);
+            };
+            select.addEventListener('change', check);
+            check();
+        });
+
+        // Table sorting
+        function makeTableSortable(tableId) {
+            const table = document.getElementById(tableId);
+            if (!table) return;
+            const headers = table.querySelectorAll('th');
+            headers.forEach((th, index) => {
+                if (index === 0) return; // Skip checkbox column
+                th.style.cursor = 'pointer';
+                th.title = 'Click to sort';
+                th.addEventListener('click', () => {
+                    const rows = Array.from(table.querySelectorAll('tbody tr'));
+                    const isAsc = th.classList.contains('sort-asc');
+                    headers.forEach(h => h.classList.remove('sort-asc', 'sort-desc'));
+                    th.classList.toggle('sort-asc', !isAsc);
+                    th.classList.toggle('sort-desc', isAsc);
+
+                    rows.sort((a, b) => {
+                        const aVal = a.cells[index].textContent.trim();
+                        const bVal = b.cells[index].textContent.trim();
+                        return isAsc 
+                            ? bVal.localeCompare(aVal, undefined, {numeric: true}) 
+                            : aVal.localeCompare(bVal, undefined, {numeric: true});
+                    });
+
+                    const tbody = table.querySelector('tbody');
+                    tbody.innerHTML = '';
+                    rows.forEach(r => tbody.appendChild(r));
+                });
+            });
+        }
+        makeTableSortable('student-table');
                 }
             } catch (e) { showToast('Action failed', 'error'); }
             finally { ui.setLoading(btn, false); }
@@ -499,7 +556,7 @@
             ui.showConfirm('Delete Question', 'Are you sure? This cannot be undone.', async () => {
                 ui.setLoading(btn, true);
                 try {
-                    const res = await fetch(`/api/faculty/question-bank/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${tok()}` } });
+                    const res = await fetch(`/api/faculty/question-bank/${id}`, { method: 'DELETE', headers: auth.getHeaders() });
                     if (res.ok) {
                         showToast('Question deleted ✅', 'success');
                         loadQuestionBank();
@@ -520,7 +577,7 @@
             try {
                 const res = await fetch('/api/faculty/question-bank', {
                     method: 'POST',
-                    headers: { 'Authorization': `Bearer ${tok()}`, 'Content-Type': 'application/json' },
+                    headers: auth.getHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({ question, category, difficulty })
                 });
                 if (res.ok) {
@@ -539,15 +596,14 @@
         document.getElementById('qb-search')?.addEventListener('input', () => renderQB());
 
         async function loadClassroom() {
-            const t = tok();
             ui.showSkeleton('ann-list', 2, 'list');
             ui.showSkeleton('flag-list', 2, 'list');
             
             try {
                 const [ann, flags, def] = await Promise.all([
-                    fetch('/api/faculty/announcements', { headers: { 'Authorization': `Bearer ${t}` } }).then(r => r.json()),
-                    fetch('/api/faculty/flagged', { headers: { 'Authorization': `Bearer ${t}` } }).then(r => r.json()),
-                    fetch('/api/faculty/defense-schedule?all=true', { headers: { 'Authorization': `Bearer ${t}` } }).then(r => r.json())
+                    fetch('/api/faculty/announcements', { headers: auth.getHeaders() }).then(r => r.json()),
+                    fetch('/api/faculty/flagged', { headers: auth.getHeaders() }).then(r => r.json()),
+                    fetch('/api/faculty/defense-schedule?all=true', { headers: auth.getHeaders() }).then(r => r.json())
                 ]);
                 defenseRows = def;
                 
@@ -585,9 +641,8 @@
         window.deleteAnn = async function(id, btn) {
             ui.showConfirm('Delete Announcement', 'Are you sure? This cannot be undone.', async () => {
                 ui.setLoading(btn, true);
-                const t = tok();
                 try {
-                    const r = await fetch('/api/faculty/announcements/' + id, { method: 'DELETE', headers: { 'Authorization': `Bearer ${t}` } });
+                    const r = await fetch('/api/faculty/announcements/' + id, { method: 'DELETE', headers: auth.getHeaders() });
                     if (r.ok) { showToast('Deleted ✅', 'success'); loadClassroom(); }
                 } catch (e) { showToast('Delete failed', 'error'); }
                 finally { ui.setLoading(btn, false); }
@@ -596,9 +651,8 @@
 
         window.resolveFlag = async function(id, btn) {
             ui.setLoading(btn, true);
-            const t = tok();
             try {
-                const r = await fetch('/api/faculty/flag-student/' + id + '/resolve', { method: 'PATCH', headers: { 'Authorization': `Bearer ${t}` } });
+                const r = await fetch('/api/faculty/flag-student/' + id + '/resolve', { method: 'PATCH', headers: auth.getHeaders() });
                 if (r.ok) { showToast('Resolved ✅', 'success'); loadClassroom(); }
             } catch (e) { showToast('Failed to resolve', 'error'); }
             finally { ui.setLoading(btn, false); }
@@ -657,7 +711,6 @@
         };
         document.getElementById('def-save').addEventListener('click', async (e) => {
             const btn = e.target;
-            const t = tok();
             const eid = document.getElementById('def-edit-id').value;
             const body = {
                 date: document.getElementById('def-date').value,
@@ -670,12 +723,12 @@
             ui.setLoading(btn, true);
             try {
                 if (eid) {
-                    const r = await fetch('/api/faculty/defense-schedule/' + eid, { method: 'PATCH', headers: { 'Authorization': `Bearer ${t}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+                    const r = await fetch('/api/faculty/defense-schedule/' + eid, { method: 'PATCH', headers: auth.getHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(body) });
                     if (r.ok) { showToast('Updated ✅', 'success'); document.getElementById('def-modal').style.display = 'none'; loadClassroom(); }
                 } else {
                     const r = await fetch('/api/faculty/schedule-defense', {
                         method: 'POST',
-                        headers: { 'Authorization': `Bearer ${t}`, 'Content-Type': 'application/json' },
+                        headers: auth.getHeaders({ 'Content-Type': 'application/json' }),
                         body: JSON.stringify({ studentId: document.getElementById('def-student').value, date: body.date, location: body.location, panelMembers: body.panelMembers, notes: body.notes })
                     });
                     if (r.ok) { showToast('Scheduled ✅', 'success'); document.getElementById('def-modal').style.display = 'none'; loadClassroom(); }
@@ -698,7 +751,7 @@
             try {
                 const res = await fetch('/api/faculty/announcements', {
                     method: 'POST',
-                    headers: { 'Authorization': `Bearer ${tok()}`, 'Content-Type': 'application/json' },
+                    headers: auth.getHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({ title, message, target_role })
                 });
                 if (res.ok) {
@@ -718,7 +771,7 @@
             const btn = e.target;
             ui.setLoading(btn, true);
             try {
-                const res = await fetch('/api/faculty/export-zip', { headers: { 'Authorization': `Bearer ${tok()}` } });
+                const res = await fetch('/api/faculty/export-zip', { headers: auth.getHeaders() });
                 if (!res.ok) throw new Error('Export failed');
                 const blob = await res.blob();
                 const url = window.URL.createObjectURL(blob);
@@ -747,7 +800,7 @@
             try {
                 const res = await fetch('/api/faculty/generate-pdf', {
                     method: 'POST',
-                    headers: { 'Authorization': `Bearer ${tok()}`, 'Content-Type': 'application/json' },
+                    headers: auth.getHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({ studentIds: ids.split(',').map(x => x.trim()), count: n, difficulty: diff })
                 });
                 if (!res.ok) throw new Error('PDF generation failed');
@@ -779,17 +832,15 @@
             });
         });
         document.getElementById('ann-post').addEventListener('click', async () => {
-            const t = tok();
             const r = await fetch('/api/faculty/announcements', {
                 method: 'POST',
-                headers: { 'Authorization': `Bearer ${t}`, 'Content-Type': 'application/json' },
+                headers: auth.getHeaders({ 'Content-Type': 'application/json' }),
                 body: JSON.stringify({ title: document.getElementById('ann-title').value, message: document.getElementById('ann-body').value, targetRole: document.getElementById('ann-role').value })
             });
             if (r.ok) { showToast('Posted', 'success'); document.getElementById('ann-title').value = ''; document.getElementById('ann-body').value = ''; loadClassroom(); }
         });
         document.getElementById('btn-export-zip').addEventListener('click', async () => {
-            const t = tok();
-            const r = await fetch('/api/faculty/export-all', { headers: { 'Authorization': `Bearer ${t}` } });
+            const r = await fetch('/api/faculty/export-all', { headers: auth.getHeaders() });
             if (!r.ok) { showToast('Export failed', 'error'); return; }
             const b = await r.blob();
             const a = document.createElement('a');
@@ -800,12 +851,11 @@
             showToast('Download started', 'success');
         });
         document.getElementById('btn-qp').addEventListener('click', async () => {
-            const t = tok();
             const raw = document.getElementById('qp-ids').value.split(/[\s,]+/).map((x) => parseInt(x, 10)).filter((n) => n > 0);
             if (!raw.length) { showToast('Enter student IDs', 'error'); return; }
             const r = await fetch('/api/faculty/generate-question-paper', {
                 method: 'POST',
-                headers: { 'Authorization': `Bearer ${t}`, 'Content-Type': 'application/json' },
+                headers: auth.getHeaders({ 'Content-Type': 'application/json' }),
                 body: JSON.stringify({ studentIds: raw, difficulty: document.getElementById('qp-diff').value, questionCount: document.getElementById('qp-n').value })
             });
             if (!r.ok) { showToast('PDF failed', 'error'); return; }
@@ -833,8 +883,7 @@
         });
 
         async function loadHeatmap() {
-            const token = auth.getToken();
-            const data = await fetch('/api/faculty/analytics/heatmap', { headers: { 'Authorization': `Bearer ${token}` } }).then(r => r.json());
+            const data = await fetch('/api/faculty/analytics/heatmap', { headers: auth.getHeaders() }).then(r => r.json());
             const grid = document.getElementById('heatmap-grid');
             const dims = ['clarity', 'reasoning', 'depth', 'confidence'];
             const tiers = ['tier1', 'tier2', 'tier3'];
@@ -855,8 +904,7 @@
         }
 
         async function loadDropoff() {
-            const token = auth.getToken();
-            const data = await fetch('/api/faculty/analytics/dropoff', { headers: { 'Authorization': `Bearer ${token}` } }).then(r => r.json());
+            const data = await fetch('/api/faculty/analytics/dropoff', { headers: auth.getHeaders() }).then(r => r.json());
             document.getElementById('dropoff-rate').textContent = `Completion rate: ${data.completionRate}% — avg questions completed: ${data.avgQuestionsCompleted}`;
             const labels = Object.keys(data.abandonedAt).map((k) => 'Q' + k);
             const values = Object.values(data.abandonedAt);
@@ -876,8 +924,7 @@
         }
 
         async function loadTimeAnalytics() {
-            const token = auth.getToken();
-            const d = await fetch('/api/faculty/analytics/time', { headers: { 'Authorization': `Bearer ${token}` } }).then(r => r.json());
+            const d = await fetch('/api/faculty/analytics/time', { headers: auth.getHeaders() }).then(r => r.json());
             if (axCharts.timeTier) axCharts.timeTier.destroy();
             if (axCharts.timeHist) axCharts.timeHist.destroy();
             const t1 = d.avgTimePerQuestion?.tier1 || 0;
@@ -899,8 +946,7 @@
 
         async function loadDepartment() {
             const scope = document.getElementById('dept-scope').value;
-            const token = auth.getToken();
-            const d = await fetch('/api/faculty/analytics/department?scope=' + encodeURIComponent(scope), { headers: { 'Authorization': `Bearer ${token}` } }).then(r => r.json());
+            const d = await fetch('/api/faculty/analytics/department?scope=' + encodeURIComponent(scope), { headers: auth.getHeaders() }).then(r => r.json());
             const depts = d.departments || [];
             if (axCharts.dept) axCharts.dept.destroy();
             const ctx = document.getElementById('deptChart').getContext('2d');
@@ -925,8 +971,7 @@
         async function doYoy() {
             const y = document.getElementById('yoy-year').value;
             const c = document.getElementById('yoy-compare').value;
-            const token = auth.getToken();
-            const data = await fetch('/api/faculty/analytics/yearly?year=' + encodeURIComponent(y) + '&compare=' + encodeURIComponent(c), { headers: { 'Authorization': `Bearer ${token}` } }).then(r => r.json());
+            const data = await fetch('/api/faculty/analytics/yearly?year=' + encodeURIComponent(y) + '&compare=' + encodeURIComponent(c), { headers: auth.getHeaders() }).then(r => r.json());
             document.getElementById('yoy-summary').innerHTML = `<strong>Improvement (avg score 0-4):</strong> <span class="badge-yoy ${data.improvement && data.improvement.startsWith('-') ? 'badge-neg' : 'badge-pos'}">${data.improvement}</span> &nbsp; 
                 Current year: ${data.currentYear?.sessions || 0} sessions, previous: ${data.previousYear?.sessions || 0}`;
             if (axCharts.yoy) axCharts.yoy.destroy();
@@ -952,8 +997,7 @@
         async function loadSessionsFor(selectEl, userId) {
             selectEl.innerHTML = '<option value="">--</option>';
             if (!userId) return;
-            const token = auth.getToken();
-            const data = await fetch('/api/faculty/student/' + userId, { headers: { 'Authorization': `Bearer ${token}` } }).then(r => r.json());
+            const data = await fetch('/api/faculty/student/' + userId, { headers: auth.getHeaders() }).then(r => r.json());
             (data.sessions || []).forEach((s) => {
                 const o = document.createElement('option');
                 o.value = s.id;
@@ -969,11 +1013,10 @@
             const sa = document.getElementById('plag-session-a').value;
             const sb = document.getElementById('plag-session-b').value;
             if (!a || !b || a === b || !sa || !sb) { showToast('Select two different students and one session each.', 'error'); return; }
-            const token = auth.getToken();
             try {
                 const res = await fetch('/api/ai/check-plagiarism', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    headers: auth.getHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({ studentAId: Number(a), studentBId: Number(b), sessionAId: Number(sa), sessionBId: Number(sb) })
                 });
                 const out = await res.json();
@@ -991,13 +1034,12 @@
 
         async function init() {
             try {
-                const token = auth.getToken();
                 const [stats, cohort, students, atRisk, requests] = await Promise.all([
-                    fetch('/api/faculty/stats', { headers: { 'Authorization': `Bearer ${token}` } }).then(r => r.json()),
-                    fetch('/api/faculty/cohort', { headers: { 'Authorization': `Bearer ${token}` } }).then(r => r.json()),
-                    fetch('/api/faculty/students', { headers: { 'Authorization': `Bearer ${token}` } }).then(r => r.json()),
-                    fetch('/api/faculty/at-risk', { headers: { 'Authorization': `Bearer ${token}` } }).then(r => r.json()),
-                    fetch('/api/faculty/session-requests', { headers: { 'Authorization': `Bearer ${token}` } }).then(r => r.json())
+                    apiFetch('/api/faculty/stats'),
+                    apiFetch('/api/faculty/cohort'),
+                    apiFetch('/api/faculty/students'),
+                    apiFetch('/api/faculty/at-risk'),
+                    apiFetch('/api/faculty/session-requests')
                 ]);
                 studentsCache = students;
                 fillPlagiarismStudents(students);
@@ -1014,12 +1056,12 @@
                 charts.renderCohortBarChart('cohortChart', ['0-20', '21-40', '41-60', '61-80', '81-100'], cohort.cohortChart);
 
                 // Render Table
-                const atRiskIds = atRisk.map(s => s.id);
+                const atRiskIds = (atRisk || []).map(s => s.id);
                 renderTable(students, atRiskIds);
 
                 // Render Requests
                 const reqList = document.getElementById('requests-list');
-                if (requests.length > 0) {
+                if (requests && requests.length > 0) {
                     reqList.innerHTML = requests.map(r => `
                         <div style="padding: 1rem; border: 1px solid var(--border-color); border-radius: var(--radius); margin-bottom: 0.75rem; display: flex; justify-content: space-between; align-items: center;">
                             <div><strong>${r.student_name}</strong></div>
@@ -1039,6 +1081,7 @@
                 });
 
             } catch (err) {
+                console.error(err);
                 showToast('Failed to initialize dashboard', 'error');
             }
         }
@@ -1063,14 +1106,13 @@
         window.flagOne = async function(studentId) {
             const reason = window.prompt('Reason for flag?');
             if (reason == null) return;
-            const r = await fetch('/api/faculty/flag-student', { method: 'POST', headers: { 'Authorization': `Bearer ${tok()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ studentId, reason }) });
+            const r = await fetch('/api/faculty/flag-student', { method: 'POST', headers: auth.getHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify({ studentId, reason }) });
             if (r.ok) { showToast('Student flagged', 'success'); if (window._loadedClass) loadClassroom(); }
         };
 
         async function openProfile(id) {
             try {
-                const token = auth.getToken();
-                const data = await fetch(`/api/faculty/student/${id}`, { headers: { 'Authorization': `Bearer ${token}` } }).then(r => r.json());
+                const data = await fetch(`/api/faculty/student/${id}`, { headers: auth.getHeaders() }).then(r => r.json());
                 
                 document.getElementById('modal-name').textContent = data.student.name;
                 document.getElementById('modal-email').textContent = data.student.email;
@@ -1111,10 +1153,9 @@
 
         async function handleRequest(id, action) {
             try {
-                const token = auth.getToken();
                 const res = await fetch(`/api/faculty/session-requests/${id}`, {
                     method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    headers: auth.getHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({ action: action === 'accept' ? 'accept' : 'reject' })
                 });
                 if (res.ok) {

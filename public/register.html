@@ -8,8 +8,9 @@
     <link rel="stylesheet" href="/css/style.css">
     <link rel="stylesheet" href="/css/animations.css">
     <style>
-        body { display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%); min-height: 100vh; }
+        body { display: flex; flex-direction: column; background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%); min-height: 100vh; }
         body.dark-mode { background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); --bg-color: #0f172a; --card-bg: #1e293b; --text-color: #f1f5f9; --text-muted: #94a3b8; --border-color: rgba(255,255,255,0.1); }
+        .auth-container { flex-grow: 1; display: flex; align-items: center; justify-content: center; padding: 2rem 1rem; }
         .auth-card { background: white; padding: 2.5rem; border-radius: var(--radius); box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); width: 100%; max-width: 450px; }
         body.dark-mode .auth-card { background: var(--card-bg); border: 1px solid var(--border-color); color: var(--text-color); }
         .role-toggle { display: flex; gap: 1rem; margin-bottom: 1.5rem; background: #f1f5f9; padding: 0.4rem; border-radius: 10px; }
@@ -34,8 +35,21 @@
     </script>
 </head>
 <body class="animate-up">
-    <button onclick="toggleTheme()" class="theme-toggle-fixed" id="theme-btn">🌙</button>
-    <div class="auth-card">
+    <nav class="navbar">
+        <div class="container" style="display:flex; justify-content:space-between; align-items:center;">
+            <div style="display: flex; align-items: center; gap: 2rem;">
+                <h1 style="color: var(--primary-color); margin:0; display:flex; align-items:center; gap:0.5rem; cursor:pointer; font-weight: 800;" onclick="window.location.href='/'">
+                    <span style="font-size:1.5rem;">🛡️</span> PDRS
+                </h1>
+            </div>
+            <div style="display:flex; align-items:center; gap:1.25rem;">
+                <button onclick="toggleTheme()" class="theme-toggle" id="theme-btn" title="Toggle Theme">🌙</button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="auth-container">
+        <div class="auth-card">
         <div style="text-align: center; margin-bottom: 2rem;">
             <h1 style="color: var(--primary-color); font-weight: 800; font-size: 2rem;">Create Account</h1>
             <p class="text-muted">Join the rehearsal system today.</p>
@@ -67,7 +81,7 @@
                 <label for="password">Password</label>
                 <div style="position: relative;">
                     <input type="password" id="password" required placeholder="••••••••" minlength="6" style="padding-right: 2.5rem; width: 100%;">
-                    <button type="button" id="toggle-password" style="position: absolute; right: 0.75rem; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; font-size: 1.25rem; padding: 0; display: flex; align-items: center; justify-content: center; color: var(--text-muted);">👁</button>
+                    <button type="button" onclick="ui.togglePassword('password', this)" style="position: absolute; right: 0.75rem; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; font-size: 1.25rem; padding: 0; display: flex; align-items: center; justify-content: center; color: var(--text-muted);">👁</button>
                 </div>
                 <div class="strength-meter">
                     <div id="strength-bar" class="strength-bar"></div>
@@ -86,12 +100,32 @@
             <p class="text-muted">Already have an account? <a href="/login.html" style="color: var(--primary-color); font-weight: 600; text-decoration: none;">Login</a></p>
         </div>
     </div>
+</div>
 
+    <script src="/js/utils.js"></script>
     <script src="/js/auth.js"></script>
+    <script src="/js/api.js"></script>
     <script src="/js/toast.js"></script>
     <script>
         // Initialize form validation
         ui.initFormValidation('register-form');
+
+        // Add real-time validation for registration fields
+        const nameInput = document.getElementById('name');
+        const emailInput = document.getElementById('email');
+
+        nameInput.addEventListener('input', () => ui.clearError(nameInput));
+        emailInput.addEventListener('input', () => ui.clearError(emailInput));
+        passwordInput.addEventListener('input', () => ui.clearError(passwordInput));
+
+        function showError(message) {
+            const errorBox = document.getElementById('error-box');
+            if (errorBox) {
+                errorBox.textContent = message;
+                errorBox.style.display = 'block';
+            }
+            showToast(message, 'error');
+        }
 
         // Password strength meter
         const passwordInput = document.getElementById('password');
@@ -132,19 +166,29 @@
             ui.setLoading(registerBtn, true);
 
             try {
-                const response = await fetch('/api/auth/register', {
+                const data = await apiFetch('/api/auth/register', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ name, email, password, role })
                 });
 
-                const data = await response.json();
-                if (!response.ok) throw new Error(data.error || 'Registration failed');
-
                 auth.saveToken(data.token, data.user);
                 showToast('Registration successful! ✅', 'success');
+                
+                const user = data?.user || data?.data?.user || data?.data;
+                const role = user?.role;
+                if (!role) { 
+                    showError('Registration failed. Please try again.'); 
+                    return; 
+                }
+
+                const redirectMap = {
+                    student: '/student.html',
+                    faculty: '/faculty.html',
+                    admin: '/admin.html'
+                };
+
                 setTimeout(() => {
-                    window.location.href = data.user.role === 'admin' ? '/admin.html' : (data.user.role === 'faculty' ? '/faculty.html' : '/student.html');
+                    window.location.href = redirectMap[role] || '/student.html';
                 }, 500);
 
             } catch (err) {
@@ -167,12 +211,7 @@
             document.getElementById('theme-btn').textContent = isDark ? '☀️' : '🌙';
         }
 
-        document.getElementById('toggle-password').addEventListener('click', function() {
-            const passwordInput = document.getElementById('password');
-            const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
-            passwordInput.setAttribute('type', type);
-            this.textContent = type === 'password' ? '👁' : '🙈';
-        });
+
         
         if (localStorage.getItem('pdrs_theme') === 'dark') {
             document.getElementById('theme-btn').textContent = '☀️';
@@ -191,14 +230,27 @@
             if (!hash.startsWith('#token=')) return;
             const token = decodeURIComponent(hash.replace('#token=', ''));
             try {
-                const meRes = await fetch('/api/auth/me', {
+                // Use apiFetch for consistency and automatic data unwrapping
+                const meData = await apiFetch('/api/auth/me', {
                     headers: { Authorization: `Bearer ${token}` }
                 });
-                const meData = await meRes.json();
-                if (!meRes.ok || !meData.user) throw new Error('Failed to load user profile');
-                auth.saveToken(token, meData.user);
+                
+                // meData IS the user object since apiFetch unwraps it
+                const user = meData?.user || meData?.data?.user || meData?.data || meData;
+                const role = user?.role;
+                if (!role) { 
+                    showError('Registration failed. Please try again.'); 
+                    return; 
+                }
+                auth.saveToken(token, user);
                 history.replaceState(null, '', window.location.pathname);
-                window.location.href = meData.user.role === 'admin' ? '/admin.html' : (meData.user.role === 'faculty' ? '/faculty.html' : '/student.html');
+
+                const redirectMap = {
+                    student: '/student.html',
+                    faculty: '/faculty.html',
+                    admin: '/admin.html'
+                };
+                window.location.href = redirectMap[role] || '/student.html';
             } catch (err) {
                 errorBox.textContent = 'Google signup failed. Please register again.';
                 errorBox.style.display = 'block';

@@ -1,16 +1,20 @@
 const { IncomingWebhook } = require('@slack/webhook');
 
 /**
- * Send a generic message to a Slack webhook
+ * Send a generic message to a Slack webhook with graceful fallback
  */
 async function sendMessage(webhookUrl, message) {
-    if (!webhookUrl) return;
+    if (!webhookUrl) return { success: false, error: 'No webhook URL provided' };
     const webhook = new IncomingWebhook(webhookUrl);
     try {
         await webhook.send(message);
+        return { success: true };
     } catch (error) {
-        console.error('Slack sendMessage error:', error);
-        throw error;
+        const details = error.response?.data || error.message;
+        console.warn('Slack sendMessage failed:', details);
+        // Fallback: log to internal audit log or notification table if possible
+        // For now, just return the error instead of throwing
+        return { success: false, error: details };
     }
 }
 

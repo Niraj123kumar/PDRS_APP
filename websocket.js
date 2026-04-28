@@ -89,6 +89,14 @@ function initWebSocket(server) {
         },
         broadcastFacultyRoom: (roomCode, type, payload = {}) => {
             broadcastToFacultyInRoom(roomCode, { type, payload }, clients, rooms, userRoles);
+        },
+        getParticipants: (roomCode) => {
+            const room = rooms.get(roomCode);
+            if (!room) return [];
+            return Array.from(room).map(userId => ({
+                userId,
+                role: userRoles.get(userId)
+            }));
         }
     };
 }
@@ -124,6 +132,15 @@ function broadcastToFacultyInRoom(roomCode, data, clients, rooms, userRoles) {
 function handleMessage(ws, data, clients, rooms, userRooms, userRoles, roomTimers) {
     const { type, roomCode, payload, targetId } = data;
     const userId = ws.userId;
+
+    // Security/Consistency check: ensure user is in the room they are messaging
+    if (roomCode && type !== 'room-join') {
+        const currentUserRoom = userRooms.get(userId);
+        if (currentUserRoom !== roomCode) {
+            console.warn(`User ${userId} tried to message room ${roomCode} but is in ${currentUserRoom || 'no room'}`);
+            return;
+        }
+    }
 
     switch (type) {
         case 'room-join':

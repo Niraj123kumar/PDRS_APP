@@ -159,6 +159,7 @@
             </div>
 
             <div class="scroll-area" style="text-align: center;">
+                <video id="remote-video" autoplay playsinline style="width: 100%; max-height: 500px; display: none; background: #000; border-radius: 20px; margin-bottom: 1.5rem; box-shadow: var(--shadow);"></video>
                 <div id="timer-display" class="timer-circle">00:00</div>
                 
                 <div id="current-question-card" class="card" style="margin: 0 2rem; padding: 2.5rem; border-radius: 20px; border: 2px solid var(--border-color); background: var(--bg-color);">
@@ -182,6 +183,7 @@
                         <button onclick="updatePhase('questioning')" class="btn btn-secondary">Start Questions</button>
                         <button id="pause-btn" onclick="togglePause()" class="btn" style="background: var(--warning-color);">Pause Session</button>
                         <button onclick="startTimer()" class="btn btn-secondary">Start Timer</button>
+                        <button id="faculty-share-screen-btn" onclick="toggleScreenShare()" class="btn btn-secondary" style="grid-column: span 2;">Share Screen 🖥️</button>
                     </div>
                     <button onclick="teacherInterrupt()" class="btn-interrupt" style="margin-top: 1.5rem;">Interrupt Student 📢</button>
                 </div>
