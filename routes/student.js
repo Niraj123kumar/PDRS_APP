@@ -153,3 +153,24 @@ router.get('/export-report', verifyToken, requireRole('student'), async (req, re
 });
 
 module.exports = router;
+
+// GET /api/student/goals
+router.get('/goals', verifyToken, requireRole('student'), (req, res) => {
+    try {
+        const goals = db.prepare('SELECT * FROM user_goals WHERE user_id = ? ORDER BY datetime(created_at) DESC').all(req.user.id);
+        res.json({ success: true, data: goals });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// GET /api/student/bookmarks
+router.get('/bookmarks', verifyToken, requireRole('student'), (req, res) => {
+    try {
+        const rows = db.prepare('SELECT * FROM bookmarks WHERE user_id = ? ORDER BY datetime(created_at) DESC').all(req.user.id);
+        res.json({ success: true, data: rows });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
